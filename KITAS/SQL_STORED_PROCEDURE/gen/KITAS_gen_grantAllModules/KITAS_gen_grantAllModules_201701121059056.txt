@@ -1,0 +1,16 @@
+
+
+
+CREATE procedure [gen].[grantAllModules] @uGroupGUID uniqueidentifier
+as
+	insert into coUGRPMODL (AccessGUID, UGroupGUID, ModuleGUID, AllowBrowse, AllowAdd, AllowEdit, AllowHold, AllowDelete, AllowWipe, AllowForce, AllowShowAttach)
+	select newid(), @uGroupGUID, x.ModuleGUID, 1, 1, 1, 1, 1, 1, 1, 1 
+	from coMODL x
+		left join (select * from coUGRPMODL where ugroupguid=@ugroupGUID) y
+			on x.ModuleGUID=y.moduleguid
+	where y.UGroupGUID is null
+
+
+
+
+

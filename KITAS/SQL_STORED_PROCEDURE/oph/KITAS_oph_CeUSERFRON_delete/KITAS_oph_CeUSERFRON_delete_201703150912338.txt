@@ -1,0 +1,24 @@
+create procedure oph.CeUSERFRON_delete
+	@GUID uniqueidentifier, @hostGUID uniqueidentifier
+as --automatic creation by system, you have to remove this comment to customize this procedure
+ 
+	declare @isCancel bit = 0, @msg nvarchar(250) = ''
+
+	if dbo.fn_checkObject('dbo','CeUSERFRON_delete_custom') = 1 
+		exec dbo.CeUSERFRON_delete_custom @GUID, @hostGUID
+
+	else begin
+		if dbo.fn_checkObject('dbo','CeUSERFRON_delete_before') = 1 
+			exec dbo.CeUSERFRON_delete_before @GUID, @hostGUID, @isCancel OUTPUT, @msg OUTPUT
+
+		if @isCancel = 0 begin
+			update CoUSERFRON set 
+				isDeleted = 1, DeletedDate = GETDATE(), DeletedUser = gen.getUser(@hostGUID)
+			where UserGUID = @GUID
+
+			if dbo.fn_checkObject('dbo','CeUSERFRON_delete_after') = 1
+				exec dbo.CeUSERFRON_delete_after @GUID, @hostGUID
+		end
+
+		select @msg deleted
+	end

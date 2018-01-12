@@ -1,0 +1,37 @@
+
+CREATE procedure [api].[theme_form_child_v4] @accountid varchar(50), @code nvarchar(max), @db nvarchar(max), @settingmode nvarchar(1), @childxml xml output, @isdebug bit=0
+--WITH ENCRYPTION
+as
+	declare @sqlstr nvarchar(max)='
+
+	select @xml = (
+		select lower(a.moduleid) as code, a.ModuleDescription as childTitle, b2.colkey as parentkey,
+			(
+				select (
+					select b1.infovalue allowbrowse, b2.infovalue allowadd,
+						b3.infovalue allowedit, --b4.infovalue allowhold,
+						b5.infovalue allowdelete--, b6.infovalue allowwipe, b7.infovalue allowbatch 
+					from modl a
+						left join modlinfo b1 on a.moduleguid=b1.moduleguid and (b1.infokey=''AllowBrowse'' or b1.infokey=''AllowAccess'')
+						left join modlinfo b2 on a.moduleguid=b2.moduleguid and b1.infokey=''allowadd''
+						left join modlinfo b3 on a.moduleguid=b3.moduleguid and b1.infokey=''allowedit''
+						left join modlinfo b5 on a.moduleguid=b5.moduleguid and b1.infokey=''allowdelete''
+					where moduleid='''+@code+''' for xml path(''permission''),type)
+			) as info
+		from modl a
+			inner join modl c on c.ParentModuleGUID=a.ModuleGUID
+			inner join modlcolm b on c.ModuleGUID=b.ModuleGUID
+			inner join modlcolm b2 on a.ModuleGUID=b2.ModuleGUID and b.colkey=b2.colkey
+			--inner join modlcolminfo d on d.ColumnGUID=b.ColumnGUID and d.InfoKey=''isParentKey''
+		where a.moduleid = '''+@code+''' and b.colkey not in (''createddate'', ''updateddate'', ''createduser'', ''updateduser'')
+		for xml path(''child''),type,root(''children'')) '
+
+	print @sqlstr
+
+	EXECUTE sp_executesql @sqlstr, N'@xml xml output', @xml = @childxml output
+
+
+
+
+
+

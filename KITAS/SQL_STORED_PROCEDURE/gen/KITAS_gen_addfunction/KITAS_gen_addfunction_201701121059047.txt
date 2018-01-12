@@ -1,0 +1,81 @@
+
+
+CREATE procedure [gen].[addfunction]	@functionName varchar(50), @parameter varchar(max), @returns varchar(max),
+	@content varchar(max), @content1 varchar(max)='', @content2 varchar(max)='', 
+	@content3 varchar(max)='', @content4 varchar(max)='', @content5 varchar(max)=''
+as
+
+--ver 20140604
+
+	declare @sqlstr varchar(max)
+	declare @sqlstr1 varchar(max)
+	declare @moduleGUID uniqueidentifier
+	select @moduleGUID = moduleGUID from coMODL where moduleId like '%' + moduleId + '%'
+
+print @functionNAME
+
+	if not exists (
+		select * 
+		from sysObjects
+		where name = @functionName) 
+	begin --not exists
+		--set @sqlstr = 'create'+' '+'function oph.' + @functionName +'('+ @parameter +')' + char(13) + char(10) +
+		--	'returns ' + @returns + char(13) + char(10) +
+		--	'as --automatic creation by system, you have to remove this comment to customize this procedure' + char(13) + char(10) + ' ' 
+
+		set  @sqlstr = 'create'+' '+'function oph.' + @functionName +'('+ @parameter +')' + char(13) + char(10) +
+			'returns '
+
+		set  @sqlstr1 = @returns + char(13) + char(10) +
+			'as --automatic creation by system, you have to remove this comment to customize this procedure' + char(13) + char(10) + ' '
+
+print '12'
+print @functionname
+print '1'
+print @parameter
+print '1'
+print @sqlstr+@sqlstr1
+--print len(@content)
+--print '---'
+print @sqlstr+@sqlstr1+isnull(@content,'')+isnull(@content1,'')+isnull(@content2,'')+isnull(@content3,'')+isnull(@content4,'')+isnull(@content5,'')
+--print '---'
+		exec (@sqlstr+@sqlstr1+@content+@content1+@content2+@content3+@content4+@content5)
+--		exec sp_CaMODLSCRP_save null, null, @moduleGUID, @parameter, @functionName, @sqlstr, 1
+
+	end
+	else
+	begin	--automatic
+		if exists (
+			select text from syscomments 
+			inner join sysObjects on sysComments.id = sysObjects.id
+			where sysObjects.name = @functionName and text like '%as --automatic creation by system, you have to remove this comment to customize this procedure%')
+		begin
+			--set @sqlstr = 'alter'+' '+'function oph.' + @functionName +'('+@parameter + ')' + char(13) + char(10) +
+			--	'returns ' + @returns + char(13) + char(10) +
+			--	'as --automatic creation by system, you have to remove this comment to customize this procedure' + char(13) + char(10) + ' ' 
+			set  @sqlstr = 'alter'+' '+'function oph.' + @functionName +'('+ @parameter +')' + char(13) + char(10) +
+			'returns '
+
+		set  @sqlstr1 = @returns + char(13) + char(10) +
+			'as --automatic creation by system, you have to remove this comment to customize this procedure' + char(13) + char(10) + ' '
+
+print @sqlstr+@sqlstr1+@content+@content1+@content2+@content3+@content4+@content5
+--print len(@content)
+
+			exec (@sqlstr+@sqlstr1+@content+@content1+@content2+@content3+@content4+@content5)
+--			exec sp_CaMODLSCRP_save null, null, @moduleGUID, @functionName, @parameter, @sqlstr, 1
+		end
+	end
+
+
+
+
+
+
+
+
+
+
+
+
+

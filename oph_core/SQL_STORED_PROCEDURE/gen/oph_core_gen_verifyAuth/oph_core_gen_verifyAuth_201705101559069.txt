@@ -1,0 +1,116 @@
+
+CREATE PROCEDURE [gen].[verifyAuth] @code nvarchar(30), @HostGUID uniqueidentifier, 
+	@allowadd int OUTPUT, @allowBrowse int OUTPUT, @allowEdit int OUTPUT, @allowDelete int OUTPUT, --@allowWipe int OUTPUT, 
+	--@allowForce int output, @allowShowAttach int output, 
+	@debug bit = 0
+as 
+ 	declare 
+		@userGUID uniqueidentifier, @delegateUserGUID uniqueidentifier, @UserId varchar(100), @DelegateTo varchar(100),
+		@ModuleGUID uniqueidentifier, @allowedModuleGUID uniqueidentifier, 
+		@EnvirontmentGUID uniqueidentifier, @allowEnvirontmentGUID uniqueidentifier
+
+	
+	select @userGUID = userGUID, @delegateUserGUID = delegateUserGUID from userhost where HostGUID = @HostGUID
+	
+	select @UserId = UserId from [user] where UserGUID = @userGUID
+	select @DelegateTo = UserId from [user] where UserGUID = @delegateUserGUID
+
+	select * 
+	from ugrp x
+		inner join ugrpmodl y on x.UGroupGUID=y.UGroupGUID
+		inner join modl z on y.ModuleGUID=z.ModuleGUID
+	where CHARINDEX(cast(@userGUID as varchar(50)), x.TokenUser)<>x.allExceptUser
+		--and (x.allExceptEnv=0 and CHARINDEX(cast(@userGUID as varchar(50)), x.TokenEnv)) or (x.allExceptEnv=1 and not CHARINDEX(cast(@userGUID as varchar(50)), x.TokenEnv))
+
+	--* Active Environtment & Header Module
+	select @EnvirontmentGUID = b.ModuleGroupGUID, @ModuleGUID = a.ModuleGUID 
+	from modl a 
+		left join modg b ON a.AccountDBGUID = b.AccountDBGUID
+	where ModuleId = SUBSTRING(@code, 1, 6)
+
+	--* Allowed Environtment & Module by Delegate
+	select 
+		@allowEnvirontmentGUID = EnvirontmentGUID, @allowedModuleGUID = ModuleGUID
+	from coUDELMODL 
+	where UserGUID = @userGUID AND DelegateToUserGUID = @delegateUserGUID 
+		AND EnvirontmentGUID = @EnvirontmentGUID AND ModuleGUID = @ModuleGUID
+	
+	--* For Each Environtment with Different Modules
+	if @allowEnvirontmentGUID is NULL AND @allowedModuleGUID is NULL AND exists(
+		select * from coUDELMODL where UserGUID = @userGUID AND DelegateToUserGUID = @delegateUserGUID 
+			AND EnvirontmentGUID = @EnvirontmentGUID AND ModuleGUID = dbo.ZeroGUID()
+	) select @allowEnvirontmentGUID = @EnvirontmentGUID, @allowedModuleGUID = @ModuleGUID
+	
+	--*	For All Environtments & Modules
+	if @allowEnvirontmentGUID is NULL AND @allowedModuleGUID is NULL AND exists(
+		select * from CoUDELMODL where UserGUID = @userGUID AND DelegateToUserGUID = @delegateUserGUID 
+			AND EnvirontmentGUID = dbo.ZeroGUID() AND ModuleGUID = dbo.ZeroGUID()
+	) select @allowEnvirontmentGUID = @EnvirontmentGUID, @allowedModuleGUID = @ModuleGUID
+
+	if @delegateUserGUID is NOT NULL 
+		if @allowEnvirontmentGUID = @EnvirontmentGUID AND @allowedModuleGUID = @ModuleGUID
+			select	
+				@allowAdd = isNULL(d.A, 0),	@allowBrowse = ISNULL(d.B, 0),
+				@allowEdit = isNULL(d.E, 0), @allowDelete = ISNULL(d.D, 0)--,
+				--@allowWipe = case when d.W=1 and d.D1=1 then 1 else 0 end,
+				--@allowForce= isNULL(d.C, 0), @allowShowAttach = isNULL(d.SA, 0)
+			from (	
+				select b.MemberUserGUID, a.ModuleGUID,
+					max(isNull(cast(a.AllowBrowse as int),1)) as B,		max(isNull(cast(AllowBrowse.infovalue as int),1)) as B1, 
+					max(isNull(cast(a.AllowAdd as int),1)) as A,		max(isNull(cast(AllowAdd.infovalue as int),1)) as A1, 
+					max(isNull(cast(a.AllowEdit as int),1)) as E,		max(isNull(cast(AllowEdit.infovalue as int),1)) as E1, 
+					max(isNull(cast(a.AllowDelete as int),1)) as D,		max(isNull(cast(AllowDelete as int),1)) as D1--, 
+					--max(isNull(cast(a.AllowHold as int),1)) as H,		max(isNull(cast(AllowForce.infovalue int),1)) as C, 
+					--max(isNull(cast(a.AllowWipe as int),1)) as W,		max(isNull(cast(AllowWipe.infovalue int),1)) as W1,
+					--max(isNull(cast(a.AllowShowAttach as int),1)) as SA
+				from ugrpmodl a
+					inner join ugrpuser b ON a.UGroupGUID = b.UGroupGUID 
+					inner join modl e ON a.ModuleGUID = e.ModuleGUID
+					left join modlinfo AllowBrowse on a.moduleguid=AllowBrowse.moduleguid and AllowBrowse.infokey='allowBrowse'
+					left join modlinfo AllowAdd on a.moduleguid=AllowAdd.moduleguid and AllowAdd.infokey='AllowAdd'
+					left join modlinfo AllowEdit on a.moduleguid=AllowEdit.moduleguid and AllowEdit.infokey='AllowEdit'
+					left join modlinfo AllowDelete on a.moduleguid=AllowDelete.moduleguid and AllowDelete.infokey='AllowDelete'
+				where b.MemberUserGUID = @userGUID and e.ModuleId = @code
+				group by b.MemberUserGUID, a.ModuleGUID
+			) d
+		else 
+			select @allowAdd = 0, @allowBrowse = 0, @allowEdit = 0, @allowDelete = 0--, @allowWipe = 0, @allowForce= 0, @allowShowAttach= 0
+	else 
+		select	
+			@allowAdd = isNULL(d.A, 0),	@allowBrowse = ISNULL(d.B, 0),
+			@allowEdit = isNULL(d.E, 0), @allowDelete = ISNULL(d.D, 0)--,
+			--@allowWipe = case when d.W=1 and d.D1=1 then 1 else 0 end,
+			--@allowForce= isNULL(d.C, 0), @allowShowAttach = isNULL(d.SA, 0)
+		from (	
+			select b.MemberUserGUID, a.ModuleGUID,
+				max(isNull(cast(a.AllowBrowse as int),1)) as B,		max(isNull(cast(AllowBrowse.infovalue as int),1)) as B1, 
+				max(isNull(cast(a.AllowAdd as int),1)) as A,		max(isNull(cast(AllowAdd.infovalue as int),1)) as A1, 
+				max(isNull(cast(a.AllowEdit as int),1)) as E,		max(isNull(cast(AllowEdit.infovalue as int),1)) as E1, 
+				max(isNull(cast(a.AllowDelete as int),1)) as D,		max(isNull(cast(AllowDelete as int),1)) as D1--, 
+				--max(isNull(cast(a.AllowHold as int),1)) as H,		max(isNull(cast(AllowForce.infovalue int),1)) as C, 
+				--max(isNull(cast(a.AllowWipe as int),1)) as W,		max(isNull(cast(AllowWipe.infovalue int),1)) as W1,
+				--max(isNull(cast(a.AllowShowAttach as int),1)) as SA
+			from ugrpmodl a
+				inner join ugrpuser b ON a.UGroupGUID = b.UGroupGUID
+				inner join modl e ON a.ModuleGUID = e.ModuleGUID
+				left join modlinfo AllowBrowse on a.moduleguid=AllowBrowse.moduleguid and AllowBrowse.infokey='allowBrowse'
+				left join modlinfo AllowAdd on a.moduleguid=AllowAdd.moduleguid and AllowAdd.infokey='AllowAdd'
+				left join modlinfo AllowEdit on a.moduleguid=AllowEdit.moduleguid and AllowEdit.infokey='AllowEdit'
+				left join modlinfo AllowDelete on a.moduleguid=AllowDelete.moduleguid and AllowDelete.infokey='AllowDelete'
+			where b.MemberUserGUID = @userguid and e.ModuleID = @code
+			group by b.MemberUserGUID, a.ModuleGUID
+		) d
+
+	select 
+		@allowAdd = isNULL(@allowAdd, 0), @allowBrowse = isNULL(@allowBrowse, 0), @allowEdit = isNULL(@allowEdit, 0), 
+		@allowDelete = isNULL(@allowDelete, 0)--, @allowWipe = isNULL(@allowWipe, 0), @allowForce = isNULL(@allowForce, 0), 
+		--@allowShowAttach= isNULL(@allowShowAttach, 0)
+		
+	if @debug = 1 begin
+		select @userGUID [UserGUID], @delegateUserGUID [DelegateUserGUID], SUBSTRING(@code,1,6) [Header Module], @code [Module Id]
+		select 
+			@EnvirontmentGUID [ActiveEnvirontment], IIF(@allowEnvirontmentGUID = dbo.ZeroGUID(), @EnvirontmentGUID, @allowEnvirontmentGUID) [AllowedEnvirontment], 
+			@ModuleGUID [ActiveModule], IIF(@allowedModuleGUID = dbo.ZeroGUID(), @ModuleGUID, @allowedModuleGUID) [AllowedModule]
+		select @allowadd [Add], @allowBrowse [Browse], @allowEdit [Edit], @allowDelete [Delete]--, @allowWipe [Wipe], @allowForce [Force], @allowShowAttach [ShowAttach]
+	end
+

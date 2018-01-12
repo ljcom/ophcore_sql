@@ -1,0 +1,12 @@
+
+CREATE procedure [api].[getData] @hostGUID uniqueidentifier, @data nvarchar(20), @sqlFilter nvarchar(max)
+as
+	declare @sqlstr nvarchar(max)
+
+	select @sqlstr=sqlStr+' '''+cast(@hostguid as nvarchar(50))+''', '''+@sqlFilter+'''' 
+	from widg
+	where widgetId=@data
+
+	exec sp_executesql @sqlstr, N'@hostGUID uniqueidentifier, @sqlFilter nvarchar(max)', @hostGUID, @sqlFilter
+
+

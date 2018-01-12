@@ -1,0 +1,371 @@
+
+
+
+
+CREATE procedure [gen].[extractTableDef] @curTableName nvarchar(50), @mode int=0
+as
+	--mode=0: short mode, 1: long mode
+	set nocount on
+	--drop table #tmpTable
+	
+	--declare @curTableName nvarchar(50)
+	--set @curTableName='t%PDRQ'
+	set @curTableName=LEFT(@curTableName,1)+'%'+RIGHT(@curTableName,len(@curTableName)-2)
+	
+	create table #tmpTable (
+		tableName nvarchar(50) NULL,
+		xtype nvarchar(10) null,
+		checked bit NULL,
+		content varchar(8000) null, addcon varchar(4000),
+		content2 varchar(8000) null, addcon2 varchar(100),
+		content3 varchar(8000) null, addcon3 varchar(100),
+		content4 varchar(8000) null, addcon4 varchar(100),
+		content5 varchar(8000) null, addcon5 varchar(100),
+		content6 varchar(8000) null, addcon6 varchar(100),
+		content7 varchar(8000) null, addcon7 varchar(100),
+		content8 varchar(8000) null, addcon8 varchar(100),
+		content9 varchar(8000) null, addcon9 varchar(100),
+		content10 varchar(8000) null, addcon10 varchar(100),
+		content11 varchar(8000) null, addcon11 varchar(100),
+		content12 varchar(8000) null, addcon12 varchar(100),
+		content13 varchar(8000) null, addcon13 varchar(100),
+		content14 varchar(8000) null, addcon14 varchar(100),
+		content15 varchar(8000) null, addcon15 varchar(100),
+		content16 varchar(8000) null, addcon16 varchar(100),
+		content17 varchar(8000) null, addcon17 varchar(100),
+		content18 varchar(8000) null, addcon18 varchar(100),
+		content19 varchar(8000) null		
+	)
+	while isnull(@curTableName,'')&lt;&gt;'' 
+	begin	
+		--start table
+		insert into #tmpTable (tablename,checked)
+		select moduleid, 0 
+		from coMODL a
+			left join #tmpTable b
+				on a.ModuleId=b.tableName
+				--on left(a.moduleid,1)+RIGHT(a.moduleid,len(a.moduleid)-2)=left(b.tableName,1)+RIGHT(b.tableName,len(b.tableName)-2)
+		where b.tableName is null and a.moduleid like @curTableName
+
+		--inherit tables
+		insert into #tmpTable (tablename,checked)
+		select distinct c.moduleid, 0 
+		from coMODL a
+			inner join coMODLSMOD b
+				on a.ModuleGUID=b.moduleGUID
+			inner join coMODL c
+				on b.SubModuleGUID=c.ModuleGUID
+			left join #tmpTable d
+				on c.ModuleId=d.tableName
+				--on left(c.moduleid,1)+RIGHT(c.moduleid,len(c.moduleid)-2)=left(d.tableName,1)+RIGHT(d.tableName,len(d.tableName)-2)
+		where a.moduleid like @curTableName and d.tableName is null
+
+		insert into #tmpTable (tablename,checked)
+		select distinct a.tablename, 0
+		from gen.cotablfiel a
+			left join #tmpTable b
+				on a.Tablename=b.tableName
+				--on left(a.tableName,1)+RIGHT(a.tableName,len(a.tableName)-2)=left(b.tableName,1)+RIGHT(b.tableName,len(b.tableName)-2)
+		where b.tableName is null and a.tablename like @curTableName
+
+		--combo
+		insert into #tmpTable (tablename,checked)
+		select distinct ComboTable, 0
+		from gen.cotablfiel a
+			left join #tmpTable b
+				on a.ComboTable=b.tableName
+				--on left(a.ComboTable,1)+RIGHT(a.ComboTable,len(a.ComboTable)-2)=left(b.tableName,1)+RIGHT(b.tableName,len(b.tableName)-2)
+		where b.tableName is null and a.tablename like @curTableName and ComboType in (1,3,10,12)
+	
+		update #tmpTable
+		set checked=1
+		where tableName like @curTableName
+		
+		select @curTableName=tablename from #tmpTable
+		where checked=0
+
+		if not exists(select * from #tmpTable where checked=0) break
+				
+		set @curTableName=LEFT(@curTableName,1)+'%'+RIGHT(@curTableName,LEN(@curTableName)-2)
+			
+--select * from #tmpTable
+--		print @curTableName
+	end		
+
+	update #tmpTable
+	set xtype=b.xtype
+	from sysObjects b
+		inner join #tmpTable c		
+			on c.tableName=b.name
+	
+	insert into #tmpTable (tablename,checked, xtype)
+	select name, 1, a.xtype 
+	from sysobjects a
+		inner join #tmpTable b
+			on a.name like ''+b.tableName+''
+	where a.xtype='V' and a.name&lt;&gt;b.tableName
+	
+	insert into #tmpTable (tablename,checked, xtype)
+	select name, 1, a.xtype 
+	from sysobjects a
+		inner join #tmpTable b
+			on a.name like '%'+b.tableName+'_%'
+	where a.xtype='P' and a.name&lt;&gt;b.tableName
+
+	update #tmpTable
+	set content=
+		char(13)+CHAR(10)+'GO'+char(13)+CHAR(10)+
+		'if exists(select * from sysobjects where xtype='''+rtrim(b.xtype)+''' and name='''+b.name+''') drop '+case rtrim(b.xtype) when 'V' then 'view' when 'P' then 'procedure' when 'FN' then 'function' end+' '+b.name+''+
+		CHAR(13)+CHAR(10)+'GO'+char(13)+CHAR(10)+
+		substring(text1,1,3800),
+		addcon=substring(text1,3801,200)+isnull(atext1,''), content2=substring(text2,1,4000),
+		addcon2=atext2, content3=substring(text3,1,4000),
+		addcon3=atext3, content4=substring(text4,1,4000),
+		addcon4=atext4, content5=substring(text5,1,4000),
+		addcon5=atext5, content6=substring(text6,1,4000),
+		addcon6=atext6, content7=substring(text7,1,4000),
+		addcon7=atext7, content8=substring(text8,1,4000),
+		addcon8=atext8, content9=substring(text9,1,4000),
+		addcon9=atext9, content10=substring(text10,1,4000),
+		addcon10=atext10, content11=substring(text11,1,4000),
+		addcon11=atext11, content12=substring(text12,1,4000),
+		addcon12=atext12, content13=substring(text13,1,4000),
+		addcon13=atext13, content14=substring(text14,1,4000),
+		addcon14=atext14, content15=substring(text15,1,4000),
+		addcon15=atext15, content16=substring(text16,1,4000),
+		addcon16=atext16, content17=substring(text17,1,4000),
+		addcon17=atext17, content18=substring(text18,1,4000),
+		addcon18=atext18, content19=substring(text19,1,4000)
+	from (
+		select id, max(case when colid=1 then text else '' end) text1,
+			max(case when colid=2 then substring(text,1,charindex(' ',text,1)) else '' end) atext1,
+			max(case when colid=2 then substring(text,charindex(' ',text,1)+1,4000) else '' end) text2,
+
+			max(case when colid=3 then substring(text,1,charindex(' ',text,1)) else '' end) atext2,
+			max(case when colid=3 then substring(text,charindex(' ',text,1)+1,4000) else '' end) text3,
+
+			max(case when colid=4 then substring(text,1,charindex(' ',text,1)) else '' end) atext3,
+			max(case when colid=4 then substring(text,charindex(' ',text,1)+1,4000) else '' end) text4,
+
+			max(case when colid=5 then substring(text,1,charindex(' ',text,1)) else '' end) atext4,
+			max(case when colid=5 then substring(text,charindex(' ',text,1)+1,4000) else '' end) text5,
+
+			max(case when colid=6 then substring(text,1,charindex(' ',text,1)) else '' end) atext5,
+			max(case when colid=6 then substring(text,charindex(' ',text,1)+1,4000) else '' end) text6,
+
+			max(case when colid=7 then substring(text,1,charindex(' ',text,1)) else '' end) atext6,
+			max(case when colid=7 then substring(text,charindex(' ',text,1)+1,4000) else '' end) text7,
+
+			max(case when colid=8 then substring(text,1,charindex(' ',text,1)) else '' end) atext7,
+			max(case when colid=8 then substring(text,charindex(' ',text,1)+1,4000) else '' end) text8,
+
+			max(case when colid=9 then substring(text,1,charindex(' ',text,1)) else '' end) atext8,
+			max(case when colid=9 then substring(text,charindex(' ',text,1)+1,4000) else '' end) text9,
+			max(case when colid=10 then substring(text,1,charindex(' ',text,1)) else '' end) atext9,
+			max(case when colid=10 then substring(text,charindex(' ',text,1)+1,4000) else '' end) text10,
+			max(case when colid=11 then substring(text,1,charindex(' ',text,1)) else '' end) atext10,
+			max(case when colid=11 then substring(text,charindex(' ',text,1)+1,4000) else '' end) text11,
+			max(case when colid=12 then substring(text,1,charindex(' ',text,1)) else '' end) atext11,
+			max(case when colid=12 then substring(text,charindex(' ',text,1)+1,4000) else '' end) text12,
+			max(case when colid=13 then substring(text,1,charindex(' ',text,1)) else '' end) atext12,
+			max(case when colid=13 then substring(text,charindex(' ',text,1)+1,4000) else '' end) text13,
+			max(case when colid=14 then substring(text,1,charindex(' ',text,1)) else '' end) atext13,
+			max(case when colid=14 then substring(text,charindex(' ',text,1)+1,4000) else '' end) text14,
+			max(case when colid=15 then substring(text,1,charindex(' ',text,1)) else '' end) atext14,
+			max(case when colid=15 then substring(text,charindex(' ',text,1)+1,4000) else '' end) text15,
+			max(case when colid=16 then substring(text,1,charindex(' ',text,1)) else '' end) atext15,
+			max(case when colid=16 then substring(text,charindex(' ',text,1)+1,4000) else '' end) text16,
+			max(case when colid=17 then substring(text,1,charindex(' ',text,1)) else '' end) atext16,
+			max(case when colid=17 then substring(text,charindex(' ',text,1)+1,4000) else '' end) text17,
+			max(case when colid=18 then substring(text,1,charindex(' ',text,1)) else '' end) atext17,
+			max(case when colid=18 then substring(text,charindex(' ',text,1)+1,4000) else '' end) text18,
+
+			max(case when colid=19 then substring(text,1,charindex(' ',text,1)) else '' end) atext18,
+			max(case when colid=19 then substring(text,charindex(' ',text,1)+1,4000) else '' end) text19
+
+		from  syscomments
+		group by id) a
+		inner join sysObjects b
+			on a.id = b.id
+		inner join #tmpTable c		
+			on c.tableName=b.name
+	where c.xtype not in ('U', 'D')
+			
+	if exists(
+		select tablename, datalength(content)
+		from #tmpTable
+		where datalength(content)&gt;8000) print 'One or more scripts are bigger than 8000 character'
+			
+	DECLARE #curxx CURSOR
+	READ_ONLY
+	FOR 
+	--create table
+		select a.name, 0 orderNo, 'if not exists(select * from sysobjects where name='''+a.name+''') '+
+				'create table '+a.name+' ('+b.name+' '+b1.name+case when b1.name like '%char' then '('+convert(nvarchar(10),b.prec)+')'else '' end +' ROWGUIDCOL '+case when b.isnullable=1 then 'NULL' else 'NOT NULL' end+')' content
+		from sysobjects a
+			inner join syscolumns b
+				on a.id=b.id
+			inner join sys.types b1
+				on b.xtype=b1.user_type_id
+			inner join #tmpTable c	
+				on c.tableName=a.name
+		where a.xtype='U' and b.colid=1
+		
+		union
+
+	--alter table		
+		select a.name, b.colid orderNo, 'if exists(select * from sysobjects where name='''+a.name+''') and not exists (select * from sysobjects a inner join syscolumns b on a.id=b.id where a.name='''+a.name+''' and b.name='''+b.name+''') alter table '+a.name+' add '+b.name+' '+b1.name+case when b1.name like '%char' then '('+convert(nvarchar(10),b.prec)+')'else '' end +' '+case when b.isnullable=1 then 'NULL' else 'NOT NULL' end+'' content 
+	--		a.name,  content, b.*
+		from sysobjects a
+			inner join syscolumns b
+				on a.id=b.id
+			inner join sys.types b1
+				on b.xtype=b1.user_type_id
+			inner join #tmpTable c	
+				on c.tableName=a.name
+		where a.xtype='U'
+		
+		union
+	
+	--alter default
+		select b.name, a.colid orderNo, 'if exists(select * from sysobjects where name='''+b.name+''') and not exists(select * from sysobjects where name='''+b.name+''') alter table '+b2.name+' add constraint '+b.name+' default ('+b1.text+') for '+a.name content 
+		from syscolumns a
+			inner join sysobjects b
+				on a.cdefault=b.id
+			inner join syscomments b1
+				on b1.id=b.id
+			inner join sysobjects b2
+				on b.parent_obj=b2.id
+			inner join #tmpTable c
+				on c.tableName=b.name
+		where c.xtype='D'
+
+
+--UQ belum masuk
+		
+		union
+
+		select a.name, 200+d.colid, 'if exists(select * from sysobjects where name='''+d1.name+''') and not exists (select * from sysobjects where name=''PK_'+d1.name+''') alter table '+d1.name+' ADD  CONSTRAINT PK_'+d1.name+' PRIMARY KEY CLUSTERED (['+d.name+'] ASC) 
+			WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]' 
+		from sysobjects a
+			inner join sys.indexes b
+				on a.name=b.name
+			inner join sys.index_columns c
+				on b.object_id=c.object_id
+				and b.index_id=c.index_id
+			inner join syscolumns d
+				on d.id=a.parent_obj
+				and c.index_column_id=d.colid
+			inner join sysobjects d1
+				on d.id=d1.id
+			inner join #tmpTable e
+				on a.name=e.tablename
+		where a.xtype='PK'
+
+		union
+		
+	--alter primary key
+		select a.name, 0 orderNo, 'if exists(select * from sysobjects where name='''+a.name+''') and not exists(select * from sysobjects where name='''+a.name+''') '+
+				'create table '+a.name+' ('+b.name+' '+b1.name+case when b1.name like '%char' then '('+convert(nvarchar(10),b.prec)+')'else '' end +' ROWGUIDCOL '+case when b.isnullable=1 then 'NULL' else 'NOT NULL' end+')' content
+		from sysobjects a
+			inner join syscolumns b
+				on a.id=b.id
+			inner join sys.types b1
+				on b.xtype=b1.user_type_id
+			inner join #tmpTable c	
+				on c.tableName=a.name
+		where a.xtype='U' and b.colid=1
+		order by a.name, orderNo
+
+	
+	DECLARE @t nvarchar(50), @ct varchar(8000), @i int
+	OPEN #curxx
+
+	FETCH NEXT FROM #curxx INTO @t, @i, @ct
+	WHILE (@@fetch_status &lt;&gt; -1)
+	BEGIN
+		IF (@@fetch_status &lt;&gt; -2)
+		BEGIN
+			--select @t, @i, @ct		
+			update #tmpTable
+			set content=case when LEN(isnull(content2,''))=0  and len(isnull(content,''))+len(@ct)+2&lt;=8000                                                then isnull(substring(content,1,8000),'')+@ct+CHAR(13)+CHAR(10) else content end,
+				content2=case when LEN(isnull(content3,''))=0 and len(isnull(content2,''))+len(@ct)+2&lt;=8000 and len(isnull(content,''))+len(@ct)+2&gt;=8000  then isnull(substring(content2,1,8000),'')+@ct+CHAR(13)+CHAR(10) else content2 end,
+				content3=case when LEN(isnull(content4,''))=0 and len(isnull(content3,''))+len(@ct)+2&lt;=8000 and len(isnull(content2,''))+len(@ct)+2&gt;=8000 then isnull(substring(content3,1,8000),'')+@ct+CHAR(13)+CHAR(10) else content3 end,
+				content4=case when LEN(isnull(content5,''))=0 and len(isnull(content4,''))+len(@ct)+2&lt;=8000 and len(isnull(content3,''))+len(@ct)+2&gt;=8000 then isnull(substring(content4,1,8000),'')+@ct+CHAR(13)+CHAR(10) else content4 end,
+				content5=case when LEN(isnull(content6,''))=0 and len(isnull(content5,''))+len(@ct)+2&lt;=8000 and len(isnull(content4,''))+len(@ct)+2&gt;=8000 then isnull(substring(content5,1,8000),'')+@ct+CHAR(13)+CHAR(10) else content5 end,
+				content6=case when LEN(isnull(content7,''))=0 and len(isnull(content6,''))+len(@ct)+2&lt;=8000 and len(isnull(content5,''))+len(@ct)+2&gt;=8000 then isnull(substring(content6,1,8000),'')+@ct+CHAR(13)+CHAR(10) else content6 end,
+				content7=case when LEN(isnull(content8,''))=0 and len(isnull(content7,''))+len(@ct)+2&lt;=8000 and len(isnull(content6,''))+len(@ct)+2&gt;=8000 then isnull(substring(content7,1,8000),'')+@ct+CHAR(13)+CHAR(10) else content7 end,
+				content8=case when LEN(isnull(content9,''))=0 and len(isnull(content8,''))+len(@ct)+2&lt;=8000 and len(isnull(content7,''))+len(@ct)+2&gt;=8000 then isnull(substring(content8,1,8000),'')+@ct+CHAR(13)+CHAR(10) else content8 end,
+				content9=case when LEN(isnull(content10,''))=0 and len(isnull(content9,''))+len(@ct)+2&lt;=8000 and len(isnull(content8,''))+len(@ct)+2&gt;=8000 then isnull(substring(content9,1,8000),'')+@ct+CHAR(13)+CHAR(10) else content9 end,
+				content10=case when LEN(isnull(content11,''))=0 and len(isnull(content10,''))+len(@ct)+2&lt;=8000 and len(isnull(content9,''))+len(@ct)+2&gt;=8000 then isnull(substring(content10,1,8000),'')+@ct+CHAR(13)+CHAR(10) else content10 end,
+				content11=case when LEN(isnull(content12,''))=0 and len(isnull(content11,''))+len(@ct)+2&lt;=8000 and len(isnull(content10,''))+len(@ct)+2&gt;=8000 then isnull(substring(content11,1,8000),'')+@ct+CHAR(13)+CHAR(10) else content11 end,
+				content12=case when LEN(isnull(content13,''))=0 and len(isnull(content12,''))+len(@ct)+2&lt;=8000 and len(isnull(content11,''))+len(@ct)+2&gt;=8000 then isnull(substring(content12,1,8000),'')+@ct+CHAR(13)+CHAR(10) else content12 end,
+				content13=case when LEN(isnull(content14,''))=0 and len(isnull(content13,''))+len(@ct)+2&lt;=8000 and len(isnull(content12,''))+len(@ct)+2&gt;=8000 then isnull(substring(content13,1,8000),'')+@ct+CHAR(13)+CHAR(10) else content13 end,
+				content14=case when LEN(isnull(content15,''))=0 and len(isnull(content14,''))+len(@ct)+2&lt;=8000 and len(isnull(content13,''))+len(@ct)+2&gt;=8000 then isnull(substring(content14,1,8000),'')+@ct+CHAR(13)+CHAR(10) else content14 end,
+				content15=case when LEN(isnull(content16,''))=0 and len(isnull(content15,''))+len(@ct)+2&lt;=8000 and len(isnull(content14,''))+len(@ct)+2&gt;=8000 then isnull(substring(content15,1,8000),'')+@ct+CHAR(13)+CHAR(10) else content15 end,
+				content16=case when LEN(isnull(content17,''))=0 and len(isnull(content16,''))+len(@ct)+2&lt;=8000 and len(isnull(content15,''))+len(@ct)+2&gt;=8000 then isnull(substring(content16,1,8000),'')+@ct+CHAR(13)+CHAR(10) else content16 end,
+				content17=case when LEN(isnull(content18,''))=0 and len(isnull(content17,''))+len(@ct)+2&lt;=8000 and len(isnull(content16,''))+len(@ct)+2&gt;=8000 then isnull(substring(content17,1,8000),'')+@ct+CHAR(13)+CHAR(10) else content17 end,
+				content18=case when LEN(isnull(content19,''))=0 and len(isnull(content18,''))+len(@ct)+2&lt;=8000 and len(isnull(content17,''))+len(@ct)+2&gt;=8000 then isnull(substring(content18,1,8000),'')+@ct+CHAR(13)+CHAR(10) else content18 end,
+				content19=case when                                len(isnull(content19,''))+len(@ct)+2&lt;=8000 and len(isnull(content18,''))+len(@ct)+2&gt;=8000 then isnull(substring(content19,1,8000),'')+@ct+CHAR(13)+CHAR(10) else content19 end
+			where tableName=@t
+		END
+		FETCH NEXT FROM #curxx INTO @t, @i, @ct
+	END
+
+	CLOSE #curxx
+	DEALLOCATE #curxx
+
+	if @mode=1	
+		select tableName, content, addcon, content2, addcon2, 
+				content3, addcon3, content4, addcon4, 
+				content5, addcon5, content6, addcon6, 
+				content7, addcon7, content8, addcon8, 
+				content9, addcon9, content10, addcon10, 
+				content11, addcon11, content12, addcon12, 
+				content13, addcon13, content14, addcon14, 
+				content15, addcon15, content16, addcon16, 
+				content17, addcon17, content18, addcon18, 
+				content19,
+			LEN(content), LEN(content2), LEN(content3), LEN(content4) , LEN(content5), 
+			LEN(content6), LEN(content7), LEN(content8), LEN(content9) , LEN(content10), 
+			LEN(content11), LEN(content12), LEN(content13), LEN(content14) , LEN(content15), 
+			LEN(content16) , LEN(content17) , LEN(content18) , LEN(content19)  
+		from #tmpTable 
+		order by case xtype when 'U' then 1 when 'PK' then 2 when 'D' then 3 when 'V' then 4 else 5 end 	 			
+	else
+		select isnull(content,'')+isnull(addcon,''), 
+			isnull(content2,'')+isnull(addcon2,''), 
+			isnull(content3,'')+isnull(addcon3,''), 
+			isnull(content4,'')+isnull(addcon4,''), 
+			isnull(content5,'')+isnull(addcon5,''), 
+			isnull(content6,'')+isnull(addcon6,''), 
+			isnull(content7,'')+isnull(addcon7,''), 
+			isnull(content8,'')+isnull(addcon8,''), 
+			isnull(content9,'')+isnull(addcon9,''), 
+			isnull(content10,'')+isnull(addcon10,''), 
+			isnull(content11,'')+isnull(addcon11,''), 
+			isnull(content12,'')+isnull(addcon12,''), 
+			isnull(content13,'')+isnull(addcon13,''), 
+			isnull(content14,'')+isnull(addcon14,''), 
+			isnull(content15,'')+isnull(addcon15,''), 
+			isnull(content16,'')+isnull(addcon16,''), 
+			isnull(content17,'')+isnull(addcon17,''), 
+			isnull(content18,'')+isnull(addcon18,''), 
+			isnull(content19,'')
+		from #tmpTable 
+		order by case xtype when 'U' then 1 when 'PK' then 2 when 'D' then 3 when 'V' then 4 else 5 end 	 			
+
+		
+--	select * from #tmpTable
+--	where tablename='pk_couserbudg'
+	--where xtype='SN'
+--exec gen.extractTableDef 'toPDRQ'
+--EXEC master..xp_cmdshell 'bcp eform20110916.dbo.coUSER out ''c:\coUSER.dat'' -c -T'
+
+
+
+
+
+
+
+

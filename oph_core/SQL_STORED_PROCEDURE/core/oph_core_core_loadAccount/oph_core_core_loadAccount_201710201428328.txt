@@ -1,0 +1,154 @@
+
+CREATE procedure [core].[loadAccount] @hostGUID uniqueidentifier, 
+	@address nvarchar(100), @env nvarchar(50)=null, @code nvarchar(50)=null, @isSyncData bit=0
+as
+	declare @accountid nvarchar(50), @coreDB nvarchar(50)=db_name(), @datadb nvarchar(50), 
+		@themeCode nvarchar(50), @themePage nvarchar(50), @accountguid uniqueidentifier
+
+	declare @sqlstr nvarchar(max)
+
+	select @accountid=a.accountid, @datadb=d.DatabaseName 
+	from acct a
+		inner join acctinfo b1 on a.accountguid=b1.accountguid and b1.infokey='address' 
+			and charindex(lower(@address), lower(b1.infovalue)+';')>0
+		inner join acctdbse d on a.AccountGUID=d.AccountGUID and d.isMaster=1 and d.[version]='4.0'
+
+
+	set @sqlstr='	
+		--insert from oph_core
+		insert into '+@dataDB+'.dbo.acct
+		select a.* from acct a
+			left join '+@dataDB+'.dbo.acct b
+				on a.accountguid=b.accountguid
+		where b.accountguid is null and a.accountguid=@accountguid
+
+		insert into '+@dataDB+'.dbo.acctdbse
+		select a.* from acctdbse a
+			left join '+@dataDB+'.dbo.acctdbse b
+				on a.accountdbguid=b.accountdbguid
+		where b.accountdbguid is null and a.accountguid=@accountguid  		
+
+		insert into '+@dataDB+'.dbo.acctinfo
+		select a.* from acctinfo a
+			left join '+@dataDB+'.dbo.acctinfo b
+				on a.accountinfoguid=b.accountinfoguid
+		where b.accountinfoguid is null and a.accountguid=@accountguid  
+
+		--insert to oph_core
+		insert into acctdbse
+		select a.* from '+@dataDB+'.dbo.acctdbse a
+			left join acctdbse b
+				on a.accountdbguid=b.accountdbguid
+		where b.accountdbguid is null and a.accountguid=@accountguid  		
+
+		insert into acctinfo
+		select a.* from '+@dataDB+'.dbo.acctinfo a
+			left join acctinfo b
+				on a.accountinfoguid=b.accountinfoguid
+		where b.accountinfoguid is null and a.accountguid=@accountguid  
+		
+		--update from oph_core
+		update b
+		set DatabaseName=a.DatabaseName, serverName=a.serverName, ODBC=a.ODBC, isMaster=a.isMaster, 
+			version=a.version, migrateDB=a.migrateDB
+		from acctdbse a
+			inner join '+@dataDB+'.dbo.acctdbse b
+				on a.accountdbguid=b.accountdbguid
+		where a.accountguid=@accountguid  		
+		--where gen.datetoint(isnull(a.updateddate, a.createddate))> gen.datetoint(isnull(b.updateddate, b.createddate))
+
+		update b
+		set InfoKey=a.InfoKey, InfoValue=a.InfoValue 
+		from acctinfo a
+			inner join '+@dataDB+'.dbo.acctinfo b
+				on a.accountinfoguid=b.accountinfoguid
+		where gen.datetoint(isnull(a.updateddate, a.createddate))> gen.datetoint(isnull(b.updateddate, b.createddate))
+
+		--update to oph_core
+		update b
+		set DatabaseName=a.DatabaseName, serverName=a.serverName, ODBC=a.ODBC, isMaster=a.isMaster, 
+			version=a.version, migrateDB=a.migrateDB
+		from '+@dataDB+'.dbo.acctdbse a
+			inner join acctdbse b
+				on a.accountdbguid=b.accountdbguid
+		where a.accountguid=@accountguid  		
+		--where gen.datetoint(isnull(a.updateddate, a.createddate))> gen.datetoint(isnull(b.updateddate, b.createddate))
+
+		update b
+		set InfoKey=a.InfoKey, InfoValue=a.InfoValue 
+		from '+@dataDB+'.dbo.acctinfo a
+			inner join acctinfo b
+				on a.accountinfoguid=b.accountinfoguid
+		where gen.datetoint(isnull(a.updateddate, a.createddate))> gen.datetoint(isnull(b.updateddate, b.createddate))
+				
+		'
+
+	if @isSyncData=1 exec sp_executesql @sqlstr, N'@accountguid uniqueidentifier', @accountguid
+
+
+
+	
+	set @sqlstr=N'
+		use '+@datadb+N'
+		
+		declare @isWhite bit = 0, @whiteAddress nvarchar(max), @fp nvarchar(50), @sip nvarchar(50), @skins nvarchar(50), @ODBC varchar(max)
+
+		select @fp=b4.InfoValue, @sip=b5.InfoValue, @whiteAddress=b6.infoValue, @skins=b7.InfoValue, @ODBC=b2.InfoValue
+		from '+@coreDB+'.dbo.acct a
+			inner join '+@coreDB+'.dbo.acctinfo b2 on a.accountguid=b2.accountguid and b2.infokey=''ODBC''
+			left join '+@coreDB+'.dbo.acctinfo b3 on a.accountguid=b3.accountguid and b3.infokey=''themeCode''
+			left join '+@coreDB+'.dbo.acctinfo b4 on a.accountguid=b4.accountguid and b4.infokey=''frontPage''
+			left join '+@coreDB+'.dbo.acctinfo b5 on a.accountguid=b5.accountguid and b5.infokey=''signinPage''
+			left join '+@coreDB+'.dbo.acctinfo b6 on a.accountguid=b6.accountguid and b6.infokey=''whiteAddress''
+			left join '+@coreDB+'.dbo.acctinfo b7 on a.accountguid=b7.accountguid and b7.infokey=''skinColor''
+		where a.accountid=@accountid		
+	
+		set @isWhite = iif(@whiteAddress like ''%'+@address+'%'', 1, 0)
+		--set @skins = iif(@skins like ''%skin%'', @skins, ''skin-blue'')
+
+		if not exists(select * from userhost where hostguid=@hostguid) 
+			exec gen.createGuestID @accountid, @coreDB, @hostGUID output
+		
+		declare @userGUID uniqueidentifier
+		select @userguid=userguid from userhost where hostguid=@hostguid
+		
+		if @code is null or not exists(select * from modl where moduleid=@code) 
+			select @code=g1.infovalue 
+			from modg g
+				inner join modginfo g1 on g.modulegroupguid=g1.modulegroupguid and g1.infokey=''frontpage''
+			where modulegroupid=@env
+
+		if @code is null set @code=@fp
+
+		declare @needLogin bit=0, @lastPar nvarchar(max)=null, @signInPage nvarchar(50),
+			@themeFolder nvarchar(50), @themePage nvarchar(50)
+		
+		if exists(select * from modl where moduleid=@code)
+			select 
+				@themeFolder=t.themeFolder,
+				@themePage=tp.pageurl, 
+				@env=g.ModuleGroupID,
+				@code=iif(isnull(m.moduleid,'''')<>'''', m.moduleid, isnull(g4.infovalue, @fp)),
+				@signInPage=isnull(g5.infovalue, @sip),
+				@needLogin=iif(m.needLogin=1 and @userGUID is null, 1, 0)
+				
+			from modl m
+				left join thmepage tp on m.themepageguid=tp.themepageguid 
+				left join thme t on tp.themeGUID=t.themeGUID
+				left join modg g on m.ModuleGroupGUID=g.ModuleGroupGUID
+				left join modginfo g4 on g.ModuleGroupGUID=g4.modulegroupguid and g4.InfoKey=''frontPage''
+				left join modginfo g5 on g.ModuleGroupGUID=g5.modulegroupguid and g5.InfoKey=''signinPage''
+			where m.ModuleID=isnull(@code, @fp)
+			
+		select @accountid [account], @coreDB [db_core], @ODBC [odbc], @themeFolder [themeFolder], @themePage [themePage], @env [env], @code [code], 
+			@hostGUID [host], @userGUID [user], @needLogin [needLogin], @signInPage [signInPage], @isWhite [isWhiteAddress], @skins [skins]
+	'
+	print @accountid
+	print @sqlstr
+
+	exec sp_executesql @sqlstr, 
+		N'@accountid nvarchar(50), @hostguid uniqueidentifier, @coreDB nvarchar(50), @code nvarchar(50), @env nvarchar(50)',
+		@accountid, @hostguid, @coreDB, @code, @env--, @ODBC, @themeCode, , , @sip, @fp, @isWhite, @skins
+
+	
+

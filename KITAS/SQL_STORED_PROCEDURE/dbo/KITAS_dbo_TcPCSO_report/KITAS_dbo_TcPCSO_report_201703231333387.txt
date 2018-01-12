@@ -1,0 +1,20 @@
+CREATE PROCEDURE TcPCSO_report @hostGUID uniqueidentifier, @PCSOGUID uniqueidentifier
+as	--CreatedBy eLs ON Mar, 2017
+
+	--declare @hostGUID uniqueidentifier = gen.getHost('oph', null), @PCSOGUID uniqueidentifier
+
+	declare @UserGUID uniqueidentifier = gen.getUser(@hostGUID)
+	if @UserGUID is NULL begin
+		set @UserGUID = oph_core.gen.getUserHost(@hostGUID)
+	end
+
+	select 
+		DocRefNo [InvNo], CONVERT(varchar(12), ClosedDate, 106) [InvDate], 
+		TotalQty, FORMAT((SubTotal + TotalDiscount), '#,#0' ) [SubTotal1], FORMAT(TotalDiscount, '#,#0') [Discount], 
+		FORMAT(SubTotal, '#,#0') [SubTotal2], FORMAT(PPN, '#,#0') [PPN], FORMAT(TotalSales, '#,#0') [GrandTotal],
+		PAYMGUIDCbNm [Payment], CarolGUIDCbNm+' '+ISNULL('('+CarolGUIDcbId+')', '') [Customer], HostName,
+		CONVERT(varchar(20), GETDATE(), 113) [printDate]
+	from oph.TcPCSO a
+		left join (select UserName [HostName] from CoUSER where UserGUID = isNULL(@UserGUID, dbo.OPHGUID())) b ON 1=1
+	where PCSOGUID = @PCSOGUID
+

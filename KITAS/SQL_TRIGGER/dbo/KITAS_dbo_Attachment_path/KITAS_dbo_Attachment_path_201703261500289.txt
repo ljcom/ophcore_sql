@@ -1,0 +1,19 @@
+CREATE TRIGGER [dbo].[Attachment_path] ON [dbo].[MoPRODFOTO] 
+	AFTER INSERT, UPDATE
+AS	--
+BEGIN
+
+	SET NOCOUNT ON;
+	update b set
+		b.Attachment = c.uploadFolder + '\' + documentFolder + '\' + 'MaPRODFOTO_Attachment\' +
+		CAST(a.PRODFOTOGUID AS varchar(50)) + '_' + 
+		case when CHARINDEX('\', REVERSE(a.Attachment)) = 0 then a.attachment else RIGHT(a.Attachment, CHARINDEX('\', REVERSE(a.Attachment)) - 1) end
+	--select * 
+	from inserted a
+		inner join MoPRODFOTO b ON b.PRODFOTOGUID = a.PRODFOTOGUID
+		left join CoACCT c ON AccountGUID = 'EDF9451C-25DE-4EA5-A337-DA29AB251B60'
+	where documentFolder is not null and uploadFolder is not null
+		AND uploadFolder != LEFT(a.Attachment, LEN(uploadFolder))
+
+END
+

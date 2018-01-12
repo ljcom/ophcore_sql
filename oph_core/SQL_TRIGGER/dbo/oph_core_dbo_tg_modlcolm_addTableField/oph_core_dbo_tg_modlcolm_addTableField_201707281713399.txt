@@ -1,0 +1,44 @@
+
+CREATE TRIGGER [dbo].[tg_modlcolm_addTableField] 
+ON [dbo].[modlcolm]
+AFTER INSERT AS
+BEGIN
+
+	SET NOCOUNT ON;
+
+	declare @sqlstr nvarchar(max)
+		, @datadb nvarchar(30)
+		, @v4DB nvarchar(30)
+		, @svr nvarchar(50)=''
+		, @columnname nvarchar(50), @code nvarchar(50), @colType int, @colLength int
+
+		set @datadb =  DB_NAME() 
+
+		select @v4DB = c.databasename, @columnname = a.colKey, @code = moduleid, @colLength=colLength, @coltype=coltype
+		from inserted a
+		inner join modl b on b.ModuleGUID = a.ModuleGUID
+		inner join acctdbse c on c.AccountDBGUID = b.AccountDBGUID 
+
+	set @sqlstr = '	
+		use '+@v4DB+'
+		if not exists(
+			select * 
+			from sys.objects o inner join sys.columns c on o.object_id=c.object_id 
+			where o.name='''+@code+''' and c.name='''+@columnname+''') 
+		begin
+			alter table doc.['+@code+'] 
+				add ['+@columnname+'] '+
+					case 
+						when @coltype in (59,60,62,122,106) then 'money' 
+						when @coltype in (40,41,42,43,58,61,189) then 'datetime' 
+						when @coltype in (48,52,56,108,127,104) then 'bigint' 
+						when @coltype in (36) then 'uniqueidentifier' 
+						when @coltype in (167,173,175,231,239) and @collength between 1 and 300 then 'nvarchar('+cast(@collength as nvarchar(5))+')' 
+						when @coltype in (167,173,175,231,239) then 'nvarchar(max)' 
+						else 'nvarchar(max)'
+					end+' null
+
+		end'
+	exec sp_executesql @sqlstr
+END
+

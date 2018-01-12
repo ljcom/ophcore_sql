@@ -1,0 +1,379 @@
+
+CREATE procedure [api].[theme_browse_v4] @accountid varchar(50), 
+	@hostGUID uniqueidentifier,
+	@code varchar(100), 
+	@sqlFilter varchar(max)='', 
+	@searchText varchar(max)='', 
+	@pgNo int=1, 
+	@nbRows int=10,
+	@sortOrder varchar(max)='', 
+	@stateid varchar(10)='', 
+	@isdebug int=0
+as
+
+	if @sqlfilter !='' 
+		set @sqlFilter = 'and ' +@sqlfilter
+
+	--set userGUID and accountGUID
+	declare @userGUID uniqueidentifier
+
+	select @userGUID=a.userGUID--, @accountGUID=b.accountGUID, @accountid=AccountId
+	from userhost a 
+		inner join [user] b on a.userguid=b.userguid
+		inner join acct c on b.AccountGUID=c.AccountGUID
+	where hostguid=@hostguid
+
+	--check db location
+	declare @db varchar(10), @settingMode varchar(1)
+	set @db=[api].[fn_checkDB](@accountid, @code)
+
+	select @settingMode=api.settingmode(settingMode) 
+	from modl a
+		inner join acct b on a.accountguid=b.AccountGUID
+	where moduleid=@code and accountid=@accountid
+
+	declare @totalPages int=0
+
+	declare @randomText varchar(50)=replace(cast(newid() as varchar(50)), '-', '')
+	declare @sqlstr nvarchar(max)
+
+	declare @browseList as api.browselist
+	declare @browseRows as api.browsefieldlist
+	declare @browseFields as api.browsefields
+
+	if @settingMode='C' begin
+
+		declare @fieldkey varchar(50)
+		select @fieldkey=colkey
+		from modl a
+			inner join modlcolm b on a.moduleguid=b.moduleguid
+			inner join acct c on c.accountguid=a.AccountGUID
+		--where a.moduleid='menu'
+		where a.moduleid=@code and accountid=@accountID
+			and colorder=(
+				select min(colorder)
+				from modl a
+					inner join modlcolm b on a.moduleguid=b.moduleguid
+					inner join acct c on a.accountguid=c.AccountGUID
+				where a.moduleid=@code and accountid=@accountID
+			)
+
+		--fieldGUID
+		--tidak perlu pakai accountid, karena table core tidak semuanya ada accountid. mungkin perlu tambahkan @db
+		set @sqlstr='
+			select '+@fieldkey+' formGUID, '''+@code+''' moduleid, 0 status, null statusLabel, null statuscomment
+			from ['+@code+'] where 1=1 '+@sqlfilter	-- where accountID='''+@accountID+''''
+
+		if @isdebug=1 print @sqlstr
+		insert into @browseList (formGUID, moduleid, status, statusLabel, statusComment)
+		exec sp_executesql @sqlstr
+
+		set @sqlstr='
+			select b.columnGUID, a.moduleguid, colOrder, b.colkey, case when c4.infovalue>0 then 1 else 0 end, c5.infovalue, b.titleCaption, c2.infoValue, c1.infovalue  
+			--select *
+			from modl a
+				inner join acct d on a.accountguid=d.AccountGUID
+				inner join modlcolm b on a.moduleguid=b.moduleguid
+				left join modlcolminfo c1 on b.columnguid=c1.columnguid and c1.infokey=''colSize''
+				left join modlcolminfo c2 on b.columnguid=c2.columnguid and c2.infokey=''BrowseColAlign''
+				left join modlcolminfo c3 on b.columnguid=c3.columnguid and c3.infokey=''BrowseColDigit''
+				left join modlcolminfo c4 on b.columnguid=c4.columnguid and c4.infokey=''PrimaryCol''
+				inner join modlcolminfo c5 on b.columnguid=c5.columnguid and c5.infokey=''isBrowsable'' and c5.infovalue=''1''
+			where a.moduleid='''+@code+''' and accountID='''+@accountID+''''
+
+		if @isdebug=1 print @sqlstr
+		insert into @browseFields (columnGUID, moduleGUID, colOrder, colKey, isMandatory, isBrowsable, titleCaption, align, width)
+		exec sp_executesql @sqlstr
+
+		--rows
+		declare @fieldList varchar(max), @fieldList2 varchar(max)
+		set @fieldList=stuff((
+			select ', '+colkey
+			from modl  a
+				inner join acct c on a.accountguid=c.AccountGUID
+				inner join modlcolm b on a.moduleguid=b.moduleguid
+			where moduleid=@code and accountid=@accountID and colKey not in (@fieldkey, 'accountguid')
+			for xml path('')),1,2, '')
+
+		set @fieldList2=stuff((
+			select ', cast('+colkey+' as varchar(max)) '+colkey --cast(menuid as varchar(max)) menuid
+			from modl  a
+				inner join acct c on a.accountguid=c.AccountGUID
+				inner join modlcolm b on a.moduleguid=b.moduleguid
+			where moduleid=@code and accountid=@accountID and colKey not in (@fieldkey, 'accountguid')
+			for xml path('')),1,2, '')
+
+		set @sqlstr='
+			SELECT newid(), '+@fieldkey+' formGUID, fextkey, fextstring, 0 mandatory, null titlecaption
+			FROM
+			(	select '+@fieldkey+', '+@fieldList2+' 
+				from ['+@code+']) t
+			UNPIVOT
+			(	fextstring FOR fextkey  IN ('+@fieldList+')
+			) AS x'
+		
+		if @isdebug=1 print @sqlstr
+		insert into @browseRows (formFieldGUID, formGUID, formkey, formvalue, mandatory, caption)
+		exec sp_executesql @sqlstr
+
+		if @isdebug=1 print 'delete'
+		delete x
+		--select x.*, c1.infovalue 
+		from @browseRows x
+			inner join modlcolm a on x.formkey=a.colKey
+			inner join modl b on a.ModuleGUID=b.ModuleGUID
+			inner join acct d on d.accountguid=b.AccountGUID
+			left join modlcolminfo c1 on c1.ColumnGUID=a.ColumnGUID and c1.InfoKey='isBrowsable'
+		where d.AccountID=@accountID and b.moduleid=@code and isnull(c1.infovalue,'')<>'1'
+
+		update x
+		set Mandatory=case when c1.InfoValue>0 then 1 else 0 end, caption=a.titlecaption
+		from @browseRows x
+			inner join modlcolm a on x.formkey=a.colKey
+			inner join modl b on a.ModuleGUID=b.ModuleGUID
+ 			inner join acct d on d.accountguid=b.AccountGUID
+			left join modlcolminfo c1 on c1.ColumnGUID=a.ColumnGUID and c1.InfoKey='PrimaryCol'
+		where d.AccountID=@accountID and b.moduleid=@code
+
+		
+	end 
+	else begin
+		print 'docm'
+		--select b.formGUID, b.fextKey, b.fextString, 0 mandatory
+		--into #browsefields
+		--from oph_modules.dbo.oph_form a
+		--	inner join oph_modules.dbo.oph_formfext b
+		--		on a.formGUID=b.formGUID
+		--where moduleid=@code
+	end
+
+		--select a.moduleGUID, a.docGUID
+		----into #browserows
+		--from oph_core.dbo.docm a
+		--where moduleguid = (
+		--	select moduleguid from modl where moduleid=@code)
+
+	if @isdebug=1 select * from @browseList
+	if @isdebug=1 select * from @browsefields
+	if @isdebug=1 select * from @browseRows
+
+	declare @browsexml xml
+	select @browsexml = 
+		--info
+		--<info>
+		--  <code>VEND</code>
+		--  <description>New Vendor Request</description>
+		--  <state code="0">DRAFT</state>
+		--  <searchText />
+		--  <nbRows>10</nbRows>
+		--  <pageNo>1</pageNo>
+		--  <nbPages>1</nbPages>
+		(select (select moduleid code, ModuleDescription description, --@searchText searchText, @pgNo pageNo, @nbRows nbRows, @totalPages nbPages,
+		--permission
+		--  <permission>
+		--	<allowAdd>1</allowAdd>
+		--	<allowEdit>1</allowEdit>
+		--	<allowDelete>1</allowDelete>
+		--	<allowWipe>1</allowWipe>
+		--	<allowArchieve>1</allowArchieve>
+		--	<allowBatchInsert>1</allowBatchInsert>
+		--  </permission>
+			(select 
+				(select infovalue as 'AllowAdd' from modlinfo where infokey = 'AllowAdd' and moduleguid = modl.moduleguid),
+				(select infovalue as 'AllowBatch' from modlinfo where infokey = 'AllowBatch' and moduleguid = modl.moduleguid),
+				(select infovalue as 'AllowBrowse' from modlinfo where infokey = 'AllowBrowse' and moduleguid = modl.moduleguid),
+				(select infovalue as 'AllowDelete' from modlinfo where infokey = 'AllowDelete' and moduleguid = modl.moduleguid), 
+				(select infovalue as 'AllowEdit' from modlinfo where infokey = 'AllowEdit' and moduleguid = modl.moduleguid), 
+				(select infovalue as 'AllowHold' from modlinfo where infokey = 'AllowHold' and moduleguid = modl.moduleguid), 
+				(select infovalue as 'AllowWipe' from modlinfo where infokey = 'AllowWipe' and moduleguid = modl.moduleguid)
+			for xml path('permission'),type), 
+		--states
+		--  <states>
+		--	<state code="100" name="Pending">
+		--	  <substates>
+		--		<substate code="0">Draft</substate>
+		--		<substate code="100">On Approval</substate>
+		--		<substate code="300">Rejected</substate>
+		--		<substate code="399">Pending Release</substate>
+		--	  </substates>
+		--	</state>
+		--	<state code="400" name="Approved">
+		--	  <substates>
+		--		<substate code="400">Approved</substate>
+		--	  </substates>
+		--	</state>
+		--	<state code="500" name="Closed">
+		--	  <substates>
+		--		<substate code="500">Closed</substate>
+		--	  </substates>
+		--	</state>
+		--	<state code="999" name="Deleted">
+		--	  <substates>
+		--		<substate code="999">Deleted</substate>
+		--	  </substates>
+		--	</state>
+		--  </states>
+			(
+				select top 100 stata.statecode as '@code',statedesc as '@name',(
+					select top 100 stateid as '@code',statename+''  
+					--select * 
+					from mstastat statb
+					where StateCode = stata.StateCode	
+						and modl.ModuleStatusGUID=statb.moduleStatusguid 
+					order by stateid
+					for xml path('substate'),type)  
+				from (
+					select distinct statecode, modulestatusguid, statedesc 
+					from mstastat 
+					where modl.moduleStatusguid=mstastat.moduleStatusguid
+					) as stata
+				order by statecode
+				for xml path('state'),type
+			) as states
+		from modl
+			inner join acct b on modl.accountguid=b.AccountGUID
+		where moduleid=@code and accountid=@accountID
+		for xml path(''), elements, type
+			) info, 
+		--</info>
+		--columns
+		--<columns>
+		--  <column fieldName="DocNo" mandatory="1" width="80">Doc No</column>
+		--  <column fieldName="RefNo" mandatory="1" width="80">Ref No</column>
+		--  <column fieldName="DocDate" mandatory="1" width="80">Date</column>
+		--  <column fieldName="VendorNo" mandatory="0">Vendor No</column>
+		--  <column fieldName="VendorName" mandatory="0">Vendor Name</column>
+		--  <column fieldName="PurposeDescription" mandatory="0">Purpose Description</column>
+		--  <column fieldName="docStatus" mandatory="0" docStatus="1" width="80" text-align="center">Status</column>
+		--</columns>
+		(select top 1000 fieldname '@fieldName', mandatory '@mandatory', width '@width', titleCaption
+		from (
+			--select 'DocNo' fieldName, 1 mandatory, 80 width,-3 colOrder, 'Doc No' titleCaption union all
+			--select 'RefNo', 1, 80, -2, 'Ref No' union all
+			--select 'DocDate', 1, 80, 1, 'Date' union all
+			select colkey fieldName, ismandatory mandatory, width, colOrder, titleCaption  
+			from @browsefields) x
+		order by colOrder, fieldname
+		for xml path('column'), elements, type) header, 
+		--rows
+		--<rows>
+		--  <row code="VEND" GUID="CF549076-2773-4FF8-8129-230B6263479C" edit="1" delete="1" wipe="0" restore="0" force="0" reopen="0" approve="0" reject="0">
+		--    <fields>
+		--	    <field caption="Doc No" mandatory="1">VQ10B0017</field>
+		--	    <field caption="Ref No" mandatory="1">VQ10B0007</field>
+		--	    <field caption="Doc Date" mandatory="1">01/01/2015</field>
+		--	    <field caption="Vendor No">VENDORID</field>
+		--	    <field caption="Vendor Name">PT VENDOR NAME</field>
+		--	    <field caption="Purpose Description">THIS IS COMMENT</field>
+		--    </fields>
+		--	  <docStatus labelColor="success" title="RELEASE">Open/Draft. You cannot generate any Vendor since you don''t have any approval level above you. Please make sure y</docStatus>
+		--	  <approvals>
+		--      <approval></approval>
+		--    </approvals>
+		--	  <talks>
+		--	    <talk GUID="555209CB-E2E4-47C1-8B09-4025D8DE2349">
+		--		  <Message>88</Message>
+		--		  <userid>Sam</userid>
+		--		  <username>samuel</username>
+		--		  <sentdate>05 Dec 2016</sentdate>
+		--	    </talk>
+		--	    <talk GUID="EF39B46F-4A5F-425D-AF8B-E6C80C39B765">
+		--		  <Message>0000</Message>
+		--		  <userid>Sam</userid>
+		--		  <username>samuel</username>
+		--		  <sentdate>05 Dec 2016</sentdate>
+		--	    </talk>
+		--	  </talks>
+		--  </row>
+		--</rows>
+		(select moduleid '@code', formGUID '@GUID', 0 '@edit', 0 '@delete', 0 '@wipe', 0 '@restore', 0 '@force', 0 '@reopen', 0 '@approve', 0 '@reject', 
+			(select y.caption '@title',  y.formkey '@caption', y.mandatory '@mandatory', y.formValue+'' 
+			from @browserows y
+				inner join @browsefields z on y.formkey=z.colkey
+			where y.formGUID=x.formGUID
+			order by z.colorder, y.formkey
+			for xml path('field'), elements, type) fields
+		from @browselist x
+		for xml path('row'), elements, type) content
+		for xml path(''), elements, type)
+
+	--select @browsexml
+
+
+	select (
+		select (
+			--info
+			select (
+				--account
+				select accountid account from acct a
+					inner join modl b
+						on a.AccountGUID=b.AccountGUID
+				where moduleid=@code and a.accountid=@AccountID
+				) account, 
+				--themeFolder
+				(select infoValue  from acctinfo a
+					inner join modl b
+						on a.AccountGUID=b.AccountGUID
+ 					inner join acct c on c.accountguid=b.AccountGUID
+				where moduleid=@code and c.accountid=@AccountID
+					and infoKey='themename') 'themeFolder',
+				--title
+				(	select ModuleDescription 
+					from modl  a
+						inner join acct b on a.accountguid=b.AccountGUID
+					where moduleid=@code and accountid=@AccountID) title, 
+				--code
+				(	select moduleid id, ModuleDescription name 
+					from modl  a
+						inner join acct b on a.accountguid=b.AccountGUID
+					where moduleid=@code and accountid=@accountID for xml path(''), elements, type) code, 
+				--user
+				(select userId, userName, '' userURL, hostGUID 
+				from userhost a
+					inner join [user] b
+						on a.userguid=b.userguid
+				where hostguid=@hostGUID
+				for xml path(''), elements, type) [user]	 
+			for xml path(''), elements, type
+			) info, 
+			--menus
+			(select menucode '@code', 
+				--submenus
+				(select [type] '@type', Tag '@tag', SubMenuDescription [MenuDescription],  caption,  url pageURL, icon_fa fa, icon_url icon_url, 
+					--submenus
+					(select [type] '@type', Tag '@tag', SubMenuDescription [MenuDescription], caption,  url pageURL, icon_fa fa, icon_url icon_url
+					from menusmnu c
+					where c.uppersubmenuGUID=b.MenudetailGUID
+					order by c.OrderNo, c.caption
+					for xml path('submenu'), elements, type) submenus
+				from menusmnu b
+				where b.menuGUID=a.MenuGUID and b.upperSubmenuGUID is null
+				order by OrderNo, b.caption
+				for xml path('submenu'), elements, type) submenus
+			from menu a
+				inner join modl b
+					on a.AccountGUID=b.AccountGUID
+				inner join acct c on c.accountguid=b.AccountGUID
+			where moduleid=@code and c.accountid=@AccountID
+			order by OrderNo asc
+			for xml path('menu'), elements, type) menus
+		for xml path(''), elements, type
+		) header,
+		(select '' dashboard, @browsexml [browse], '' form
+		for xml path('bodyContent'), elements, type) body,
+		'' footer
+	for xml path('sqroot')
+
+
+
+
+
+
+
+
+
+
+
+
+
+

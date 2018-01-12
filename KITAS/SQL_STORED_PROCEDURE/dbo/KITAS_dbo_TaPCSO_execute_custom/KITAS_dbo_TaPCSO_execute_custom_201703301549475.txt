@@ -1,0 +1,78 @@
+CREATE PROCEDURE [dbo].[TaPCSO_execute_custom]
+	@GUID uniqueidentifier, @hostGUID uniqueidentifier
+as --automatic creation by system, you have to remove this comment to customize this procedure
+
+	--declare @GUID uniqueidentifier = '5934B385-9EBA-4D84-94B6-F03D916DA422', @hostGUID uniqueidentifier	
+	set nocount on
+	declare @UserHostGUID uniqueidentifier, @CreatedUser uniqueidentifier, @msg varchar(max), @iscancel bit=0, 
+		@docStatus int, @SFCDate smalldatetime, @refno varchar(10)
+		
+	if gen.getUser(@hostGUID) is NULL
+		select @hostGUID = b.HostGUID from ToPCSO a
+			inner join CoUSERHOST b ON a.CreatedUser = b.UserGUID
+		where PCSOGUID = @GUID
+
+	set @hostGUID = ISNULL(@hostGUID, gen.getHost('OPH', NULL))
+	set @UserHostGUID = gen.getUser(@hostGUID)
+
+	if dbo.fn_checkObject('dbo','TaPCSO_execute_before')=1 exec dbo.TaPCSO_execute_before @GUID, @hostGUID, @isCancel OUTPUT, @msg OUTPUT
+
+	if @iscancel=0 begin try
+		exec oph.TaPCSOAPRV_setuser @GUID, @hostGUID
+		
+		if exists(select * from ToPCSOAPRV where PCSOGUID = @GUID) begin
+			update ToPCSOAPRV set IsActive = 1 where PCSOGUID = @GUID
+			
+			select 
+				@SFCDate = DocDate, @docStatus = Status, @CreatedUser = CreatedUser 
+			from ToPCSO where PCSOGUID = @GUID
+			
+			if @docStatus = 0 AND @CreatedUser = @UserHostGUID begin
+				update ToPCSO set 
+					Status = 100, StatusComment = 'Waiting for Confirmation by Administrator.'
+				where PCSOGUID = @GUID
+
+				update ToPCSOAPRV set 
+					Status = 400, UpdatedDate = GETDATE()
+				where PCSOGUID = @GUID AND ApprovalUserGUID = @UserHostGUID
+			end
+			else if @docStatus = 100 and exists(select * from ToPCSOAPRV 
+				where PCSOGUID = @GUID AND Lvl between 100 and 299 AND ApprovalUserGUID = @UserHostGUID
+			) begin
+				exec gen.getNumber 'TaPCSO', @SFCDate, 1, @refno OUTPUT
+
+				update ToPCSO set 
+					DocRefNo = @refno, Status = 400, StatusComment = 'Confirmed by Administrator'
+				where PCSOGUID = @GUID
+				
+				update ToPCSOAPRV set 
+					Status = 400, UpdatedDate = GETDATE()
+				where PCSOGUID = @GUID AND ApprovalUserGUID = @UserHostGUID
+
+				delete ToPCSOAPRV where PCSOGUID = @GUID AND Status is NULL	
+			end
+			else
+				set @msg = '3Approval process failed.'
+			
+			if exists(select * from ToPCSO where PCSOGUID = @GUID AND EVGRGUID = '9573DD6B-DB6F-4153-8A07-9B7CC8C0ADE7')
+			begin
+				exec gen.getNumber 'TaPCSO', @SFCDate, 1, @refno OUTPUT
+				update ToPCSO set 
+					DocRefNo = @refno, Status = 500, StatusComment = 'Closed by Administrator', ClosedDate = getdate()
+				where PCSOGUID = @GUID
+			end
+		end
+		else begin
+			set @msg = '3Submission Failed! There is no approval user.'
+		end
+
+		if @msg is NULL and dbo.fn_checkObject('dbo','TaPCSO_execute_after')=1 exec dbo.TaPCSO_execute_after @GUID, @hostGUID
+
+	end try
+	begin catch
+		set @msg = ERROR_MESSAGE()
+	end catch
+
+	if @msg is NULL AND dbo.fn_checkObject('dbo','TaPCSO_mail_send')=1 exec TaPCSO_mail_send @GUID, @hostGUID
+	else select @msg saved
+

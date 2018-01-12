@@ -1,0 +1,89 @@
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+CREATE procedure [gen].[procfields] @tableName nvarchar(50), @insertstr varchar(8000) OUTPUT, @par varchar(8000) OUTPUT,
+		@updatestr varchar(8000) OUTPUT, @valuestr varchar(8000) OUTPUT, @selectstr varchar(8000) OUTPUT, @browsestr varchar(8000) OUTPUT
+as
+	declare @colName nvarchar(50), @colOrder int, @type nvarchar(50), @len int, @isbrowsable bit
+
+	set @par = ''
+	set @insertstr = ''
+	set @updatestr = ''
+	set @valuestr = ''
+	set @selectstr = ''
+	set @browsestr = ''
+		
+	DECLARE curD CURSOR
+	   FOR 	select syscolumns.name, syscolumns.colOrder, x.name, case when syscolumns.xtype = 231 then syscolumns.length/2 else 0 end, isBrowsable
+		from sysobjects
+			inner join syscolumns
+				on sysobjects.id = syscolumns.id
+			inner join systypes 
+				on syscolumns.xtype =  systypes.xtype 
+				and syscolumns.xusertype =  systypes.xusertype 
+			inner join systypes x
+				on x.xtype = systypes.xtype
+				and x.xtype = x.xusertype 				
+			inner join gen.cotabl b
+				on b.tablename=sysobjects.name
+			inner join gen.cotablfiel
+				on gen.cotablfiel.colname = syscolumns.name
+				and b.tableguid = gen.cotablfiel.tableguid
+		where sysobjects.name = @TableName
+		order by syscolumns.colorder	--sysobjects.name, syscolumns.name, syscolumns.colOrder, systypes.name 
+
+	OPEN curD
+	FETCH NEXT FROM curD
+	into @colName, @colOrder, @type, @len, @isBrowsable
+	
+	WHILE @@FETCH_STATUS = 0
+	BEGIN	
+		if @colOrder &gt; 1 and @colname not in ('UpdatedDate', 'UpdatedUser', 'DeletedDate', 'DeletedUser', 'CreatedDate', 'CreatedUser', 'isDeleted', 'userGUID')
+			and @colname not like '%status'
+		begin
+			set @par = @par + ', @' + @colName + ' ' + @type + case when @len&gt;0 then '(' + convert(nvarchar(10), @len) + ')' else '' end
+			set @valuestr = @valuestr + ', @' + @colName
+			set @insertstr = @insertstr + ', ' + @colName
+			set @selectstr = @selectstr + ', ' + @colName
+			set @updatestr = @updatestr + ', ' + @colName + ' = @' + @colName 
+			if @isBrowsable = 1
+				set @browsestr = @browsestr + ', ' + @colName
+				
+		end
+
+		FETCH NEXT FROM curD
+		into @colName, @colOrder, @type, @len, @isBrowsable
+	end
+	CLOSE curD
+	DEALLOCATE curD
+
+	if len(@par)&gt;2 set @par = substring(@par, 3, len(@par) - 2)
+	if len(@insertstr)&gt;2 set @insertstr = substring(@insertstr, 3, len(@insertstr) - 2)
+	if len(@updatestr)&gt;2 set @updatestr = substring(@updatestr, 3, len(@updatestr) - 2)
+	if len(@valuestr)&gt;2 set @valuestr = substring(@valuestr, 3, len(@valuestr) - 2)
+	if len(@selectstr)&gt;2 set @selectstr = substring(@selectstr, 3, len(@selectstr) - 2)
+	if len(@browsestr)&gt;2 set @browsestr = substring(@browsestr, 3, len(@browsestr) - 2)
+
+
+
+
+
+
+
+
+
+
+
+
+

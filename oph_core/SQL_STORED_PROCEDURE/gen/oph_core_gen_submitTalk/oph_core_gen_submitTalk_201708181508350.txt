@@ -1,0 +1,25 @@
+CREATE procedure [gen].[submitTalk] @hostGUID uniqueidentifier, @docGUID uniqueidentifier, @comment nvarchar(50)=null, @isdebug bit=0
+as
+
+	declare @accountid varchar(50)
+	exec gen.getDBInfo @hostguid, 'docmtalk', @accountid=@accountid output
+
+	declare @userGUID uniqueidentifier
+	select @userguid=userguid from userhost where hostguid=@hostGUID
+
+	if isnull(@comment,'')<>''
+		insert into chat (chatGUID, DocGUID, Comment, Attachment, talkUser, createdDate)
+		values (newid(), @docguid, @comment, null, @userGUID, getdate())
+
+	declare @xmltalk xml
+	exec api.theme_talk @hostguid, @docguid, @xmltalk output, @isdebug
+
+	select @accountid [info/account], (
+		select @xmltalk 
+		for xml path('form'), type, root('bodyContent')
+	) 
+	for xml path('body'), root('sqroot')
+
+
+
+

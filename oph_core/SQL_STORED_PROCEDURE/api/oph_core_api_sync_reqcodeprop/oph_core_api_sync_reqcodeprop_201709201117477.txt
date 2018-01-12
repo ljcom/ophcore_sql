@@ -1,0 +1,53 @@
+
+
+
+CREATE procedure [api].[sync_reqcodeprop] @accountid nvarchar(50), @token uniqueidentifier, @code nvarchar(50)=null, @r xml=null output, @issilent bit=0
+as
+
+	declare @dataDB nvarchar(50)
+	select @datadb=databasename 
+	from oph_core.dbo.acctdbse d	
+		inner join oph_core.dbo.acct a on a.AccountGUID=d.AccountGUID
+	where accountid=@accountid and isMaster=1 and [version]='4.0'
+
+	print @datadb
+
+	declare @sqlstr nvarchar(max)='
+		set @r=replace((
+			select (
+				select ModuleGUID, AccountGUID, ModuleID, ModuleDescription, settingMode, AccountDBGUID, ParentModuleGUID, OrderNo, needLogin, ThemePageGUID, ModuleStatusGUID, ModuleGroupGUID, triggerAction, createdDate, updatedDate
+				from '+@datadb+'.dbo.modl m
+				where moduleid=@code
+				for xml path(''item''), type) modl,
+
+				(select c.ColumnGUID, c.ModuleGUID, c.colKey, c.colType, c.colOrder, gen.validXMLString(c.titlecaption) titlecaption, c.createdDate, c.updatedDate, c.colLength
+				from '+@datadb+'.dbo.modlcolm c
+					inner join '+@datadb+'.dbo.modl m on m.moduleguid=c.moduleguid
+				where moduleid=@code
+				for xml path(''item''), type) modlcolm,
+
+				(
+				select i.ColumnInfoGUID, i.ColumnGUID, i.InfoKey, gen.validXMLString(i.InfoValue) InfoValue, i.createdDate, i.updatedDate
+				from '+@datadb+'.dbo.modlcolminfo i
+					inner join '+@datadb+'.dbo.modlcolm c on i.ColumnGUID=c.ColumnGUID
+					inner join '+@datadb+'.dbo.modl m on m.moduleguid=c.moduleguid
+				where m.moduleid=@code
+				for xml path(''item''), type) modlcolminfo, 
+
+				(
+				select i.ModuleInfoGUID, i.ModuleGUID, i.InfoKey, gen.validXMLString(i.InfoValue) InfoValue, i.createdDate, i.updatedDate
+				from '+@datadb+'.dbo.modlinfo i
+					inner join '+@datadb+'.dbo.modl m on m.moduleguid=i.moduleguid
+				where m.moduleid=@code
+				for xml path(''item''), type) modlinfo
+			for xml path(''replicationCode''), root(''sqroot'')), ''&'+'#x0D;'', '''')
+
+			'+iif(@issilent=0, 'select @r', '')
+		
+	--print @sqlstr
+	exec sp_executesql @sqlstr, N'@code nvarchar(50), @r xml output', @code, @r output
+	
+
+
+
+

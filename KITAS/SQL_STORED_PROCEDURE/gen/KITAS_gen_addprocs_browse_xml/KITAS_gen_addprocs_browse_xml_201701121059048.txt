@@ -1,0 +1,84 @@
+
+
+
+
+
+
+
+
+
+
+CREATE procedure [gen].[addprocs_browse_xml] @tablename varchar(50), @colname varchar(50), 
+	@browsestr varchar(8000), @wherestr varchar(8000), @isEnc bit=1, @isdebug bit=0
+as
+	declare @content varchar(4000)
+	declare @content1 varchar(4000)
+	declare @content2 varchar(4000)
+	declare @sp varchar(4000)
+	declare @parameter varchar(4000)
+
+	Declare @siteGUIDStr nvarchar(100)
+	set @siteGUIDStr=''
+	if exists(select syscolumns.*,sysobjects.name  from syscolumns
+		inner join sysobjects
+		on syscolumns.id = sysobjects.id
+		where  sysobjects.name =@tableName and syscolumns.name='siteguid')
+	if left(@tablename,1)='T'
+	begin
+	set @siteGUIDStr='siteGUID=''''''+cast(@siteGUID as nvarchar(100))+'''''' and'
+	end 
+	set @sp = '' + @tableName + '_browse' 
+	set @parameter = '@nbRec int, @pageNo int, @orderType int, @searchText nvarchar(100), @whereFields varchar(8000), @orderField nvarchar(100), @hostGUID uniqueidentifier, @mode int = 0'
+	
+	set @content = 	char(9) + 'declare @userGUID uniqueidentifier, @siteGUID uniqueidentifier' + char(13) + char(10) + 
+			char(9) + 'select @userGUID=userguid, @siteGUID=siteGUID from coUSERHOST where hostGUID=@hostGUID' + char(13) + char(10) +
+			char(9) + 'if @mode=0 or @mode=9 begin ' + char(13) + char(10) +
+			char(9) + char(9) + 'set @whereFields = ''' + @wherestr + ''' ' + case when @wherestr&lt;&gt;'' then '+ ''and ''' else '' end +  '  +'' '+@siteGUIDStr+' 1=1 '' + case when @whereFields &lt;&gt; '''' then ''and '' else '''' end + @whereFields ' + char(13) + char(10)  
+
+
+	set @content1 = char(9) + char(9) + 'exec gen.browselist ' + char(13) + char(10) + 
+			char(9) + char(9) + char(9) + '@nbRec, @pageNo, ''' + @tableName + ''', ''' + @colName + ''', ' + char(13) + char(10) + 
+			char(9) + char(9) + char(9) + '''' + replace(@browsestr, ', userStatusDescription','') + ''', @searchtext, @whereFields, @orderType, @orderField, @userGUID, @mode' + char(13) + char(10) + 
+			char(13) + char(10) +
+			char(9) + 'end' + char(13) + char(10) +
+			char(13) + char(10) +
+			char(9) + 'if @mode=4 begin ' + char(13) + char(10) +
+			char(9) + char(9) + 'set @whereFields = ''' + @wherestr + ''' ' + case when @wherestr&lt;&gt;'' then '+ ''and ''' else '' end +  '  +'' '+@siteGUIDStr+' 1=1 '' + case when @whereFields &lt;&gt; '''' then ''and '' else '''' end + @whereFields ' + char(13) + char(10) + 
+			char(9) + char(9) + 'exec gen.browselist4 ' + char(13) + char(10) +
+			char(9) + char(9) + char(9) + '@nbRec, @pageNo, ''' + @tableName + ''', ''' + @colName + ''', ' + char(13) + char(10) +
+			char(9) + char(9) + char(9) + '''' + replace(@browsestr, ', userStatusDescription','') + ''', @searchtext, @whereFields, @orderType, @orderField,@userGUID,1' + char(13) + char(10) + 
+			char(9) + 'end' + char(13) + char(10) +
+			char(13) + char(10) 
+set @content2=char(9) + 'if @mode=2 begin ' + char(13) + char(10) + 
+			char(9) + char(9) + 'set @whereFields = ''' + @wherestr + ''' ' + case when @wherestr&lt;&gt;'' then '+ ''and ''' else '' end +  '  +'' '+@siteGUIDStr+' 1=1 '' + case when @whereFields &lt;&gt; '''' then ''and '' else '''' end + @whereFields ' + char(13) + char(10) + 
+			char(13) + char(10) +
+			char(9) + char(9) + 'exec gen.browselist ' + char(13) + char(10) + 
+			char(9) + char(9) + char(9) + '@nbRec, @pageNo, ''' + @tableName + ''', ''' + @colName + ''', ' + char(13) + char(10) + 
+			char(9) + char(9) + char(9) + '''' + replace(@browsestr, ', userStatusDescription','') + ''', @searchtext, @whereFields, @orderType, @orderField,@userGUID,1' + char(13) + char(10) + 
+			char(13) + char(10) +
+			char(9) + 'end' + char(13) + char(10) + 
+			char(13) + char(10) +
+			char(9) + 'if @mode=1 begin ' + char(13) + char(10) + 
+			char(9) + char(9) + 'select * '+ char(13) + char(10) + 
+			char(9) + char(9) + 'from gen.cotablfiel a' + char(13) + char(10) + 
+			char(9) + char(9) + char(9) + 'inner join gen.cotabl b' + char(13) + char(10) + 
+			char(9) + char(9) + char(9) + char(9) + 'on a.tableGUID=b.tableGUID ' + char(13) + char(10) + 
+			char(9) + char(9) + 'where b.tablename = ''' + @tablename + '''' + char(13) + char(10) +  
+			char(9) + 'end'
+	
+
+						
+
+
+
+
+
+
+
+
+
+
+
+
+
+

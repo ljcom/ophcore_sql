@@ -1,0 +1,170 @@
+CREATE procedure [api].[sidebar]  @hostGUID uniqueidentifier,@code nvarchar(max), @GUID uniqueidentifier = NULL, @isdebug bit=0
+as
+begin
+
+	declare @ver varchar(10), @settingMode nvarchar(1)
+	declare @formguid nvarchar(max), @accountid varchar(50)
+	select @settingmode = api.settingmode(settingmode), @ver=b.[version], @accountid=d.accountid
+	--select * 
+	from modl a
+		inner join acctdbse	b 
+					on a.accountdbguid=b.accountdbguid
+		inner join acct d
+			on d.accountGUID=a.AccountGUID
+		inner join [user] e
+			on e.AccountGUID=d.AccountGUID
+		inner join userhost c
+			on c.userguid=e.UserGUID
+	where ModuleID=@code and c.HostGUId=@hostGUID
+
+	declare @db varchar(50)=api.fn_checkDB(@accountid, @code)
+	
+	declare @moduleguid uniqueidentifier
+
+	select @moduleguid = moduleguid from modl where moduleid = @code
+	
+	exec [api].[getPrimaryKey] @accountid, @code, @formGUID OUTPUT
+
+	declare @docInfo xml
+	declare @docTalk xml
+	declare @approval xml
+
+	
+	declare @colinfo api.[type]
+
+	IF @guid is null
+	begin
+	--Browse
+		select (
+		select (
+
+			select (
+
+				select accountid account from acct a
+					inner join modl b
+						on a.AccountGUID=b.AccountGUID
+				where moduleid=@code
+				) account, 
+
+				(select infoValue  from acctinfo a
+					inner join modl b
+						on a.AccountGUID=b.AccountGUID
+				where moduleid=@code
+					and infoKey='themename') 'themeFolder',
+
+				(select ModuleDescription from modl where moduleid=@code) title, 
+
+
+				(select moduleid id, ModuleDescription name from modl where moduleid=@code for xml path(''), elements, type) code, 
+
+				(select userId, userName, '' userURL, hostGUID 
+				from userhost a
+					inner join [user] b
+						on a.userguid=b.userguid
+				where hostguid=@hostGUID
+				for xml path(''), elements, type) [user]	 
+			for xml path(''), elements, type
+			) info, 
+
+			(select menucode '@code', 
+				--submenus
+				(select [type] '@mode', Tag '@tag', SubMenuDescription [MenuDescription],  caption,  url pageURL, icon_fa fa,
+					--submenus
+					(select [type] '@mode', Tag '@tag', SubMenuDescription [MenuDescription], caption,  url pageURL, icon_fa fa
+					from menusmnu c
+					where c.uppersubmenuGUID=b.MenudetailGUID
+					for xml path('submenu'), elements, type) submenus
+				from menusmnu b
+				where b.menuGUID=a.MenuGUID
+				for xml path('submenu'), elements, type) submenus
+			from menu a
+				inner join modl b
+					on a.AccountGUID=b.AccountGUID
+			where moduleid=@code
+			for xml path('menu'), elements, type) menus
+		for xml path('header'), elements, type,root('sqroot')
+		--   &lt;/info&gt;
+		) header
+		
+
+	end
+	else
+	begin
+	--form
+		if @ver='3.0' 
+		begin
+		
+			insert into @colinfo
+			exec api.theme_form_v3 @code,@guid,@db,@settingmode,1,0		
+			print  'exec api.theme_form_v3 '''+@code+''','''+convert(nvarchar(max),@guid)+''','''+@db+''','''+@settingmode+''',1,''0''' 
+
+			declare @child xml
+			exec api.theme_form_child_v3 @code,@db,@settingMode,@child output
+
+			declare @docNo varchar(50), @refNo varchar(50), @docDate varchar(50)
+
+			exec [api].[getPrimaryCol] @accountid, @code, 2, @docDate OUTPUT
+			exec [api].[getPrimaryCol] @accountid, @code, 3, @docNo OUTPUT
+			exec [api].[getPrimaryCol] @accountid, @code, 4, @refNo OUTPUT
+		
+			declare @sqlstr nvarchar(max) = '
+				use '+@db+'
+				
+				select @docInfoxml=(
+					select (
+						select colvalue 
+						from @moduleinfo  
+						pivot (max(infovalue) for infokey in(colkey,colValue)) as pvt
+						where colkey='''+@docNo+''') as docNo,
+						
+						(
+						select colvalue 
+						from @moduleinfo  
+						pivot (max(infovalue) for infokey in(colkey,colValue)) as pvt
+						where colkey='''+@refNo+''') as refNo,
+
+						(
+						select colvalue 
+						from @moduleinfo  
+						pivot (max(infovalue) for infokey in(colkey,colValue)) as pvt
+						where colkey='''+@docDate+''') as docDate 
+					for xml path(''docInfo''))
+			
+				select @docTalkxml =(
+					select createduser, createddate, doccomment, docattachment 
+					from cotalk 
+					where documentguid = '''+convert(nvarchar(max),@guid)+''' for xml path(''docTalk''),root(''docTalks'')) 
+			
+				select @approvalxml  =(
+					select username, lvl, status 
+					from '+@settingMode+'o'+@code+'aprv a 
+						inner join [couser] b 
+							on a.approvaluserguid = b.userguid 
+					where '+@formguid+' = '''+convert(nvarchar(max),@guid)+''' 
+					for xml path(''approval''), root(''approvals'')) '
+
+			if @isdebug=1 print @sqlstr
+
+			EXECUTE sp_executesql @sqlstr, N'@moduleinfo api.[type] readonly, @docInfoxml xml output,
+				@docTalkxml xml output, @approvalxml xml output', @moduleinfo = @colinfo, @docInfoxml = @docInfo output,
+				@docTalkxml = @docTalk output,@approvalxml = @approval output
+		end
+		else begin
+			insert into @colinfo
+			exec api.theme_form_v4 @moduleguid,@guid,@db
+		end
+		
+		select @docInfo, @doctalk, @approval, @child
+		for xml path('sqroot')
+	end
+	
+	
+end
+
+
+
+
+
+
+
+

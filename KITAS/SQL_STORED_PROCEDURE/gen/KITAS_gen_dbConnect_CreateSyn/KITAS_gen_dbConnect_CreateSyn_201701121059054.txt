@@ -1,0 +1,12 @@
+
+
+
+CREATE procedure [gen].[dbConnect_CreateSyn] @SynName nvarchar(20)=null, @TableSource nvarchar(20)=null, @DBmain nvarchar(20)=null
+as	
+	
+	declare @sqlstr nvarchar (max)
+  SELECT @sqlstr = 'CREATE SYNONYM [dbo].[syn._' + @SynName + '] FOR ' + @DBmain + '.[dbo].[' + @TableSource +']'
+  print @sqlstr
+ 
+
+

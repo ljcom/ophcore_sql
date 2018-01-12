@@ -1,0 +1,117 @@
+
+
+
+
+
+CREATE procedure [gen].[DependentTable]
+as
+/*	select b.name viewName, b.xtype, CHARINDEX('FROM', replace(replace(replace(text, 'JOIN', 'FROM'), char(13), ' '), CHAR(10), ' ')) startPoint,
+		ltrim(substring(replace(replace(replace(text, 'JOIN', 'FROM'), char(13), ' '), CHAR(10), ' '), CHARINDEX('FROM', replace(replace(replace(text, 'JOIN', 'FROM'), char(13), ' '), CHAR(10), ' '))+4+1, 50)) firstGrab,
+		CHARINDEX(' ',ltrim(substring(replace(replace(replace(text, 'JOIN', 'FROM'), char(13), ' '), CHAR(10), ' '), CHARINDEX('FROM', replace(replace(replace(text, 'JOIN', 'FROM'), char(13), ' '), CHAR(10), ' '))+4+1, 50))) endPoint,
+		rtrim(SUBSTRING(ltrim(substring(replace(replace(replace(text, 'JOIN', 'FROM'), char(13), ' '), CHAR(10), ' '), CHARINDEX('FROM', replace(replace(replace(text, 'JOIN', 'FROM'), char(13), ' '), CHAR(10), ' '))+4+1, 50)), 1,
+			case	
+				when CHARINDEX(' ',ltrim(substring(replace(replace(replace(text, 'JOIN', 'FROM'), char(13), ' '), CHAR(10), ' '), CHARINDEX('FROM', replace(replace(replace(text, 'JOIN', 'FROM'), char(13), ' '), CHAR(10), ' '))+4+1, 50)))=0 then 50 
+				else CHARINDEX(' ',ltrim(substring(replace(replace(replace(text, 'JOIN', 'FROM'), char(13), ' '), CHAR(10), ' '), CHARINDEX('FROM', replace(replace(replace(text, 'JOIN', 'FROM'), char(13), ' '), CHAR(10), ' '))+4+1, 50)))
+			end)) parentTable
+	--into #table1
+	from syscomments a
+		inner join sysobjects b
+			on a.id=b.id
+	where CHARINDEX('FROM', replace(replace(replace(text, 'JOIN', 'FROM'), char(13), ' '), CHAR(10), ' '))&gt;0
+		and b.xtype='V'
+*/
+
+	select distinct b.name viewName, b.xtype xtype,
+		rtrim(SUBSTRING(ltrim(substring(replace(replace(text, char(13), ' '), CHAR(10), ' '), CHARINDEX('FROM', replace(replace(text, char(13), ' '), CHAR(10), ' '))+4+1, 50)), 1,
+			case	
+				when CHARINDEX(' ',ltrim(substring(replace(replace(text, char(13), ' '), CHAR(10), ' '), CHARINDEX('FROM', replace(replace(text, char(13), ' '), CHAR(10), ' '))+4+1, 50)))=0 then 50 
+				else CHARINDEX(' ',ltrim(substring(replace(replace(text, char(13), ' '), CHAR(10), ' '), CHARINDEX('FROM', replace(replace(text, char(13), ' '), CHAR(10), ' '))+4+1, 50)))
+			end)) parentTable
+	into #table0
+	from syscomments a
+		inner join sysobjects b
+			on a.id=b.id
+	where CHARINDEX('FROM', replace(replace(text, char(13), ' '), CHAR(10), ' '))&gt;0
+		and b.xtype='V'
+
+	select distinct b.name viewName, b.xtype xtype,
+		rtrim(SUBSTRING(ltrim(substring(replace(replace(replace(text, 'JOIN', 'FROM'), char(13), ' '), CHAR(10), ' '), CHARINDEX('FROM', replace(replace(replace(text, 'JOIN', 'FROM'), char(13), ' '), CHAR(10), ' '))+4+1, 50)), 1,
+			case	
+				when CHARINDEX(' ',ltrim(substring(replace(replace(replace(text, 'JOIN', 'FROM'), char(13), ' '), CHAR(10), ' '), CHARINDEX('FROM', replace(replace(replace(text, 'JOIN', 'FROM'), char(13), ' '), CHAR(10), ' '))+4+1, 50)))=0 then 50 
+				else CHARINDEX(' ',ltrim(substring(replace(replace(replace(text, 'JOIN', 'FROM'), char(13), ' '), CHAR(10), ' '), CHARINDEX('FROM', replace(replace(replace(text, 'JOIN', 'FROM'), char(13), ' '), CHAR(10), ' '))+4+1, 50)))
+			end)) parentTable
+	into #table1
+	from syscomments a
+		inner join sysobjects b
+			on a.id=b.id
+	where CHARINDEX('FROM', replace(replace(replace(text, 'JOIN', 'FROM'), char(13), ' '), CHAR(10), ' '))&gt;0
+		
+	--select * from #table1
+		
+	insert into cotablview (TableViewGUID, TableGUID, ViewName, EditMode)
+	select NEWID(), a.tableguid, b.viewname, 0 
+	from coTABL a
+		inner join #table0 b
+			on a.tablename=b.parenttable
+		left join coTABLVIEW c
+			on a.tableGUID=c.tableGUID
+			and b.viewName=c.viewName
+	where c.tableviewGUID is null
+		and b.xtype='V'
+
+	insert into cotablviewrela (TableViewRelatedTableGUID, tableGUID, 
+		tableViewGUID, relatedTableGUID)
+	select NEWID(), a.tableguid, 
+		c.tableviewGUID, d.tableGUID 
+	from coTABL a
+		inner join gen.coTABLVIEW c
+			on a.tableGUID=c.tableGUID
+		inner join #table1 b
+			on b.viewName=c.viewName
+		inner join gen.coTABL d
+			on b.parenttable=d.tablename
+		left join coTABLVIEWRELA e
+			on e.tableviewGUID=c.tableviewGUID
+			and e.relatedTableGUID=d.tableGUID
+	where e.tableViewRelatedTableGUID is null
+		and b.xtype='V'	
+	
+	insert into gen.cotablproc (TableProcedureGUID, tableGUID, ProcedureName, EditMode)
+	select newid(), y.tableGUID, viewname, 0
+	from ( 
+		select a.viewname, max(b.tablename) tablename
+		from #table1 a
+			inner join gen.cotabl b
+				on CHARINDEX(b.tablename, a.viewname)&gt;0
+		where xtype='P'
+		group by a.viewname) x
+		inner join gen.cotabl y
+			on x.tablename=y.tablename
+		left join gen.cotablproc z
+			on z.tableGUID=y.tableGUID
+			and z.procedureName=x.viewname
+	where z.tableprocedureGUID is null
+	
+	insert into cotablprocrela (TableProcedureRelatedTableGUID, tableGUID, 
+		tableProcedureGUID, relatedTableGUID)
+	select NEWID(), a.tableguid, 
+		c.tableprocedureGUID, d.tableGUID 
+	from coTABL a
+		inner join gen.coTABLPROC c
+			on a.tableGUID=c.tableGUID
+		inner join #table1 b
+			on b.viewName=c.procedureName
+		inner join gen.coTABL d
+			on b.parenttable=d.tablename
+		left join coTABLPROCRELA e
+			on e.tableProcedureGUID=c.tableProcedureGUID
+			and e.relatedTableGUID=d.tableGUID
+	where e.tableProcedureRelatedTableGUID is null
+		and b.xtype='P'	
+
+
+
+
+
+
+

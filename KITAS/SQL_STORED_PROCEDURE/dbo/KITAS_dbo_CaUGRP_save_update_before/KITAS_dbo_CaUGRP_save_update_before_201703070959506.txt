@@ -1,0 +1,11 @@
+CREATE PROCEDURE [dbo].[CaUGRP_save_update_before]	@GUID uniqueidentifier, @hostGUID uniqueidentifier, @GroupId nvarchar(50) OUTPUT, @GroupDescription nvarchar(50) OUTPUT, @ModuleGUID uniqueidentifier OUTPUT, @TokenUser nvarchar(max) OUTPUT, @isCancel bit = 0 OUTPUT, @msg nvarchar(1000) = '' OUTPUT--Automatic Parameters by OPH. Do Not Modify This Parameters Intentionally.
+
+as	--CreatedBy eLs ON Aug, 2016
+
+	if exists(select * from CoUGRP where GroupId = @GroupId and UGroupGUID &lt;&gt; @GUID) begin
+		select @isCancel = 1, @msg = '3Group Id already exists. Please choose another one.'
+		return
+	end
+
+
+

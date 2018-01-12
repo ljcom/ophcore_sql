@@ -1,0 +1,16 @@
+
+
+CREATE PROCEDURE [api].[save_v4] @accountid varchar(50),
+	@hostGUID uniqueidentifier, 
+	@code varchar(20),
+	@GUID uniqueidentifier,
+	@saveXML xml,
+	@preview int=0,
+	@isDebug bit=0
+--WITH ENCRYPTION
+as
+
+	print 'v4'
+
+
+

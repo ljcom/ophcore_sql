@@ -1,0 +1,66 @@
+
+CREATE procedure [gen].[createTrigger] @TriggerName varchar(50), @code nvarchar(50), @onInsert bit=0, @onUpdate bit=0, @onDelete bit=0, 
+	@content nvarchar(max), @schema nvarchar(10)='doc', @isEnc bit=0, @db nvarchar(50)=null, @resultText nvarchar(max) output, @isdebug bit=0
+--WITH ENCRYPTION
+as
+-- ver 20170720
+	declare @sqlstr nvarchar(max)=''
+	
+	if exists (select * from sys.objects a
+				inner join syscomments b
+					on a.object_id=b.id
+				inner join sys.schemas c
+					on a.schema_id=c.schema_id
+				where a.name = @TriggerName-- and encrypted=1
+					and c.name=@schema)
+	begin
+		if charindex('create trigger', @content)=0 begin
+			set @sqlstr = '
+				alter trigger ' + @schema + '.' + @TriggerName + char(13) + char(10) + 
+				'ON  ' + @schema + '.['+@code+']'+
+				case when @isEnc=1 then 'with encryption'+ char(13) + char(10) else '' end +
+				'AFTER '+stuff(iif(@onInsert=1, ', INSERT', '')+iif(@onUpdate=1, ', UPDATE', '')+iif(@onDelete=1, ', DELETE', ''), 1, 2, '')+'
+				'+
+				'as'+char(13)-- --automatic creation by system, you have to remove this comment to customize this Trigger' + char(13) + char(10) + ' ' --+
+			set @sqlstr=@sqlstr+@content
+		end
+		else begin 
+			set @sqlstr=replace(@content, 'create trigger', 'alter trigger')
+		end
+	end
+
+	else begin
+		if charindex('create trigger', @content)=0 begin
+			set @sqlstr = '
+				create trigger ' + @schema + '.' + @TriggerName + char(13) + char(10) + 
+				'ON  ' + @schema + '.['+@code+']'+
+				case when @isEnc=1 then 'with encryption'+ char(13) + char(10) else '' end +
+				'AFTER '+stuff(iif(@onInsert=1, ', INSERT', '')+iif(@onUpdate=1, ', UPDATE', '')+iif(@onDelete=1, ', DELETE', ''), 1, 2, '')+'
+				'+
+				'as'+char(13)-- --automatic creation by system, you have to remove this comment to customize this Trigger' + char(13) + char(10) + ' ' --+
+		end
+		else set @sqlstr=''
+
+		set @sqlstr=@sqlstr+@content
+		
+	end
+
+	if @isdebug=1 print @sqlstr
+
+	BEGIN TRY
+		begin transaction
+		declare @xsql nvarchar(max)='
+			exec '+@db+'.dbo.sp_executesql @sqlstr'			
+		exec sp_executesql @xsql, N'@sqlstr nvarchar(max)', @sqlstr
+		commit
+	END TRY
+	BEGIN CATCH
+		SET @resulttext=ERROR_MESSAGE()+@sqlstr
+		rollback 
+	END CATCH;
+		
+	
+
+
+
+

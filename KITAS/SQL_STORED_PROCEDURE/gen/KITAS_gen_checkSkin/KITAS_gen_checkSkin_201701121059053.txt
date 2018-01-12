@@ -1,0 +1,20 @@
+
+
+
+CREATE procedure [gen].[checkSkin](@hostGUID uniqueidentifier)
+as
+	declare @userGUID uniqueidentifier
+
+	select @userGUID=userGUID 
+	from coUSERHOST
+	where HostGUID=@hostGUID
+
+	select coSKIN.skinFolder 
+	from coUSER 
+		inner join coSKIN 
+			on coUSER.skinGUID=coSKIN.skinGUID 
+	where userGUID=@userGUID
+
+
+
+

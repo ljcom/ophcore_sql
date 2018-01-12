@@ -1,0 +1,31 @@
+
+
+
+CREATE procedure [gen].[dropIndex] @indexName varchar(50), @code nvarchar(50), @schema nvarchar(10)='doc', 
+	@resultText nvarchar(max) output, @isdebug bit=0
+--WITH ENCRYPTION
+as
+-- ver 20170720
+	declare @sqlstr nvarchar(max)=''
+	
+	if exists (
+		select * from sys.indexes a
+		where a.name = @indexName)
+	begin
+		set @sqlstr = '
+	drop index [' + @indexname +'] on ' + @schema + '.' + @code+'
+			'
+	end
+
+	BEGIN TRY
+		begin transaction
+		exec sp_executesql @sqlstr
+		commit
+	END TRY
+	BEGIN CATCH
+		SET @resulttext=ERROR_MESSAGE()+@sqlstr
+		rollback 
+	END CATCH;
+
+
+

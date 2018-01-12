@@ -1,0 +1,15 @@
+create FUNCTION gen.[isGUID] (@Data varchar(50)) 
+RETURNS bit 
+--WITH ENCRYPTION
+AS --CreatedBy eLs ON Dec, 2016
+BEGIN 
+	return 
+		case 
+			when @Data like replace(dbo.ZeroGUID(), '0', '[0-9a-fA-F]')
+				then 1 
+			else 0 
+		end 
+
+END
+
+

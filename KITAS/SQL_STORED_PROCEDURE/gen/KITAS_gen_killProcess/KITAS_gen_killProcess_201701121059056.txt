@@ -1,0 +1,11 @@
+
+create procedure [gen].[killProcess] 
+as
+	SELECT 'kill '+cast(spid as varchar(10))
+	FROM master.dbo.sysprocesses (NOLOCK)
+	WHERE spid&gt;50
+	AND status='sleeping'
+	AND DATEDIFF(mi,last_batch,GETDATE())&gt;=5 --Check sleeping connections that exists before 60 min..
+	AND spid&lt;&gt;@@spid
+
+

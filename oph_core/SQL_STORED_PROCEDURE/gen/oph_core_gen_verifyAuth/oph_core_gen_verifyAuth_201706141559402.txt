@@ -1,0 +1,61 @@
+CREATE procedure [gen].[verifyAuth] @code nvarchar(30), @HostGUID uniqueidentifier, 
+	@allowadd int OUTPUT, @allowBrowse int OUTPUT, @allowEdit int OUTPUT, @allowDelete int OUTPUT, @allowWipe int OUTPUT, 
+	@allowForce int output, @allowExport int output,--@allowShowAttach int output, 
+	@debug bit = 0
+as
+
+--declare @code nvarchar(30) = 'tadedu', @HostGUID uniqueidentifier = gen.gethost('ap\fatimah'), 
+--	@allowadd int , @allowBrowse int , @allowEdit int , @allowDelete int , @allowWipe int , 
+--	@allowForce int , @allowExport int ,
+--	@debug bit = 0
+	
+	declare @userGUID uniqueidentifier, @modulegroupguid uniqueidentifier
+	select @userGUID = userGUID--, @delegateUserGUID = delegateUserGUID 
+	from userhost where HostGUID = @HostGUID
+
+	select @allowadd=0, @allowedit=0, @allowbrowse=0, @allowdelete=0, @allowwipe=0, @allowforce=0
+
+	select @modulegroupguid=ModuleGroupGUID 
+	from modl
+	where moduleid=@code
+
+	if exists(select * from modl where moduleid=@code and needlogin=1)
+	begin
+		select @allowbrowse=max(iif(isnull(y.AllowAccess, x.allexceptmodule)=1,1,0)), 
+			@allowadd=max(iif(isnull(y.AllowAdd, x.allexceptmodule)=1,1,0)), 
+			@allowedit=max(iif(isnull(y.allowedit, x.allexceptmodule)=1,1,0)), 
+			@allowdelete=max(iif(isnull(y.allowdelete, x.allexceptmodule)=1,1,0)),  
+			@allowforce=max(iif(isnull(y.AllowForce, x.allexceptmodule)=1,1,0)), 
+			@allowwipe=max(iif(isnull(y.AllowWipe, x.allexceptmodule)=1,1,0))
+		--select *
+		from ugrp x
+			inner join (
+				select y.* from ugrpmodl y 
+					inner join modl z on y.ModuleGUID=z.ModuleGUID
+				where z.moduleid=@code) y on x.UGroupGUID=y.UGroupGUID
+		where iif(CHARINDEX(cast(@userguid as varchar(50)), x.TokenUser)>0,1,0)<>x.allExceptUser
+			and iif(CHARINDEX(cast(@modulegroupguid as varchar(50)), x.Tokenenv)>0,1,0)<>x.allExceptenv
+
+	end
+	else 
+		select @allowadd=1, @allowedit=1, @allowbrowse=1, @allowdelete=1, @allowwipe=1, @allowforce=1
+
+	select 
+		@allowBrowse=case when allowAccess.InfoValue=1 and @allowBrowse=1 then 1 else 0 end, 
+		@allowadd=case when allowAdd.InfoValue=1 and @allowAdd=1 then 1 else 0 end, 
+		@allowedit=case when allowedit.InfoValue=1 and @allowedit=1 then 1 else 0 end, 
+		@allowdelete=case when allowdelete.InfoValue=1 and @allowDelete=1 then 1 else 0 end, 
+		@allowwipe=case when allowwipe.InfoValue=1 and @allowWipe=1 then 1 else 0 end, 
+		@allowforce=case when allowforce.InfoValue=1 and @allowforce=1 then 1 else 0 end,
+		@allowexport=case when allowexport.InfoValue=1 then 1 else 0 end	--there is no permission
+	from modl a
+		left join modlinfo allowAccess on a.ModuleGUID=allowAccess.ModuleGUID and (allowAccess.infokey='AllowBrowse' or allowAccess.infokey='AllowAccess')
+		left join modlinfo allowAdd on a.ModuleGUID=allowAdd.ModuleGUID and allowAdd.infokey='AllowAdd'
+		left join modlinfo allowEdit on a.ModuleGUID=allowEdit.ModuleGUID and allowEdit.infokey='AllowEdit'
+		left join modlinfo allowDelete on a.ModuleGUID=allowDelete.ModuleGUID and allowDelete.infokey='AllowDelete'
+		left join modlinfo allowWipe on a.ModuleGUID=allowWipe.ModuleGUID and allowWipe.infokey='AllowEdit'
+		left join modlinfo allowForce on a.ModuleGUID=allowForce.ModuleGUID and allowForce.infokey='AllowDelete'
+		left join modlinfo allowExport on a.ModuleGUID=allowExport.ModuleGUID and allowExport.infokey='AllowExport'
+	where a.moduleid=@code
+
+

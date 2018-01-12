@@ -1,0 +1,31 @@
+
+
+CREATE TRIGGER [dbo].[tg_modlinfo_updatedDate] 
+   ON  [dbo].[modlinfo]
+   AFTER UPDATE
+AS 
+BEGIN
+	set nocount on 
+
+	if exists(select * from inserted) or exists(select * from deleted) begin
+		declare @guid nvarchar(max)=(
+			select cast(ModuleInfoGUID as nvarchar(50))+'*'
+			from inserted
+			for xml path(''))
+
+		update x
+		set updatedDate=getdate()
+		--select * 
+		from inserted i inner join deleted d on i.ModuleInfoGUID=d.ModuleInfoGUID
+			inner join modlinfo x on x.ModuleInfoGUID=i.ModuleInfoGUID
+		where isnull(i.updatedDate, '1/1/2000') = isnull(d.updatedDate, '1/1/2000')
+
+		exec gen.timestamp_modifiedDate
+
+		declare @c nvarchar(max)='update: modlinfo, '+@GUID
+
+		INSERT INTO evnt (EventGUID, AccountGUID, moduleGUID, DocGUID, timeRecord, Comment, CreatedDate, CreatedUser)
+		select newid(), null, null, null, 0, @c, getdate(), null
+	end
+END
+

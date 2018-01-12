@@ -1,0 +1,4 @@
+CREATE PROCEDURE [dbo].[YtEVEN] @HostGUID uniqueidentifier
+as	--CreatedBy eLs ON Jan, 2017
+
+	select 1 [no_urut], 'event name' [event_name], 'product name' [product], 0 [price], 0 [qty]

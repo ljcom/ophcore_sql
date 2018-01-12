@@ -1,0 +1,82 @@
+
+
+
+CREATE procedure [core].[addModule_v2] @accountid nvarchar(50), @v2DB nvarchar(50), @dataDB varchar(50), @isdebug bit=0
+--WITH ENCRYPTION
+as	
+	--declare @accountid nvarchar(50) = 'eform', @v2DB nvarchar(50) = 'ef_main', @dataDB varchar(50) = 'eform_data', @isdebug bit=1
+
+	declare @accountguid uniqueidentifier, @accountdbGUID uniqueidentifier, @curMaster bit, @svrV2 nvarchar(50) 
+
+	select @accountguid=a.AccountGUID, @accountdbGUID=AccountDBGUID, @curMaster=isMaster, @svrV2=isnull(serverName, @@servername)
+	from acct a
+		inner join acctdbse b on a.AccountGUID=b.AccountGUID
+	where accountid=@accountid and b.DatabaseName=@v2DB
+	
+	declare @sqlstr nvarchar(max), @sqlpar nvarchar(max)
+	set @sqlstr='
+		insert into '+@dataDB+'.dbo.modl (ModuleGUID, AccountGUID, ModuleID, ModuleDescription, settingMode, AccountDBGUID, needLogin)
+		select newid(), '''+cast(@accountguid as varchar(50))+''', a.name, a.name, 1, '''+cast(@accountdbGUID as nvarchar(50))+''', 1
+		from '+@svrV2+'.'+@v2DB+'.sys.objects a
+			left join '+@dataDB+'.dbo.modl b on a.name=b.ModuleID 
+		where a.type=''U'' and b.ModuleGUID is null and left(a.name,1) not in (''P'', ''C'') --AND a.AccountDBGUID is Not NULL 
+		--group by a.name
+
+		--add modules groups
+		insert into '+@dataDB+'.dbo.modg (ModuleGroupGUID, AccountGUID, ModuleGroupID, ModuleGroupName, ModuleGroupDescription, AccountDBGUID, ImagePath, SortOrder, isDefault)
+		select newid(), '''+cast(@accountguid as varchar(50))+''', a.DatabaseName, a.DatabaseName, a.DatabaseName, a.AccountDBGUID, null, null, 0
+		from acctdbse a 
+			left join '+@dataDB+'.dbo.modg b on a.accountDBGUID=b.accountDBGUID
+		where a.AccountGUID='''+cast(@accountguid as varchar(50))+''' and b.moduleGroupGUID is null
+
+		update a
+		set modulegroupguid=b.modulegroupguid
+		from '+@dataDB+'.dbo.modl a
+			inner join '+@dataDB+'.dbo.modg b on a.accountdbGUID=b.accountdbGUID 
+		where a.modulegroupguid is null
+
+		update '+@dataDB+'.dbo.modl 
+		set 
+			ThemePageGUID = 
+				case settingMode 
+					when 6 then (select ThemePageGUID from '+@dataDB+'.dbo.thmepage where pageURL=moduleid)
+					--when 5 then (select ThemePageGUID from '+@dataDB+'.dbo.thmepage where pageURL=''report'')
+					else (select max(ThemePageGUID) from '+@dataDB+'.dbo.thmepage where isDefault = 1)
+				end
+		where themePageGUID is null
+
+		update '+@dataDB+'.dbo.modl 
+		set 
+			ModuleStatusGUID = case settingMode 
+				when 1 then (select ModuleStatusGUID from '+@dataDB+'.dbo.msta where ModuleStatusName = ''master'')
+				when 4 then (select ModuleStatusGUID from '+@dataDB+'.dbo.msta where ModuleStatusName = ''trx'') 
+				else NULL
+			end
+		where moduleStatusGUID is null
+		'
+
+	if @isdebug=1 print @sqlstr
+	exec sp_executesql @sqlstr
+	 
+	set @sqlstr='
+		insert into '+@dataDB+'.dbo.modlcolm (ColumnGUID, ModuleGUID, colKey, colType, colLength, colOrder, titlecaption)
+		select newid(), c.ModuleGUID, b.name, max(b.system_type_id), max(b.system_type_id), max(b.column_id), b.name
+		from '+@svrV2+'.'+@v2DB+'.sys.objects a
+			inner join '+@svrV2+'.'+@v2DB+'.sys.columns b ON a.object_id = b.object_id
+			inner join '+@dataDB+'.dbo.modl c ON a.name = c.ModuleID 
+				and LEFT(c.ModuleId, 1) in (''M'', ''T'', ''S'') AND substring(c.ModuleId, 7, 4) != ''APRV'' AND c.AccountDBGUID is Not NULL
+			left join '+@dataDB+'.dbo.modlcolm z ON b.name = z.colKey and c.moduleguid=z.moduleguid
+		where z.ColumnGUID is NULL
+		group by c.ModuleGUID, b.name
+
+	'
+	
+	if @isdebug=1 print @sqlstr 
+	exec sp_executesql @sqlstr
+
+
+
+
+
+
+

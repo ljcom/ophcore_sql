@@ -1,0 +1,35 @@
+CREATE PROCEDURE [dbo].[TaPCSODETA_delete_before] @GUID uniqueidentifier, @hostGUID uniqueidentifier, @isCancel bit = 0 OUTPUT, @msg varchar(200)='' OUTPUT 
+as	--CreatedBy eLs ON Jan, 2017
+	--PCSO
+	declare @PCSOGUID uniqueidentifier
+	
+	select @PCSOGUID = PCSOGUID from ToPCSODETA where PCSODETAGUID = @GUID
+
+	update a set
+		a.TotalQty = isNULL(sumQty, 0), a.TotalSales = isNULL(sumTPrice, 0)
+	from ToPCSO a
+		left join (
+			select PCSOGUID, SUM(Qty) [sumQty], sum(TotalPrice) [sumTPrice] from ToPCSODETA 
+			where PCSODETAGUID != @GUID
+			group by PCSOGUID
+		) b ON a.PCSOGUID = b.PCSOGUID
+	where a.PCSOGUID = @PCSOGUID
+
+	--EVENPSKU
+	update a 
+	set Used = Used - b.Qty
+	from MoEVENPSKU a 
+		inner join 
+			(
+			select PCSODETAGUID, EVENGUID, --CTGRGUID, 
+				PRODGUID, Qty 
+			from ToPCSO a
+				inner join ToPCSODETA b 
+					ON a.PCSOGUID = b.PCSOGUID
+			) b 
+			ON a.EVENGUID = b.EVENGUID 
+			--AND a.CTGRGUID = b.CTGRGUID 
+			AND a.PRODGUID = b.PRODGUID
+	where b.PCSODETAGUID = @GUID
+
+	--set @msg='x11'

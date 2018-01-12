@@ -1,0 +1,205 @@
+
+
+
+CREATE procedure [api].[sync_sendcodeprop] @accountid nvarchar(50), @token uniqueidentifier, @code nvarchar(50)=null, @r xml=null
+as
+	--set nocount on 
+
+	declare @accountdbGUID uniqueidentifier
+	select @accountdbGUID=AccountDBGUID from acctdbse d
+		inner join acct a on a.AccountGUID=d.AccountGUID
+	where ismaster=0 and [version]='4.0' and a.AccountId=@accountid
+
+	declare @moduleguid uniqueidentifier	
+	select @moduleguid=moduleguid from modl where moduleid=@code
+
+	IF OBJECT_ID('tempdb..#modl') IS NOT NULL DROP TABLE #modl
+	IF OBJECT_ID('tempdb..#modlcolm') IS NOT NULL DROP TABLE #modlcolm
+	IF OBJECT_ID('tempdb..#modlcolminfo') IS NOT NULL DROP TABLE #modlcolminfo
+	IF OBJECT_ID('tempdb..#modlinfo') IS NOT NULL DROP TABLE #modlinfo
+
+	--delete from #modl
+	--delete from #modlcolm
+	--delete from #modlcolminfo
+	--delete from #modlinfo
+
+	SELECT Tbl.Col.value('ModuleGUID[1]', 'uniqueidentifier') ModuleGUID, 
+		Tbl.Col.value('AccountGUID[1]', 'uniqueidentifier') AccountGUID, 
+		Tbl.Col.value('ModuleID[1]', 'nvarchar(50)') ModuleID, 
+		Tbl.Col.value('ModuleDescription[1]', 'nvarchar(500)') ModuleDescription, 
+		Tbl.Col.value('settingMode[1]', 'int') settingMode, 
+		@accountdbGUID accountdbguid,
+		--Tbl.Col.value('AccountDBGUID[1]', 'uniqueidentifier') AccountDBGUID, 
+		Tbl.Col.value('ParentModuleGUID[1]', 'uniqueidentifier') ParentModuleGUID, 
+		Tbl.Col.value('OrderNo[1]', 'int') OrderNo, 
+		Tbl.Col.value('needLogin[1]', 'bit') needLogin, 
+		Tbl.Col.value('ThemePageGUID[1]', 'uniqueidentifier') ThemePageGUID, 
+		Tbl.Col.value('ModuleStatusGUID[1]', 'uniqueidentifier') ModuleStatusGUID, 
+		Tbl.Col.value('ModuleGroupGUID[1]', 'uniqueidentifier') ModuleGroupGUID, 
+		Tbl.Col.value('triggerAction[1]', 'nvarchar(3)') triggerAction, 
+		Tbl.Col.value('createdDate[1]', 'datetime') createdDate, 
+		Tbl.Col.value('updatedDate[1]', 'datetime') updatedDate
+	into #modl
+	FROM @r.nodes('/sqroot/replicationCode/modl/item') Tbl(Col)
+				
+	SELECT Tbl.Col.value('ColumnGUID[1]', 'uniqueidentifier') ColumnGUID, 
+		Tbl.Col.value('ModuleGUID[1]', 'uniqueidentifier') ModuleGUID, 
+		Tbl.Col.value('colKey[1]', 'nvarchar(50)') colKey, 
+		Tbl.Col.value('colType[1]', 'int') colType, 
+		Tbl.Col.value('colOrder[1]', 'int') colOrder, 
+		gen.recoverXMLString(Tbl.Col.value('titlecaption[1]', 'nvarchar(max)')) titlecaption, 
+		Tbl.Col.value('createdDate[1]', 'datetime') createdDate, 
+		Tbl.Col.value('updatedDate[1]', 'datetime') updatedDate, 
+		Tbl.Col.value('colLength[1]', 'int') colLength
+	into #modlcolm
+	FROM @r.nodes('/sqroot/replicationCode/modlcolm/item') Tbl(Col)
+
+	SELECT Tbl.Col.value('ColumnInfoGUID[1]', 'uniqueidentifier') ColumnInfoGUID, 
+		Tbl.Col.value('ColumnGUID[1]', 'uniqueidentifier') ColumnGUID, 
+		Tbl.Col.value('InfoKey[1]', 'nvarchar(50)') infoKey, 
+		gen.recoverXMLString(Tbl.Col.value('InfoValue[1]', 'nvarchar(max)')) infovalue, 
+		Tbl.Col.value('createdDate[1]', 'datetime') createdDate, 
+		Tbl.Col.value('updatedDate[1]', 'datetime') updatedDate
+	into #modlcolminfo
+	FROM @r.nodes('/sqroot/replicationCode/modlcolminfo/item') Tbl(Col)
+
+	select * from #modlcolminfo
+
+	SELECT Tbl.Col.value('ModuleInfoGUID[1]', 'uniqueidentifier') ModuleInfoGUID, 
+		Tbl.Col.value('ModuleGUID[1]', 'uniqueidentifier') moduleGUID, 
+		Tbl.Col.value('InfoKey[1]', 'nvarchar(50)') infoKey, 
+		gen.recoverXMLString(Tbl.Col.value('InfoValue[1]', 'nvarchar(max)')) infovalue, 
+		Tbl.Col.value('createdDate[1]', 'datetime') createdDate, 
+		Tbl.Col.value('updatedDate[1]', 'datetime') updatedDate
+	into #modlinfo
+	FROM @r.nodes('/sqroot/replicationCode/modlinfo/item') Tbl(Col)
+
+	--if @isNew=1 
+	--	delete from #modlinfo
+	--	where infokey like 'view%' or infokey like 'script%'
+
+	--begin transaction
+
+		if not exists(select * from modl where moduleid=@code) begin
+			print 'insert modl '+@code
+			insert into modl (ModuleGUID, AccountGUID, ModuleID, ModuleDescription, settingMode, AccountDBGUID, ParentModuleGUID, 
+			OrderNo, needLogin, ThemePageGUID, ModuleStatusGUID, ModuleGroupGUID, triggerAction, createdDate, updatedDate)
+			SELECT * from #modl
+		end
+		else begin
+			print 'update modl '+@code
+			update y
+			set moduleguid=x.moduleguid,
+				ModuleDescription=x.ModuleDescription, settingMode=x.settingMode, 
+				ParentModuleGUID=x.ParentModuleGUID, 
+				OrderNo=x.OrderNo, needLogin=x.needLogin, 
+				ThemePageGUID=x.ThemePageGUID, ModuleStatusGUID=x.ModuleStatusGUID, 
+				ModuleGroupGUID=x.ModuleGroupGUID, triggerAction=x.triggerAction, createdDate=x.createddate, updatedDate=x.updatedDate
+			from #modl x 
+				inner join modl y on x.moduleid=y.moduleid
+			where datediff(n, isnull(y.updateddate, y.createddate), isnull(x.updateddate, x.createddate))<>0
+				or y.moduleguid<>x.moduleguid or 
+				y.ModuleDescription<>x.ModuleDescription or
+				y.ParentModuleGUID<>x.ParentModuleGUID or
+				y.OrderNo<>x.OrderNo or y.needLogin<>x.needLogin or 
+				y.ThemePageGUID<>x.ThemePageGUID or y.ModuleStatusGUID<>x.ModuleStatusGUID or 
+				y.ModuleGroupGUID<>x.ModuleGroupGUID 
+		end
+
+		--modlcolm
+		print 'delete modlcolm '+@code
+		delete x
+		from modlcolm x
+			inner join #modl x1 on x.ModuleGUID=x1.ModuleGUID	--perlu karena temp hanya ada satu modl saja
+			left join #modlcolm c on x.ColumnGUID=c.ColumnGUID 
+		where c.ColumnGUID is null
+
+		print 'insert modlcolm '+@code
+		insert into modlcolm (ColumnGUID, ModuleGUID, colKey, colType, colOrder, titlecaption, 
+			createdDate, updatedDate, colLength)
+		select x.ColumnGUID, x.ModuleGUID, x.colKey, x.colType, x.colOrder, x.titlecaption, 
+			x.createdDate, x.updatedDate, x.colLength
+		from #modlcolm x
+			--inner join #modl z on x.moduleguid=z.moduleguid
+			--inner join modl m on m.moduleguid=x.moduleguid
+			left join modlcolm c on x.columnGUID=c.columnGUID
+		where c.ColumnGUID is null
+
+		print 'update modlcolm '+@code
+		update c
+		set columnguid=x.columnguid, colOrder=x.colOrder, --colKey=x.colKey, colType=x.colType, colLength=x.colLength, 
+			titlecaption=x.titlecaption, createddate=x.createddate, updatedDate=x.updatedDate
+		from #modlcolm x
+			--inner join #modl z on x.moduleguid=z.moduleguid
+			--inner join modl m on x.moduleguid=m.moduleguid
+			inner join modlcolm c on x.columnGUID=c.columnGUID
+		where datediff(n, isnull(c.updateddate, c.createddate), isnull(x.updateddate, x.createddate))<>0
+
+		--modlcolminfo
+		print 'delete modlcolminfo'
+		delete x
+		from modlcolminfo x
+			inner join #modlcolm x2 on x.ColumnGUID=x2.ColumnGUID	--perlu karena temp hanya ada satu modl saja
+			inner join #modl x1 on x2.ModuleGUID=x1.ModuleGUID		--perlu karena temp hanya ada satu modl saja
+			left join #modlcolminfo i on i.ColumnInfoGUID=x.ColumnInfoGUID
+		where i.ColumnInfoGUID is null
+
+		print 'insert modlcolminfo '+@code
+		insert into modlcolminfo (ColumnInfoGUID, ColumnGUID, infoKey, infovalue, createdDate, updatedDate)
+		select x.ColumnInfoGUID, x.ColumnGUID, x.infoKey, x.infovalue, x.createdDate, x.updatedDate
+		from #modlcolminfo x
+			--inner join #modlcolm x2 on x.columnGUID=x2.columnGUID
+			--inner join #modl x3 on x3.moduleguid=x2.moduleguid
+			--inner join modlcolm c on c.columnguid=x.columnguid
+			--inner join modl m on c.moduleguid=m.moduleguid
+			left join modlcolminfo i on i.ColumnInfoGUID=x.ColumnInfoGUID
+		where i.ColumnInfoGUID is null
+
+		print 'update modlcolminfo '+@code
+		update i
+		set ColumnInfoGUID=x.ColumnInfoGUID, infoValue=x.infoValue, createddate=x.createddate, updatedDate=x.updatedDate
+		from #modlcolminfo x
+			--inner join #modlcolm x2 on x.columnGUID=x2.columnGUID
+			--inner join #modl x3 on x3.moduleguid=x2.moduleguid
+			inner join modlcolm c on c.columnguid=x.columnguid
+			inner join modl m on c.moduleguid=m.moduleguid
+			inner join modlcolminfo i on i.ColumnInfoGUID=x.ColumnInfoGUID
+		where datediff(n, isnull(i.updateddate, i.createddate), isnull(x.updateddate, x.createddate))<>0
+
+
+		--modlinfo
+		print 'delete modlinfo'
+		delete x
+		from modlinfo x
+			inner join #modl x1 on x.ModuleGUID=x1.ModuleGUID	--perlu karena temp hanya ada satu modl saja	
+			left join #modlinfo i on i.moduleInfoGUID=x.moduleInfoGUID
+		where i.moduleInfoGUID is null
+		print 'insert modlinfo '+@code
+
+		insert into modlinfo (ModuleInfoGUID, moduleGUID, infoKey, infovalue, createdDate, updatedDate)
+		select x.ModuleInfoGUID, x.moduleGUID, x.infoKey, x.infovalue, x.createdDate, x.updatedDate
+		from #modlinfo x
+			--inner join #modl x3 on x3.moduleguid=x.moduleguid
+			--inner join modl m on x.moduleguid=m.moduleguid
+			left join modlinfo i on i.moduleInfoGUID=x.moduleInfoGUID
+		where i.ModuleInfoGUID is null
+
+		print 'update modlinfo '+@code
+		update i
+		set infoValue=x.infoValue, createddate=x.createddate, updatedDate=x.updateddate
+		from #modlinfo x
+			--inner join #modl x3 on x3.moduleguid=x.moduleguid
+			inner join modl m on x.moduleguid=m.moduleguid
+			inner join modlinfo i on i.moduleInfoGUID=x.moduleInfoGUID
+		where datediff(n, isnull(i.updateddate, i.createddate), isnull(x.updateddate, x.createddate))<>0
+
+
+
+
+
+
+
+
+
+
+

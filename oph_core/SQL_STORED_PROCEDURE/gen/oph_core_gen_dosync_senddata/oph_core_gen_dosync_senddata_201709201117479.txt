@@ -1,0 +1,73 @@
+
+
+CREATE procedure [gen].[dosync_senddata] @paccountid nvarchar(50), @saccountid nvarchar(50), 
+	@paddress nvarchar(500), @laddress nvarchar(500), @code nvarchar(50), @token uniqueidentifier, @tbl nvarchar(max), @isLAN bit=0,
+	@isdebug bit=0
+as
+	declare @cx bigint, @c bigint, @url nvarchar(max), @g uniqueidentifier, @x nvarchar(max),
+		@xx xml, @xx2 xml, @guid nvarchar(max), @poststring nvarchar(max)
+
+	print @tbl
+
+	select @cx=count(*)
+	from (
+		select val guid
+		from gen.splitdelimeter(@tbl, '*')
+		where val is not null
+	) x
+
+	select val guid
+	from gen.splitdelimeter(@tbl, '*')
+	where val is not null
+
+	set @c=0
+	print @code+' '+cast(@c as nvarchar(10))+'/'+cast(@cx as nvarchar(10))+' '+CAST(GETDATE() as nvarchar(50))
+				
+	while @c<@cx and @cx>0
+	begin
+		set @GUID=stuff((
+			select '*'+cast(y1.guid as nvarchar(50))
+			from (
+				select x.guid, ROW_NUMBER() OVER(ORDER BY isnull(x.guid, 0) desc) RowNum
+				from (
+					select val guid
+					from gen.splitdelimeter(@tbl, '*')
+					where isnull(val, '')<>''
+				) x 
+			) y1
+			where rowNum between @c+1 and @c+100
+			for xml path('')
+			), 1, 1, '')
+
+		--select @guid
+		print 'reqdata '+@saccountid+' '+@GUID
+		exec [api].[sync_reqdata] @saccountid, @token, @code, @guid, @xx output, @issilent=1
+
+		select @xx
+
+		print @code+' senddataback begin '+cast(@c as nvarchar(10))+'/'+cast(@cx as nvarchar(10))+' '+CAST(GETDATE() as nvarchar(50))
+
+		set @url=@paddress+'?mode=senddata&code='+@code+'&token='+cast(@token as nvarchar(50))
+		set @poststring='dataXML='+replace(replace(replace(cast(@xx as nvarchar(max)), '<', '%26lt;'), '>', '%26gt;'), '&', '%26')
+		print @url
+		print @poststring
+		if @isLAN=0 begin
+			exec gen.gethttp @url, @g output, @method='POST', @poststring=@poststring
+
+			select @x=httptext 
+			from http where httpguid=@g
+
+			set @xx=replace(@x, '<?xml version="1.0" encoding="utf-8"?>', '')
+			select 'back', @xx
+		end else begin
+			exec api.sync_senddata @paccountid, @token, @code, @xx, @issilent=1
+		end
+		print @code+' senddataback end '+cast(@c as nvarchar(10))+'/'+cast(@cx as nvarchar(10))+' '+CAST(GETDATE() as nvarchar(50))
+
+		set @c=@c+100
+		--print @c
+	end
+
+
+
+

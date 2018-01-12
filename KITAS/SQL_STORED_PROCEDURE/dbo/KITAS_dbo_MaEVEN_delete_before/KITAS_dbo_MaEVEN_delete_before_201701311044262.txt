@@ -1,0 +1,8 @@
+CREATE PROCEDURE [dbo].[MaEVEN_delete_before] 
+	@GUID uniqueidentifier, @hostGUID uniqueidentifier, @isCancel bit = 0 OUTPUT, @msg nvarchar(250) = '' OUTPUT
+as	--CreatedBy eLs ON Jan, 2017
+
+	if @GUID in ('9573DD6B-DB6F-4153-8A07-9B7CC8C0ADE7', '6A293D44-E76E-4979-BAD6-A598988FB61B') begin
+		select @isCancel = 1, @msg = '3You are unallowed to delete this. Event is protected by systems!'
+	end
+

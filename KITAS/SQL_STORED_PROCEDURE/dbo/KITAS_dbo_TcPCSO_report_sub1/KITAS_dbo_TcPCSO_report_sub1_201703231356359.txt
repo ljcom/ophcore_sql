@@ -1,0 +1,16 @@
+CREATE PROCEDURE TcPCSO_report_sub1 @hostGUID uniqueidentifier, @PCSOGUID uniqueidentifier
+as	--CreatedBy eLs ON Mar, 2017
+
+	--declare @hostGUID uniqueidentifier = gen.getHost('oph', null), @PCSOGUID uniqueidentifier
+
+	select 
+		b.Name [EventName], c.Code [ItemCode], c.Name [ItemName], (Qty - QtyReject - QtyReturn) [Qty], 
+		FORMAT(Price, '#,#0') [Price], IIF(DiscPrice = 0, '', '(Disc. ' + FORMAT(DiscPrice, '#,#')+')') [DiscPrice],
+		FORMAT(TotalPrice, '#,#0') [TotalPrice]
+	from ToPCSODETA a
+		left join MoEVEN b ON a.EVENGUID = b.EVENGUID
+		left join MoPROD c ON a.PRODGUID = c.PRODGUID
+	where PCSOGUID = @PCSOGUID
+	order by b.ID, c.Code
+	
+

@@ -1,0 +1,107 @@
+
+CREATE procedure [xml].[view_approval] @hostGUID uniqueidentifier, @tablename varchar(100), 
+	@GUID uniqueidentifier, @editMode int=0, @debug int=0
+as
+	declare @xhead varchar(max), @xcontent varchar(max), @xfilter varchar(max), @xinfo varchar(max), 
+		@xapproval varchar(max), @xtalk varchar(max), @x2 varchar(max), @skinFolder varchar(100)
+
+	declare @otableName nvarchar(50)
+	set @otableName=left(@tablename,1)+ 'o' +right(@tablename,len(@tablename)-2) 
+	declare @atablename nvarchar (50)
+	set @atablename= left(@tablename,1)+ 'a' +right(@tablename,len(@tablename)-2 )
+	--fieldkey
+	declare @fieldKey varchar(100)
+	select @fieldKey=ColName
+		from gen.coTABL a
+			inner join gen.coTABLFIEL b
+				on a.TableGUID=b.tableGUID
+		where tablename=@atablename and b.colorder=10
+		--select @fieldKey
+	
+	--skin
+	select @skinFolder=c.skinFolder 
+	from CoUSER a
+		inner join CoUSERHOST b
+			on a.userguid=b.userguid
+		inner join CoSKIN c
+			on a.skinguid=c.skinguid
+	where b.hostguid=@hostguid
+	--select @skinFolder
+
+	declare @allowAdd bit=0, @allowBrowse bit=0, @allowEdit bit=0, @allowDelete bit=0, @allowWipe bit=0,
+		@allowClose bit=0, @isDeletedTable bit=0
+
+	if substring(@tablename,2,1)='d' set @isDeletedTable=1	
+	--check permission
+	select @allowadd=allowAdd, @allowBrowse=allowBrowse, @allowEdit=AllowEdit, @allowDelete=AllowDelete,
+		@allowWipe=case when @isdeletedTable=1 and AllowWipe=1 then 1 else 0 end
+	from coMODL where moduleid=@atablename
+	--select @allowadd, @allowBrowse, @allowEdit, @allowDelete,@allowWipe
+
+	--xinfo
+	set @xinfo= '
+		select
+			case when isnull(moduleid,'''')='''' then null else moduleid end ''tableName'',
+			case when isnull(moduleDescription,'''')='''' then null else moduleDescription end ''description'',
+			isnull((	select '+@fieldKey+' 
+						from oph.'+@tablename+' '+@tablename+'
+						where '+@fieldKey+'='''+convert(varchar(50),@GUID)+'''),'''+case when @editMode=2 then convert(varchar(50),newid()) else '00000000-0000-0000-0000-000000000000' end+''') ''GUID'',
+			'''+@skinfolder+''' ''skinFolder'','+
+			cast(@editMode as varchar(1))+' ''editMode'','+
+			cast(@allowAdd as varchar(1))+' ''permission/allowAdd'','+
+			cast(@allowEdit as varchar(1))+' ''permission/allowEdit'','+
+			cast(@allowDelete as varchar(1))+' ''permission/allowDelete'','+
+			cast(@allowWipe as varchar(1))+' ''permission/allowWipe''
+		from coMODL a
+		where moduleid='''+@atablename+'''
+		for xml path(''''), type'
+	--elect @xinfo
+	--xapproval
+	if exists(select * from sysobjects where name=@otableName+'APRV')
+
+		set @xapproval ='
+			(	select (select 
+				(select 
+					y.ApprovalUserGUID ''approval/GUID'',
+					y.ApprovalUserGUIDcbId ''approval/userId'',
+					y.ApprovalUserGUIDcbNm ''approval/userName'',
+					y.delegateUserGUID ''approval/delegate/GUID'',
+					y.delegateUserGUIDcbId ''approval/delegate/userId'',
+					y.delegateUserGUIDcbNm ''approval/delegate/userName'',
+					y.lvl ''approval/lvl'',
+					y.Status ''approval/status'', 
+					y.UpdatedDate ''approval/approvalDate''
+				from oph.'+@atablename+'APRV y
+				where y.'+@fieldKey+'='+@atablename+'.'+@fieldKey+'
+				order by y.lvl
+				for xml path (''''), type) 
+			from (
+				select * 
+				from oph.'+@tablename+' '+@tablename+'
+				where '+@fieldKey+'='''+convert(varchar(50),@GUID)+'''
+			) '+@atablename+' 
+			for xml path (''''), type)
+			for xml path(''''), type
+		) ''approvals'','								
+	else set @xapproval=''''' [approvals], '
+				
+	set @x2='
+	select 
+		(	select ('+@xinfo+')
+		for xml path(''''), type
+		) ''info'',
+		'+@xapproval+' null
+	for xml path(''view''), root'
+
+	if @debug=1 select @x2
+	exec(@x2)
+
+
+
+
+
+
+
+
+
+

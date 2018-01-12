@@ -1,0 +1,30 @@
+
+CREATE TRIGGER [dbo].[tg_modl_dropTable] 
+ON [dbo].[modl]
+AFTER DELETE AS
+BEGIN
+
+	SET NOCOUNT ON;
+
+	declare @sqlstr nvarchar(max), @datadb nvarchar(30), @v4DB nvarchar(30), @code nvarchar(50), @db nvarchar(50)
+	
+	set @datadb = DB_NAME()
+	if exists(select * from deleted) begin		
+		if exists(select * from deleted where settingmode in (1,3,4))
+		begin
+			
+			set @sqlstr=replace((
+			select 'drop table '+b.DatabaseName+'.doc.'+a.moduleid+'
+				'+iif(a.settingmode=4, 'drop table '+b.DatabaseName+'.doc.'+a.moduleid+'APRV', '')+' 
+				'
+			from deleted a
+				inner join acctdbse b on b.AccountDBGUID = a.AccountDBGUID 
+					and ((ismaster=0 and [version]='4.0') or (ismaster=1 and ([version]='3.0' or [version]='2.0' or [version]='2.1')))
+			for xml path('')), '&'+'#x0D;', '')
+
+			print @sqlstr
+			exec sp_executesql @sqlstr
+		end
+	end
+END
+

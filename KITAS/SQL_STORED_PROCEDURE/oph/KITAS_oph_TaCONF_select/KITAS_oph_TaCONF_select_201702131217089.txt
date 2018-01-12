@@ -1,0 +1,27 @@
+CREATE procedure oph.TaCONF_select
+	@GUID uniqueidentifier, @hostGUID uniqueidentifier, @mode int=0
+as --automatic creation by system, you have to remove this comment to customize this procedure
+ 	if dbo.fn_checkObject('dbo','TaCONF_select_custom')=0 begin
+		declare @userGUID uniqueidentifier
+		select @userGUID=userguid from coUSERHOST where hostGUID=@hostGUID
+		if @mode=0 begin 
+			select TaCONF.DocNo, TaCONF.DocRefNo, TaCONF.DocDate, TaCONF.Status, TaCONF.StatusComment, TaCONF.CreatedDate, CreatedUser, TaCONF.UpdatedDate, UpdatedUser, TaCONF.isDeleted, TaCONF.DeletedDate, DeletedUser
+			from oph.TaCONF TaCONF
+			where TaCONF.CONFGUID = @GUID
+		end 
+		if @mode=1 begin 
+			select * 
+			from gen.cotablfiel a
+				inner join gen.cotabl b
+					on a.tableGUID=b.tableGUID
+			where b.tablename = 'TaCONF'
+			order by viewpageno, viewrowno, viewcolno, vieworderno,viewrowtype,viewrowtypeorder
+		end		if @mode=2 begin 
+			select TaCONF.DocNo, TaCONF.DocRefNo, TaCONF.DocDate, TaCONF.Status, TaCONF.StatusComment, TaCONF.CreatedDate, CreatedUser, TaCONF.UpdatedDate, UpdatedUser, TaCONF.isDeleted, TaCONF.DeletedDate, DeletedUser
+			from oph.TaCONFTaCONF
+			where CONFGUID = newid()
+			union select null, null, null, null, null, null, null, null, null, null, null, null
+		end 
+	end else
+		exec dbo.TaCONF_select_custom @GUID, @hostGUID
+

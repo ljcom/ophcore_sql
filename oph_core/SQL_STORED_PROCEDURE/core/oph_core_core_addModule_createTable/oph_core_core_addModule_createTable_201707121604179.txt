@@ -1,0 +1,238 @@
+CREATE procedure [core].[addModule_createTable] @accountId nvarchar(50), @dataDB nvarchar(50), @v4DB nvarchar(50), @svr nvarchar(50)=null, @isdebug bit=0
+as
+	declare @coreDB nvarchar(50)=db_name()
+	if @svr is null set @svr=@@SERVERNAME
+	declare @sqlstr nvarchar(max)='
+		select * 
+		from (
+			select ''
+				if not exists(select * from sys.objects where name=''''''+replace(cast(m.moduleid as nvarchar(50)), ''-'', '''')+'''''') begin
+					create table doc.[''+replace(cast(m.moduleid as nvarchar(50)), ''-'', '''')+''] ([DocGUID] [uniqueidentifier] NOT NULL,
+					[AccountGUID] [uniqueidentifier] NULL, [ModuleGUID] [uniqueidentifier] NULL, [Status] [int] NOT NULL, 
+					[StatusComment] [nvarchar](500) NULL, [CreatedDate] [datetime] NOT NULL, [CreatedUser] [uniqueidentifier] NULL,
+					[updatedDate] [datetime] NULL, [updatedUser] [uniqueidentifier] NULL, [isClosed] [bit] NOT NULL, [isDeleted] [bit] NOT NULL,
+					[parentDocGUID] [uniqueidentifier] NULL, [oldId] [nvarchar](50) NULL, 
+					CONSTRAINT [PK_''+replace(cast(m.moduleid as nvarchar(50)), ''-'', '''')+''] PRIMARY KEY CLUSTERED 
+					(
+						[DocGUID] ASC
+					)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+					) ON [PRIMARY]
+
+				--EXEC sys.sp_addextendedproperty 
+				--	@name=N''''moduleid'''', @value=N''''''+m.moduleid+'''''' , 
+				--	@level0type=N''''SCHEMA'''',@level0name=N''''doc'''', 
+				--	@level1type=N''''TABLE'''',@level1name=''''''+replace(cast(m.moduleguid as nvarchar(50)), ''-'', '''')+''''''
+
+					
+				end	'' script, replace(cast(m.moduleid as nvarchar(50)), ''-'', '''') objectName, ''objects'' tableName, 1 orderNo
+				from '+@datadb+'.dbo.modl m
+					inner join '+@coredb+'.dbo.acctdbse ad on m.AccountDBGUID=ad.AccountDBGUID
+					left join '+@datadb+'.dbo.modlinfo i on m.moduleguid=i.moduleguid and i.infokey=''script_view''
+					--left join '+@datadb+'.sys.objects o on m.moduleid=o.name
+				where settingmode in (1,2,3,4) and MigrateDB='''+@v4DB+''' --and ad.version=''2.0'' --and o.name is null and i.moduleinfoguid is null
+					and m.moduleid not like ''%APRV''
+		'
+
+	set @sqlstr=@sqlstr+'
+
+			union
+			select ''
+				if not exists(
+					select * 
+					from sys.objects o inner join sys.columns c on o.object_id=c.object_id 
+					where o.name=''''''+replace(cast(m.moduleid as nvarchar(50)), ''-'', '''')+'''''' 
+						and c.name=''''''+replace(cast(c.colkey as nvarchar(50)), ''-'', '''')+'''''') 
+				begin
+					alter table doc.[''+replace(cast(m.moduleid as nvarchar(50)), ''-'', '''')+''] 
+						add [''+replace(cast(c.colkey as nvarchar(50)), ''-'', '''')+''] ''+
+							case 
+								when c.coltype in (59,60,62,122,106) then ''money'' 
+								when c.coltype in (40,41,42,43,58,61,189) then ''datetime'' 
+								when c.coltype in (48,52,56,108,127,104) then ''bigint'' 
+								when c.coltype in (36) then ''uniqueidentifier'' 
+								when c.coltype in (167,173,175,231,239) then ''nvarchar(max)'' 
+								else ''nvarchar(max)''
+							end+'' null
+
+					--EXEC sys.sp_addextendedproperty 
+					--	@name=N''''colkey'''', @value=N''''''+c.colkey+'''''' , 
+					--	@level0type=N''''SCHEMA'''',@level0name=N''''doc'''', 
+					--	@level1type=N''''TABLE'''',@level1name=''''''+replace(cast(m.moduleguid as nvarchar(50)), ''-'', '''')+'''''', 
+					--	@level2type=N''''COLUMN'''',@level2name=''''''+replace(cast(c.columnguid as nvarchar(50)), ''-'', '''')+''''''
+
+				end'', 
+						replace(cast(c.colkey as nvarchar(50)), ''-'', ''''), ''columns'', 13
+			--select *  
+			from '+@datadb+'.dbo.modl m
+				--inner join '+@datadb+'.sys.objects o on replace(cast(m.moduleguid as nvarchar(50)), ''-'', '''')=o.name
+				inner join '+@datadb+'.dbo.modlcolm c on m.moduleguid=c.moduleguid
+				inner join '+@coredb+'.dbo.acctdbse ad on m.AccountDBGUID=ad.AccountDBGUID
+			where settingmode in (1,2,3,4) 
+				and colkey not in (''DocGUID'', ''AccountGUID'', ''ModuleGUID'', ''Status'', ''StatusComment'', ''CreatedDate'', ''CreatedUser'', 
+					''updatedDate'', ''updatedUser'', ''isClosed'', ''isDeleted'', ''parentDocGUID'', ''oldId'')
+				and MigrateDB='''+@v4DB+'''
+		'
+
+	--set @sqlstr=@sqlstr+'
+
+	--		union
+
+	--		select ''ALTER TABLE [dbo].[''+a.name+''] ADD CONSTRAINT [''+c.name+''] PRIMARY KEY CLUSTERED ([''+e.name+''])'', c.name, ''key_constraints'', 14
+	--		from '+@datadb+'.sys.objects a
+	--			inner join '+@datadb+'.sys.schemas s on a.schema_id=s.schema_id
+	--			inner join '+@datadb+'.sys.indexes b
+	--				on a.object_id=b.object_id and b.type=1 
+	--			inner join '+@datadb+'.sys.key_constraints c
+	--				on b.object_id=c.parent_object_id
+	--			inner join '+@datadb+'.sys.index_columns d
+	--				on d.index_id=b.index_id
+	--					and d.object_id=b.object_id
+	--			inner join '+@datadb+'.sys.columns e
+	--				on e.column_id=d.column_id
+	--				and e.object_id=a.object_id
+	--		where a.type=''U'' and s.name=''doc''
+	--	'
+
+	--set @sqlstr=@sqlstr+'
+
+	--		union
+
+	--		select ''ALTER TABLE [dbo].[''+a.name+''] ADD CONSTRAINT [''+c.name+'']  DEFAULT ''+c.definition+'' FOR [''+e.name+'']'', c.name, ''default_constraints'', 15
+	--		--select * 
+	--		from '+@datadb+'.sys.objects a
+	--			inner join '+@datadb+'.sys.schemas s on a.schema_id=s.schema_id
+	--			inner join '+@datadb+'.sys.default_constraints c
+	--				on a.object_id=c.parent_object_id --and a.name=''docmaprv'' 
+	--			inner join '+@datadb+'.sys.columns e
+	--				on e.column_id=c.parent_column_id
+	--				and e.object_id=a.object_id
+	--		where a.type=''U'' and s.name=''doc''
+	--	'
+
+	--set @sqlstr=@sqlstr+'
+
+	--		union
+
+	--		select ''CREATE ''+CASE WHEN B.is_unique=1 then ''UNIQUE '' else'''' end +''NONCLUSTERED INDEX [''+b.name+''] ON [dbo].[''+a.name+''](''+
+	--			stuff((
+	--				select '', ''+e.name+'' ASC'' 
+	--				--SELECT * 
+	--				from '+@datadb+'.sys.index_columns c
+	--					inner join '+@datadb+'.sys.columns e
+	--						on e.column_id=c.column_id
+	--						and e.object_id=a.object_id
+	--				where b.index_id=c.index_id and b.object_id=c.object_id
+	--				for xml path('''')), 1, 2, '''')+'')'', b.name, ''indexes'', 16
+	--		--select * 
+	--		from '+@datadb+'.sys.objects a
+	--			inner join '+@datadb+'.sys.schemas s on a.schema_id=s.schema_id
+	--			inner join '+@datadb+'.sys.indexes b
+	--				on a.object_id=b.object_id and b.type<>1 
+	--		where a.type=''U'' and s.name=''doc''	
+	--	'
+
+	--set @sqlstr=@sqlstr+'
+
+	--		union
+
+	--		select ''ALTER TABLE [dbo].[''+a.name+'']  WITH CHECK ADD CONSTRAINT [''+b.name+''] FOREIGN KEY([''+e.name+''])
+	--		REFERENCES [dbo].[''+c.name+''] ([''+f.name+'']) ON UPDATE CASCADE ON DELETE CASCADE'', b.name, ''foreign_keys'', 17
+	--		--select * 
+	--		from '+@datadb+'.sys.objects a
+	--			inner join '+@datadb+'.sys.schemas s on a.schema_id=s.schema_id
+	--			inner join '+@datadb+'.sys.foreign_keys b
+	--				on a.object_id=b.parent_object_id --and a.name=''modl''
+	--			inner join '+@datadb+'.sys.objects c
+	--				on b.referenced_object_id=c.object_id and c.name not in (''sysdiagrams'', ''acct'', ''acctdbse'', ''acctinfo'')	
+	--			inner join '+@datadb+'.sys.foreign_key_columns d
+	--				on d.parent_object_id=a.object_id and c.object_id=d.referenced_object_id
+	--			inner join '+@datadb+'.sys.columns e
+	--				on a.object_id=e.object_id and d.parent_column_id=e.column_id
+	--			inner join '+@datadb+'.sys.columns f
+	--				on c.object_id=f.object_id and d.referenced_column_id=f.column_id
+	--		where a.type=''U'' and s.name=''doc''
+	--	'
+
+	--set @sqlstr=@sqlstr+'
+
+	--		union 
+	--		select ''ALTER TABLE [dbo].[''+a.name+''] CHECK CONSTRAINT [''+b.name+'']'', b.name, ''foreign_keys'', 18
+	--		--select * 
+	--		from '+@datadb+'.sys.objects a
+	--			inner join '+@datadb+'.sys.schemas s on a.schema_id=s.schema_id
+	--			inner join '+@datadb+'.sys.foreign_keys b
+	--				on a.object_id=b.parent_object_id --and a.name=''modl''
+	--			inner join '+@datadb+'.sys.objects c
+	--				on b.referenced_object_id=c.object_id and c.name not in (''sysdiagrams'', ''acct'', ''acctdbse'', ''acctinfo'')	
+	--		where a.type=''U'' and s.name=''doc'''
+
+	--set @sqlstr=@sqlstr+'
+	--		union
+	--		select ''
+	--			exec '+@coreDB+'.[core].[addFunctionTable_v41] ''''''+m.moduleid+'''''', '''''+@dataDB+''''', '''''+@v4DB+''''', '''''+@svr+''''', '+iif(isnull(@isdebug,0)=1, '1', '0')+'
+	--		'', ''function'', ''function'', 21
+	--		--select *  
+	--		from '+@datadb+'.dbo.modl m
+	--		inner join '+@coredb+'.dbo.acctdbse ad on m.AccountDBGUID=ad.AccountDBGUID
+	--		where settingmode in (1,2,3,4) AND MigrateDB='''+@v4DB+'''
+	
+
+	set @sqlstr=@sqlstr+'
+			union
+			select ''
+				exec '+@coreDB+'.[core].[addSynonymsTable] ''''''+m.moduleid+'''''', '''''+@dataDB+''''', '''''+@v4DB+''''', '''''+@svr+''''', '+iif(isnull(@isdebug,0)=1, '1', '0')+'
+			'', ''synonyms'', ''synonyms'', 21
+			--select *  
+			from '+@datadb+'.dbo.modl m
+			inner join '+@coredb+'.dbo.acctdbse ad on m.AccountDBGUID=ad.AccountDBGUID
+			where settingmode in (1,2,3,4) and m.moduleid not like ''%APRV'' AND MigrateDB='''+@v4DB+'''
+		) x		
+			'
+
+	if @isdebug=1 print @sqlstr
+	create table #tmp (script nvarchar(max), objectnm nvarchar(max), tablenm nvarchar(max), o int)
+	insert into #tmp (script, objectnm, tablenm, o)
+	exec sp_executesql @sqlstr
+
+	DECLARE #cur CURSOR
+	READ_ONLY
+	FOR 
+		select script, objectnm, tablenm, o
+		from #tmp
+		order by o
+
+	--create schema doc
+	set @sqlstr='
+		if not exists(select * from '+@v4DB+'.sys.schemas where name=''doc'') 
+			exec '+@v4DB+'.dbo.sp_executesql N''create schema doc'''
+	
+	if @isdebug=1 print @sqlstr
+	exec sp_executesql @sqlstr
+
+	DECLARE @script nvarchar(max), @name nvarchar(500), @oType nvarchar(500), @ret bit=0, @oNo int
+	OPEN #cur
+
+	FETCH NEXT FROM #cur INTO @script, @name, @oType, @oNo
+	WHILE (@@fetch_status <> -1)
+	BEGIN
+		IF (@@fetch_status <> -2)
+		BEGIN
+			if @isdebug=1 print @script
+			set @sqlstr='
+				exec '+@svr+'.'+@v4DB+'.dbo.sp_executesql @s'
+
+			set @script=replace(replace(replace(replace(replace(@script, '&amp;', '&'), '&#x0D;', char(13)), '#x0A;', char(10)), '&lt;', '<'), '&gt;', '>')
+
+			select @script+''
+			for xml path('')
+
+			if @isdebug=1 print @script
+			exec sp_executesql @sqlstr, N'@s nvarchar(max)', @script
+		END
+		FETCH NEXT FROM #cur INTO @script, @name, @oType, @oNo
+	END
+
+	CLOSE #cur
+	DEALLOCATE #cur
+
+

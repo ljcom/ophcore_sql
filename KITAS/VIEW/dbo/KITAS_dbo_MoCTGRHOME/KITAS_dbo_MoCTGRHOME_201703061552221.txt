@@ -1,0 +1,16 @@
+
+
+
+CREATE view [dbo].[MoCTGRHOME]
+as
+
+select	Top 4
+		CTGRGUID, ID, Name, PARNCTGRGUID, isParent
+		, isDeleted, CreatedDate, CreatedUser, UpdatedDate, UpdatedUser, DeletedDate, DeletedUser
+from MoCTGR
+where isparent = 1
+and PARNCTGRGUID is null and name not in ('accessories','MISCELLANEOUS')
+
+
+
+

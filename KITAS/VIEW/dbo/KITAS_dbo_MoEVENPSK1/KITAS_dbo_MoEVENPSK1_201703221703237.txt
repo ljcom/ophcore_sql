@@ -1,0 +1,12 @@
+CREATE view dbo.MoEVENPSK1
+as
+select 
+	a.EVENPSKUGUID, a.EVENGUID, a.CTGRGUID, a.PRODGUID, b.barcode, b.ID, b.Name, a.Price, a.Qty, a.Used, a.Availaible
+	, a.CreatedDate, a.CreatedUser, a.UpdatedDate, a.UpdatedUser
+
+from MoEVENPSKU a
+inner join MoEVEN a1 on a1.EVENGUID = a.EVENGUID
+inner join MoPROD b on b.PRODGUID = a.PRODGUID
+where a1.isdeleted = 0 and b.isDeleted = 0 
+
+

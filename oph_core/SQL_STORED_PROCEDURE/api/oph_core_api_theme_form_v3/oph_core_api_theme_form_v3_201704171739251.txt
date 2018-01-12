@@ -1,0 +1,158 @@
+
+
+
+
+
+
+
+CREATE PROCEDURE [api].[theme_form_v3] @accountid varchar(50), 
+	@code nvarchar(max), @guid as uniqueidentifier, @database nvarchar(max), @settingtype nvarchar(1), 
+	@withPrimary int=0, @isdebug int = 0
+--WITH ENCRYPTION
+as
+	declare @tableguid uniqueidentifier
+
+	declare @primary nvarchar(max)
+
+	declare @fields nvarchar(max)
+	declare @fieldcast nvarchar(max)
+	declare @tablefields nvarchar(max)
+	declare @tablefieldcast nvarchar(max)
+	declare @colname nvarchar(max)
+
+	declare @sqlstr nvarchar(max)
+
+	select @sqlstr = 'use '+@database
+	select @sqlstr = @sqlstr + '
+		select @guid = a.tableguid 
+		from gen.cotabl a 
+		where tablename = '''+@code+'''
+	
+		--value
+		select @fldcast = convert(nvarchar(max),(
+			select ''isnull(convert(nvarchar(max),''+[colname]+''),'''''''') as [''+colname+''],'' 
+			from gen.cotablfiel
+			where tableguid = @guid and isviewable = 1 
+				and '+case when @withPrimary = 0 then '' else 'not' end +'(primarycol is null or primarycol ='''' or iseditable in (1,2,4))
+			for xml path('''') ))
+	
+		--value
+		select @flds = convert(nvarchar(max),(
+			select ''[''+colname+''],'' 
+			from gen.cotablfiel 
+			where tableguid = @guid 
+				and isviewable = 1 
+				and '+case when @withPrimary = 0 then '' else 'not' end +'(primarycol is null or primarycol ='''' or iseditable in (1,2,4))
+			for xml path('''') ))'
+
+	set @sqlstr=@sqlstr+'
+
+		--info
+		select @col = convert(nvarchar(max),(
+			select ''''''''+colname+'''''','' 
+			from gen.cotablfiel 
+			where tableguid =@guid and isviewable = 1 
+				and '+case when @withPrimary = 0 then '' else 'not' end +'(primarycol is null or primarycol ='''' or iseditable in (1,2,4))
+			for xml path('''') ))
+	
+		--info
+		select @tbl = convert(nvarchar(max),(
+			SELECT COLUMN_NAME+'',''
+			FROM INFORMATION_SCHEMA.COLUMNS
+			WHERE TABLE_NAME = ''cotablfiel'' 
+				AND TABLE_SCHEMA=''gen'' and column_name not in(''tablefieldguid'',''tableguid'') and not (column_name like ''%browse%'')
+			for xml path('''')))
+
+		select @tblcast = convert(nvarchar(max),(
+			SELECT ''isnull(convert(nvarchar(max),''+[COLUMN_NAME]+''),'''''''') as ''+[COLUMN_NAME]+'',''
+			FROM INFORMATION_SCHEMA.COLUMNS
+			WHERE TABLE_NAME = ''cotablfiel'' AND TABLE_SCHEMA=''gen''  and not (column_name like ''%browse%'')
+			for xml path('''')))
+
+		select @prim = colname 
+		from gen.cotablfiel 
+		where primarycol= 1 and tableguid = @guid
+
+	'
+	if @isdebug=1 print @sqlstr
+
+
+	declare @sqlpar nvarchar(max)  = '@tbl nvarchar(max) output, @tblcast nvarchar(max) output,
+		@flds nvarchar(max) output, @fldcast nvarchar(max) output, @prim nvarchar(max) output, @guid uniqueidentifier output, 
+		@col nvarchar(max) output'
+
+	EXECUTE sp_executesql @sqlstr,@sqlpar , @tbl = @tablefields output, @tblcast =@tablefieldcast output, 
+		@flds = @fields output, @fldcast=@fieldcast output, @prim = @primary output, @guid =@tableguid output,
+		@col = @colname output
+
+	set @fields = left(@fields,len(@fields)-1)
+	set @fieldcast = left(@fieldcast,len(@fieldcast)-1)
+	set @tablefields = left(@tablefields,len(@tablefields)-1)
+	set @tablefieldcast = left(@tablefieldcast,len(@tablefieldcast)-1)
+	set @colname = left(@colname,len(@colname)-1)
+
+	declare @oCode varchar(20), @tblCode varchar(20)=@code, 
+		@stateID int, @elsql nvarchar(MAX)
+	set @oCode = STUFF(@code, 2, 1, 'o')	print '@oCode: '+@oCode
+
+	declare @haveStatus bit=0
+	if @settingtype='T' and exists(select * from modl where moduleid=@code and ParentModuleGUID is null) set @haveStatus=1
+
+	
+	if @haveStatus=1 begin
+		set @elsql = 'select @stats=[Status] from '+@database+'.dbo.'+@oCode + ' where ' + @primary + '=''' + cast(@guid as varchar(50)) + ''''
+
+		if @isdebug=1 print @elsql
+
+		execute sp_executesql @elsql, N'@stats int output', @stats=@stateID output	
+		print 'stateID : ' + cast(@stateID as varchar(5))
+
+		if @stateID is NOT NULL begin
+			set @tblCode = STUFF(@code, 2, 1, 
+				case @stateID 
+					when 400 then 'e'
+					when 500 then 'c'
+					else 'a'
+				end
+			) print '@tblCode: ' + @tblCode
+		end
+	end
+
+	select @sqlstr = 'use '+@database+char(13)
+
+	select @sqlstr = @sqlstr + '
+		select tablefieldguid, tableguid, oph_core.api.oph4tablename(infokey) as tablename,
+			infovalue, NULL, NULL 
+		from ('+char(13)+'
+			select '+@tablefieldcast+',convert(nvarchar(max),'''') as length,infovalue as ''colValue'',convert(nvarchar(max),'''') as fieldno 
+			from gen.cotablfiel a 
+				left join (
+					select infokey, infovalue 
+					from ( 
+						select '+@fieldcast +char(13)+'
+						from oph.'+@tblCode+ ' ' +case when @guid is not null then '
+						where '+@primary+' ='''+convert(nvarchar(max),@guid)+'''' else '' end +' ) as a
+					unpivot(infovalue 
+					for infokey in('+@fields+')) as upv
+
+				) as b on a.colname  = b.infokey
+			where tableguid = '''+convert(nvarchar(max),@tableguid)+''' 
+				and colname in('+@colname+')) as main
+			unpivot (infovalue 
+			for infokey in('+@tablefields+',[length], colvalue, fieldno)) as unpvt
+		order by tablefieldguid, tablename'
+
+	if @isdebug=1 print @sqlstr
+	exec (@sqlstr)
+
+
+
+
+
+
+
+
+
+
+
+

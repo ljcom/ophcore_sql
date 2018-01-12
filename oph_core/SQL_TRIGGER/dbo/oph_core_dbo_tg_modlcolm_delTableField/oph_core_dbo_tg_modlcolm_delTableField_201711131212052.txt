@@ -1,0 +1,57 @@
+
+
+CREATE TRIGGER [dbo].[tg_modlcolm_delTableField] 
+ON [dbo].[modlcolm]
+AFTER DELETE AS
+BEGIN
+
+	SET NOCOUNT ON;
+
+	declare @sqlstr nvarchar(max), @datadb nvarchar(30), @v4DB nvarchar(30), 
+		@svr nvarchar(50)='', @code nvarchar(50), @colType int, 
+		@colLength int, @settingmode int, @colkey varchar(50)
+
+	set @datadb =  DB_NAME() 
+	
+	select @v4DB = isnull(c.migratedb, c.databasename), @settingmode=settingmode
+	from deleted a
+		inner join modl b on b.ModuleGUID = a.ModuleGUID
+		inner join acctdbse c on c.AccountDBGUID = b.AccountDBGUID 
+
+	if @settingmode='1' or @settingmode='3' or @settingmode='4' begin
+		DECLARE #cur_colm CURSOR
+		READ_ONLY
+		FOR select i.colkey, moduleid, colLength, coltype 
+			from deleted i
+				inner join modl m on i.ModuleGUID=m.moduleguid
+
+		OPEN #cur_colm
+
+		FETCH NEXT FROM #cur_colm INTO @colkey, @code, @collength, @coltype
+		WHILE (@@fetch_status <> -1)
+		BEGIN
+			IF (@@fetch_status <> -2)
+			BEGIN
+				set @sqlstr = '	
+					use '+@v4DB+'
+					if exists(
+						select * 
+						from sys.objects o inner join sys.columns c on o.object_id=c.object_id 
+						where o.name='''+@code+''' and c.name='''+@colkey+''') 
+					begin
+						alter table doc.['+@code+'] 
+							drop column ['+@colkey+'] 
+					end'
+				exec sp_executesql @sqlstr
+			END
+			FETCH NEXT FROM #cur_colm INTO @colkey, @code, @collength, @coltype
+		END
+
+		CLOSE #cur_colm
+		DEALLOCATE #cur_colm
+
+		exec [gen].[createTable] @dataDB, @v4DB, null, @code, 0, 0--@isdelTable bit=0, @isdebug bit=0
+
+	end
+END
+

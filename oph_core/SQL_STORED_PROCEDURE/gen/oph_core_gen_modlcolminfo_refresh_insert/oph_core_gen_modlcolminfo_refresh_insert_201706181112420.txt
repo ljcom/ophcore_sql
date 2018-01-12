@@ -1,0 +1,11 @@
+
+CREATE procedure [gen].[modlcolminfo_refresh_insert] @columnGUID uniqueidentifier, @ifText nvarchar(50), @ifVal nvarchar(50), @thenText nvarchar(50), @thenVal nvarchar(50)
+as		
+	insert into modlcolminfo (ColumnInfoGUID, ColumnGUID, InfoKey, InfoValue)
+	select newid(), b.ColumnGUID, @thenText, @thenVal
+	from modl a
+		inner join modlcolm b on a.moduleguid=b.moduleguid
+		inner join modlcolminfo c on b.columnguid=c.columnguid and c.InfoKey=@ifText and c.InfoValue=@ifVal
+		left join modlcolminfo d1 on b.columnguid=d1.columnguid and d1.InfoKey=@thenText 
+	where b.columnguid=@columnguid and  d1.columnguid is null
+

@@ -1,0 +1,40 @@
+
+
+CREATE function [gen].[recoverXMLString](@xmlstr nvarchar(max))
+returns nvarchar(max)
+as
+begin
+	
+	declare @r nvarchar(max)=''
+
+	if left(@xmlstr,2)='0x' begin
+		DECLARE rec_01 CURSOR
+		READ_ONLY
+		FOR 
+			select char(convert(int, convert(varbinary(10), '0x'+result, 1)))
+			from gen.splitstring(stuff(@xmlstr, 1, 2, ''), 2)
+
+		DECLARE @rx varchar(10)
+		OPEN rec_01
+
+		FETCH NEXT FROM rec_01 INTO @rx
+		WHILE (@@fetch_status <> -1)
+		BEGIN
+			IF (@@fetch_status <> -2)
+			BEGIN
+				set @r = @r+@rx
+			END
+			FETCH NEXT FROM rec_01 INTO @rx
+		END
+
+		CLOSE rec_01
+		DEALLOCATE rec_01
+	end 
+	else 
+		set @r = @xmlstr
+	
+	return @r
+		
+
+end
+

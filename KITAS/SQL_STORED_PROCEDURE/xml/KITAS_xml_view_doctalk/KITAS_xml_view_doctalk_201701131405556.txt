@@ -1,0 +1,94 @@
+
+
+
+
+CREATE procedure [xml].[view_doctalk] @hostGUID uniqueidentifier, @tablename varchar(100), 
+	@GUID uniqueidentifier, @editMode int=0
+as
+	declare @xhead varchar(max), @xcontent varchar(max), @xfilter varchar(max), @xinfo varchar(max), 
+		@xapproval varchar(max), @xtalk varchar(max), @x2 varchar(max), @skinFolder varchar(100)
+
+	--fieldkey
+	declare @fieldKey varchar(100)
+	select @fieldKey=ColName
+		from gen.coTABL a
+			inner join gen.coTABLFIEL b
+				on a.TableGUID=b.tableGUID
+		where tablename=@tablename and b.colorder=1
+
+	--skin
+	select @skinFolder=c.skinFolder from CoUSER a
+		inner join CoUSERHOST b
+			on a.userguid=b.userguid
+		inner join caskin c
+			on a.skinguid=c.skinguid
+	where b.hostguid=@hostguid
+
+	declare @allowAdd bit=0, @allowBrowse bit=0, @allowEdit bit=0, @allowDelete bit=0, @allowWipe bit=0,
+		@allowClose bit=0, @isDeletedTable bit=0
+
+	if substring(@tablename,2,1)='d' set @isDeletedTable=1	
+	--check permission
+	select @allowadd=allowAdd, @allowBrowse=allowBrowse, @allowEdit=AllowEdit, @allowDelete=AllowDelete,
+		@allowWipe=case when @isdeletedTable=1 and AllowWipe=1 then 1 else 0 end
+	from coMODL where moduleid=@tablename
+
+	--xinfo
+	set @xinfo= '
+		select
+			case when isnull(moduleid,'''')='''' then null else moduleid end ''tableName'',
+			case when isnull(moduleDescription,'''')='''' then null else moduleDescription end ''description'',
+			isnull((	select '+@fieldKey+' 
+						from '+@tablename+' 
+						where '+@fieldKey+'='''+convert(varchar(50),@GUID)+'''),'''+case when @editMode=2 then convert(varchar(50),newid()) else '00000000-0000-0000-0000-000000000000' end+''') ''GUID'',
+			'''+@skinfolder+''' ''skinFolder'','+
+			cast(@editMode as varchar(1))+' ''editMode'','+
+			cast(@allowAdd as varchar(1))+' ''permission/allowAdd'','+
+			cast(@allowEdit as varchar(1))+' ''permission/allowEdit'','+
+			cast(@allowDelete as varchar(1))+' ''permission/allowDelete'','+
+			cast(@allowWipe as varchar(1))+' ''permission/allowWipe''
+		from coMODL a
+		where moduleid='''+@tablename+'''
+		for xml path(''''), type'
+
+	--xtalk
+	set @xtalk='
+		select 
+			(select 
+				z.doctalkguid ''talk/GUID'',
+				z.DocComment ''talk/message'',
+				z.SelectedUserId ''talk/userId'',
+				z.SelectedUserName ''talk/userName'',
+				z.createdDate ''talk/talkDate''
+			from coTALK z
+			where z.DocumentGUID='+@tablename+'.'+@fieldKey+'
+			order by z.UpdatedDate
+			for xml path (''''), type)
+		from (
+			select * from '+@tablename+'
+			where '+@fieldKey+'='''+convert(varchar(50),@GUID)+'''
+		) '+@tablename+' 
+		for xml path (''''), type'			
+				
+	set @x2='
+	select 
+		(	select ('+@xinfo+')
+		for xml path(''''), type
+		) ''info'',
+		(	select ('+@xtalk+')
+			for xml path(''''), type
+		) ''talks''
+	for xml path(''view''), root'
+
+	--select @x2
+	exec(@x2)
+
+
+
+
+
+
+
+
+
+

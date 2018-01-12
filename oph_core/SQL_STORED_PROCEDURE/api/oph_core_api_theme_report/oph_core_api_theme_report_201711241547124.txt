@@ -1,0 +1,122 @@
+CREATE procedure [api].[theme_report] @hostGUID uniqueidentifier, @code varchar(100)
+--WITH ENCRYPTION
+as	--CreatedBy eLs ON Mar, 2017
+
+	--declare @hostGUID uniqueidentifier = gen.getHost('ap\iman.satyagraha'), @code varchar(100)=''
+
+	declare @theme varchar(50), @accountid nvarchar(50)
+
+	exec gen.getDBInfo @hostguid, @code, @themename=@theme output, @accountid=@Accountid output
+
+	declare @ModuleGUID uniqueidentifier, @desc varchar(255), @tdesc varchar(255)
+	select @ModuleGUID = ModuleGUID, @desc = IIF(len(ModuleDescription) < 1, ModuleID, ModuleDescription) from modl where ModuleID = @code
+
+	/*XML_BODY_INFO TEMPLATE
+	-------------------------
+	<code>#ModuleID / @Code#</code>
+	<description>#ModuleDescription#</description>
+	<querySQL>#querySQL#</querySQL>
+	<reportName>#PDF / XLS Report Name#</reportName>
+	<permission>
+		<allowPDF>0</allowPDF>
+		<allowXLS>1</allowXLS>
+	</permission>
+	*/
+
+	declare @xmlInfo xml = (
+		select 
+			@code [code], @desc [description], QueryTypeFlag [type], [querySQL], 
+			case when AllowPDF = 1 and AllowXLS = 0 then reportName
+				when AllowXLS = 1 and AllowPDF = 0 then XLSTitleName else @code end [reportName],
+			AllowPDF [permission/allowPDF], AllowXLS [permission/allowXLS]
+		from (select ModuleGUID, InfoKey, InfoValue from modlinfo where ModuleGUID = @ModuleGUID) x
+			PIVOT(MAX(InfoValue) FOR InfoKey IN ([allowXLS],[allowPDF],[querySQL],[QueryTypeFlag],[XLSTitleName],[reportName])) y			
+		for xml path(''), type
+	) 
+
+	/*XML_BODY_QUERY_ROWS TEMPLATE	
+	------------------------------
+	<queryRows>
+		<queryRow rowNo="1">
+		<fields>
+			<field fieldName="StartDate" isEditable="1" isNullable="0">
+		--case For Date
+			<dateBox>
+				<titlecaption>Start Date</titlecaption>
+				<xBoxTypexType>40</xBoxTypexType>
+				<value>05/02/2017</value>
+			</dateBox>
+		--case for combo AutoSuggest
+			<comboBox>
+				<titlecaption>Start Date</titlecaption>
+				<xBoxTypexType>12</xBoxTypexType>
+				<comboKey>ParameterValueGUID</comboKey>
+				<comboId>ParValueId</comboId>
+				<comboName>ParValueDesc</comboName>
+				<comboTable>PaABSN</comboTable>
+		  	</comboBox>
+			</field>
+		</fields>
+		</queryRow>
+	</queryRows>
+	*/
+
+	declare @xmlParameter xml = (
+		select 
+			colOrder [queryRows/queryRow/@rowNo], colKey [queryRows/queryRow/fields/field/@fieldName], 
+			1 [queryRows/queryRow/fields/field/@isEditable], 0 [queryRows/queryRow/fields/field/@isNullable],
+			CONVERT(xml, (case 
+				when x.colTypeX in (32) then
+					'<comboBox>'+
+						'<titleCaption>'+isNULL(titleCaption, colKey)+'</titleCaption>'+
+						'<comboId>'+isNULL(ComboFieldId, '')+'</comboId>' + 
+						'<comboKey>'+isNULL(ComboFieldKey, '')+'</comboKey>'+
+						'<comboName>'+isNULL(ComboFieldName, '')+'</comboName>' + 
+						'<comboTable>'+isNULL(ComboTable, '')+'</comboTable>' + 
+					'</comboBox>' 
+				when x.colTypeX in (31) then
+					'<checkBox>'+'
+						<titleCaption>'+isNULL(titleCaption, colKey)+'</titleCaption>'+
+					'</checkBox>'
+				when x.colTypeX in (41,42,43,44) then 
+					'<dateBox>'+
+						'<titleCaption>'+isNULL(titleCaption, colKey)+'</titleCaption>'+
+						'<dateType>'+cast(colType as varchar(5))+'</dateType>' + 
+						'<value>'+CONVERT(varchar(50), GETDATE(), 101)+'</value>' + 
+					'</dateBox>'
+			end)) [queryRows/queryRow/fields/field]
+		from (
+				select colorder, titleCaption, colKey, colType, 
+					coltype.infovalue coltypeX, 
+					ComboFieldId.infovalue ComboFieldId, 
+					ComboFieldKey.infovalue ComboFieldKey, 
+					ComboFieldName.infovalue ComboFieldName, 
+					ComboTable.infovalue ComboTable 
+				from modlcolm a
+					left join modlcolminfo coltype ON a.ColumnGUID = coltype.ColumnGUID and coltype.infokey='coltype'
+					left join modlcolminfo ComboFieldId ON a.ColumnGUID = ComboFieldId.ColumnGUID and ComboFieldId.infokey='ComboFieldId'
+					left join modlcolminfo ComboFieldKey ON a.ColumnGUID = ComboFieldKey.ColumnGUID and ComboFieldKey.infokey='ComboFieldKey'
+					left join modlcolminfo ComboFieldName ON a.ColumnGUID = ComboFieldName.ColumnGUID and ComboFieldName.infokey='ComboFieldName'
+					left join modlcolminfo ComboTable ON a.ColumnGUID = ComboTable.ColumnGUID and ComboTable.infokey='ComboTable'
+				where moduleguid = @ModuleGUID) x
+		order by colOrder
+		for xml path(''), type
+	) 
+	set @xmlParameter = (select 1 [queryCols/queryCol/@colNo], @xmlParameter [queryCols/queryCol] for xml path (''))
+	set @xmlParameter = (
+		select 
+			1 [querySections/querySection/@sectionNo], 'Report Parameters' [querySections/querySection/@rowTitle], 
+			@xmlParameter [querySections/querySection]
+		for xml path('')
+	) 
+
+	declare @headerXML xml
+	exec [api].[theme_header] @hostguid, @code, @headerXML output
+	
+	select 
+		@headerXML [header], 
+		@xmlInfo [body/bodyContent/query/info], 
+		@xmlParameter [body/bodyContent/query/queryPages/queryPage] 
+	for xml path('sqroot'), type
+
+

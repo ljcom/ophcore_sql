@@ -1,0 +1,97 @@
+
+
+
+
+
+CREATE procedure [api].[theme_header] 
+	@hostguid uniqueidentifier, @code varchar(50),
+	--@UserGUID uniqueidentifier, @ModuleGUID uniqueidentifier, @MenuID int = 0, 
+	@xmlHeader xml OUTPUT, 
+	@debug int=0
+--WITH ENCRYPTION
+as	
+	declare @ver varchar(10), @db varchar(50), @typecode varchar(1), @theme varchar(50), @accountid varchar(50), @coreDB varchar(50), @company nvarchar(50)
+
+	exec gen.getDBInfo @hostguid, @code, @ver output, @db output, @typecode output,  @theme output, @companyName=@company output,
+		@accountid=@accountid output, @coreDB=@coreDB output
+
+	select * 
+	into #tempmenusmnu
+	from gen.authmenusmnu(@hostguid, @code)
+
+	set @xmlHeader = (	
+		select (
+			--info
+			select (
+				--account
+				select @accountid account 
+				) account, 
+				@company company,
+				--themeFolder
+				(select @theme) 'themeFolder',
+				--title
+				(	select ModuleDescription 
+					from modl a
+					where moduleid=@code) title, 
+				--code
+				(	select moduleid id, ModuleDescription name 
+					from modl  a
+					where moduleid=@code for xml path(''), elements, type) code, 
+				--user
+				(select userId, userName, userProfilePath userURL, hostGUID 
+				from userhost a
+					inner join [user] b
+						on a.userguid=b.userguid
+				where hostguid=@hostGUID
+				for xml path(''), elements, type) [user]	 
+			for xml path(''), elements, type
+			) info, 
+			(select 'CTGRGUID' '@key', 'ID' '@fieldId', 'Name' '@GroupDescription',  'PARNCTGRGUID' '@Parent', 'Category' 'caption', 'maCTGRFRON' 'code' for xml path('filter'), elements, type
+			) filters,
+			(select 'BRANGUID' '@key', 'ID' '@fieldId', 'Name' '@GroupDescription', 'PARNBRANGUID' '@Parent', 'Division' 'caption', 'maBRANFRON' 'code' for xml path('filter'), elements, type
+			) filters,
+			--menus
+			(select menucode '@code', 
+				--submenus
+				(select [type] '@type', Tag '@tag', SubMenuDescription [MenuDescription],  caption,  url pageURL, icon_fa fa, icon_url icon_url, 
+					--submenus
+					(select [type] '@type', Tag '@tag', SubMenuDescription [MenuDescription], caption,  url pageURL, icon_fa fa, icon_url icon_url,
+						--submenus
+						(select [type] '@type', Tag '@tag', SubMenuDescription [MenuDescription], caption,  url pageURL, icon_fa fa, icon_url icon_url
+						from #tempmenusmnu d
+						where d.uppersubmenuGUID=c.MenudetailGUID
+						order by d.OrderNo, d.caption
+						for xml path('submenu'), elements, type) submenus
+					from #tempmenusmnu c
+					where c.uppersubmenuGUID=b.MenudetailGUID 
+						and (exists(
+							select * from #tempmenusmnu d
+							where d.uppersubmenuGUID=c.MenudetailGUID 
+						) or isnull(c.url,'#')<>'#')
+					order by c.OrderNo, c.caption
+					for xml path('submenu'), elements, type) submenus
+				from #tempmenusmnu b
+				where b.menuGUID=a.MenuGUID and b.upperSubmenuGUID is null
+					and (exists(
+						select * from #tempmenusmnu c
+							left join #tempmenusmnu d on d.upperSubmenuGUID=c.MenuDetailGUID
+						where c.uppersubmenuGUID=b.MenudetailGUID 
+							and exists(
+								select * from #tempmenusmnu c1
+									left join #tempmenusmnu d1 on d1.upperSubmenuGUID=c1.MenuDetailGUID
+								where c1.uppersubmenuGUID=c.MenudetailGUID)
+					) or isnull(b.url,'#')<>'#')
+				order by OrderNo, b.caption
+				for xml path('submenu'), elements, type) submenus
+			from menu a
+			--order by OrderNo asc
+			for xml path('menu'), elements, type) menus
+		for xml path(''), elements, type
+	)
+
+
+
+
+
+
+

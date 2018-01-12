@@ -1,0 +1,57 @@
+CREATE PROCEDURE [dbo].[TaPCSODETA_save_update_after] @GUID uniqueidentifier, @hostGUID uniqueidentifier, @isUpdate bit
+as	--CreatedBy eLs ON Jan, 2017
+
+	--PCSODETA
+	update b set
+		b.FirstPrice = c.Price, b.DiscPrice = FORMAT(c.Price * c.Discount / 100, 'N'),
+		b.Price = FORMAT(c.Price - c.Price * c.Discount / 100, 'N'),
+		b.TotalPrice = FORMAT(((b.Qty - QtyReject - QtyReturn) * (c.Price - c.Price * c.Discount / 100)), 'N')
+	--select * 
+	from ToPCSO a
+		inner join ToPCSODETA b ON a.PCSOGUID = b.PCSOGUID
+		inner join (
+			select
+				a.EVENGUID, PRODGUID, Price, Discount
+			from MoEVEN a 
+				inner join MoEVENPSKU b ON a.EVENGUID = b.EVENGUID
+		) c ON b.EVENGUID = c.EVENGUID AND b.PRODGUID = c.PRODGUID
+	where PCSODETAGUID = @GUID
+
+	--PCSO
+	declare @PCSOGUID uniqueidentifier	
+	select @PCSOGUID = PCSOGUID from ToPCSODETA where PCSODETAGUID = @GUID
+
+	update a set
+		a.TotalQty = (sumQty - sumQreject - sumQreturn), a.TotalDiscount = sumDiscount,  
+		a.SubTotal = sumSubTotal, a.PPN = sumPPN, a.TotalSales = sumSubTotal + sumPPN
+	from ToPCSO a
+		inner join (
+			select 
+				PCSOGUID, SUM(Qty) [sumQty], SUM(QtyReject) [sumQreject], SUM(QtyReturn) [sumQreturn],
+				sum(isNULL(DiscPrice, 0) * Qty) [sumDiscount], sum(isNULL(TotalPrice, 0)) [sumSubTotal],
+				(10 * sum(isNULL(TotalPrice, 0)) / 100) [sumPPN]
+			from ToPCSODETA group by PCSOGUID
+		) b ON a.PCSOGUID = b.PCSOGUID
+	where a.PCSOGUID = @PCSOGUID
+
+	--EVENPSKU
+
+	update a set
+		Used = isNULL(b.Qty, 0)
+	--select *
+	from MoEVENPSKU a 
+		inner join (
+			select 
+				c1.EVENGUID, b1.PRODGUID, (b1.Qty + isNULL(c1.Qty, 0)) [Qty]
+			from ToPCSO a1
+				inner join ToPCSODETA b1 ON a1.PCSOGUID = b1.PCSOGUID
+				left join (
+					select 
+						a2.PCSOGUID, PCSODETAGUID, EVENGUID, PRODGUID, Qty
+					from ToPCSO a2
+						inner join ToPCSODETA b2 ON a2.PCSOGUID = b2.PCSOGUID
+				) c1 ON b1.EVENGUID = c1.EVENGUID and b1.PRODGUID = c1.PRODGUID 
+					and a1.PCSOGUID != c1.PCSOGUID and b1.PCSODETAGUID != c1.PCSODETAGUID 
+			where b1.PCSODETAGUID = @GUID
+		) b ON a.EVENGUID = b.EVENGUID AND a.PRODGUID = b.PRODGUID
+

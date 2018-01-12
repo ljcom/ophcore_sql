@@ -1,0 +1,88 @@
+
+
+CREATE procedure [gen].[storeScriptProcedures_checkLastFile] 
+	@db varchar(50), @sc varchar(50), @sp varchar(100), @type varchar(100), @spFile nvarchar(max) OUTPUT, 
+	@spfiledate varchar(15) output, @isdebug bit=0
+--WITH ENCRPYTION
+as
+	declare @sqlstr nvarchar(max), @sqlpar nvarchar(max)
+	
+	create table #dir (folder varchar(max), depth int, isFile int)
+
+	set @sqlstr='EXEC xp_dirtree ''D:\vsonline\OPERAHOUSE\scripts\'+@db+'\'+@type+'\'+@sc+'\'+@db+'_'+@sc+'_'+@sp+''', 10, 1'
+
+	insert into #dir
+	exec sp_executesql @sqlstr
+	
+	--if @isdebug=1 print @sqlstr
+	
+	--if @isdebug=1 
+	--	select d.name schemaname, 
+	--		replace(replace(replace(replace(a.folder, @db+'_', ''), '.txt', ''), '_'+left(right(a.folder, 19),15), ''), d.name+'_', '') spname, 
+	--		left(right(a.folder, 19),15) spdate,
+	--		replace(convert(varchar(10), modify_date,102),'.','')+replace(convert(varchar(10), modify_date,114),':','') moddate,
+	--		replace(convert(varchar(10), create_date,102),'.','')+replace(convert(varchar(10), create_date,114),':','') credate
+	--	--select *
+	--	from #dir a
+	--		inner join sys.schemas d on replace(replace(replace(a.folder, @db+'_', ''), '.txt', ''), '_'+left(right(a.folder, 19),15), '') like d.name+'%'
+	--		left join 
+	--			(	select b.name sp, c.name sc, b.modify_date, b.create_date
+	--				from sys.objects b 
+	--					left join sys.schemas c on b.schema_id=c.schema_id) b
+	--			on replace(replace(replace(replace(a.folder, @db+'_', ''), '.txt', ''), '_'+left(right(a.folder, 19),15), ''), d.name+'_', '')=b.sp
+	--			and d.name=b.sc
+	--	where isFile=1 and folder like '%.txt'
+	--		--and b.type='P' 
+	--		and a.folder like @db+'%'
+	--	--and ((charindex(b.sc+'_'+b.sp, a.folder)&gt;0
+	--	--	and substring(a.folder, charindex(b.sc+'_'+b.sp, a.folder)+len(b.sc+'_'+b.sp)+1+15,4)='.txt'
+	--	--	and substring(a.folder, charindex(b.sc+'_'+b.sp, a.folder)+len(b.sc+'_'+b.sp)+1, 15) &gt; replace(convert(varchar(10), modify_date,102),'.','')+replace(convert(varchar(10), modify_date,114),':',''))
+	--	--	or b.sc is null)
+
+	--if @isdebug=1 select * from #dir
+
+	declare @scname varchar(50), @spname varchar(50), @spdate varchar(15)
+
+	select @scname=schemaname, @spname=spname, @spdate =max(spdate)		 
+	from (
+		select d.name schemaname, 
+			replace(replace(replace(replace(a.folder, @db+'_', ''), '.txt', ''), '_'+left(right(a.folder, 19),15), ''), d.name+'_', '') spname, 
+			left(right(a.folder, 19),15) spdate,
+			replace(convert(varchar(10), modify_date,102),'.','')+replace(convert(varchar(10), modify_date,114),':','') moddate,
+			replace(convert(varchar(10), create_date,102),'.','')+replace(convert(varchar(10), create_date,114),':','') credate
+		--select *
+		from #dir a
+			inner join sys.schemas d on replace(replace(replace(a.folder, @db+'_', ''), '.txt', ''), '_'+left(right(a.folder, 19),15), '') like d.name+'%'
+			left join 
+				(	select b.name sp, c.name sc, b.modify_date, b.create_date
+					from sys.objects b 
+						left join sys.schemas c on b.schema_id=c.schema_id) b
+				on replace(replace(replace(replace(a.folder, @db+'_', ''), '.txt', ''), '_'+left(right(a.folder, 19),15), ''), d.name+'_', '')=b.sp
+				and d.name=b.sc
+		where isFile=1 and folder like '%.txt'
+			--and b.type='P' 
+			and a.folder like @db+'%'
+		--and ((charindex(b.sc+'_'+b.sp, a.folder)&gt;0
+		--	and substring(a.folder, charindex(b.sc+'_'+b.sp, a.folder)+len(b.sc+'_'+b.sp)+1+15,4)='.txt'
+		--	and substring(a.folder, charindex(b.sc+'_'+b.sp, a.folder)+len(b.sc+'_'+b.sp)+1, 15) &gt; replace(convert(varchar(10), modify_date,102),'.','')+replace(convert(varchar(10), modify_date,114),':',''))
+		--	or b.sc is null)
+		) a
+	group by schemaname, spname
+
+	set @spfiledate=@spdate
+
+	set @sqlstr='
+		set @spfile=(
+			SELECT * 
+			FROM OPENROWSET (
+			BULK ''D:\vsonline\OPERAHOUSE\scripts\'+@db+'\'+@type+'\'+@scname+'\'+@db+'_'+@scname+'_'+@spname+'\'+@db+'_'+@scname+'_'+@spname+'_'+@spdate+'.txt'', SINGLE_CLOB) x)'
+	set @sqlpar = '@spfile varchar(max) OUTPUT'
+
+	exec sp_executesql @sqlstr, @sqlpar, @spfile OUTPUT
+
+
+
+
+
+
+

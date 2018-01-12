@@ -1,0 +1,175 @@
+CREATE procedure [core].[createDB] @accountid varchar(50), @dbmove varchar(50), @isdebug bit=0
+--with encryption
+as
+	
+	select 'create schema '+name createScript, name createName, 'schemas' createType, 1 orderNo
+	into #tocreate
+	from sys.schemas
+	where schema_id<>1 and principal_id=1
+	
+	union
+
+	select 'create table '+e.name+'.['+a.name+'] ('+
+		stuff((select ', '+c.name+' '+d.name+ 
+			case when d.max_length=16 or d.precision>0 or c.user_type_id in (241) then ''
+				when c.max_length=-1 then '(max)' 
+				when c.user_type_id in (231) then '('+cast(c.max_length/2 as varchar(5))+')' 
+				 else '('+cast(d.max_length as varchar(5))+')' end+' '+case when c.is_nullable=0 then 'not ' else '' end+'null'
+		from sys.columns c
+			inner join sys.types d
+				on c.user_type_id=d.user_type_id
+		where c.object_id=a.object_id
+		for xml path ('')), 1, 2, '')
+		+')', a.name, 'objects', 2
+	from sys.objects a
+		inner join sys.schemas b
+			on a.schema_id=b.schema_id and b.name='dbo'
+		inner join sys.schemas e
+			on a.schema_id=e.schema_id
+	where type='U' and a.name not in ('sysdiagrams', 'acct', 'acctdbse', 'acctinfo')
+
+	union
+
+	select 'ALTER TABLE [dbo].['+a.name+'] ADD CONSTRAINT ['+c.name+'] PRIMARY KEY CLUSTERED (['+e.name+'])', c.name, 'key_constraints', 3
+	from sys.objects a
+		inner join sys.indexes b
+			on a.object_id=b.object_id and b.type=1 --and a.name='acct'
+		inner join sys.key_constraints c
+			on b.object_id=c.parent_object_id
+		inner join sys.index_columns d
+			on d.index_id=b.index_id
+				and d.object_id=b.object_id
+		inner join sys.columns e
+			on e.column_id=d.column_id
+			and e.object_id=a.object_id
+	where a.type='U' and a.name not in ('sysdiagrams', 'acct', 'acctdbse', 'acctinfo')
+
+	union
+
+	select 'ALTER TABLE [dbo].['+a.name+'] ADD CONSTRAINT ['+c.name+']  DEFAULT '+c.definition+' FOR ['+e.name+']', c.name, 'default_constraints', 4
+	--select * 
+	from sys.objects a
+		--inner join sys.indexes b
+		--	on a.object_id=b.object_id and a.name='docmaprv' and b.type<>1
+		inner join sys.default_constraints c
+			on a.object_id=c.parent_object_id --and a.name='docmaprv' 
+		inner join sys.columns e
+			on e.column_id=c.parent_column_id
+			and e.object_id=a.object_id
+	where a.type='U' and a.name not in ('sysdiagrams', 'acct', 'acctdbse', 'acctinfo')
+
+	union
+
+	select 'CREATE NONCLUSTERED INDEX ['+b.name+'] ON [dbo].['+a.name+']('+
+		stuff((
+			select ', '+e.name+' ASC' 
+			from sys.index_columns c
+				inner join sys.columns e
+					on e.column_id=c.column_id
+					and e.object_id=a.object_id
+			where b.index_id=c.index_id and b.object_id=c.object_id
+			for xml path('')), 1, 2, '')+')', b.name, 'indexes', 5
+	--select * 
+	from sys.objects a
+		inner join sys.indexes b
+			on a.object_id=b.object_id and b.type<>1 --and a.name='docmaprv' 
+	where a.type='U' and a.name not in ('sysdiagrams', 'acct', 'acctdbse', 'acctinfo')				
+
+	union
+
+	select 'ALTER TABLE [dbo].['+a.name+']  WITH CHECK ADD  CONSTRAINT ['+b.name+'] FOREIGN KEY(['+e.name+'])
+	REFERENCES [dbo].['+c.name+'] (['+f.name+'])', b.name, 'foreign_keys', 6
+	--select * 
+	from sys.objects a
+		inner join sys.foreign_keys b
+			on a.object_id=b.parent_object_id --and a.name='modl'
+		inner join sys.objects c
+			on b.referenced_object_id=c.object_id and c.name not in ('sysdiagrams', 'acct', 'acctdbse', 'acctinfo')	
+		inner join sys.foreign_key_columns d
+			on d.parent_object_id=a.object_id and c.object_id=d.referenced_object_id
+		inner join sys.columns e
+			on a.object_id=e.object_id and d.parent_column_id=e.column_id
+		inner join sys.columns f
+			on c.object_id=f.object_id and d.referenced_column_id=f.column_id
+	where a.type='U' and a.name not in ('sysdiagrams', 'acct', 'acctdbse', 'acctinfo')	
+
+	union 
+	select 'ALTER TABLE [dbo].['+a.name+'] CHECK CONSTRAINT ['+b.name+']', b.name, 'foreign_keys', 7
+	--select * 
+	from sys.objects a
+		inner join sys.foreign_keys b
+			on a.object_id=b.parent_object_id --and a.name='modl'
+		inner join sys.objects c
+			on b.referenced_object_id=c.object_id and c.name not in ('sysdiagrams', 'acct', 'acctdbse', 'acctinfo')	
+	where a.type='U' and a.name not in ('sysdiagrams', 'acct', 'acctdbse', 'acctinfo')	
+
+	union
+	
+	select 'CREATE TYPE ['+b.name+'].['+a.name+'] AS TABLE('+
+			stuff((select ', ['+c.name +'] [uniqueidentifier] NOT NULL'
+			from sys.columns c 
+			where c.object_id=a.type_table_object_id
+			for xml path('')), 1, 2, '')+
+			isnull((select ', PRIMARY KEY CLUSTERED (['+e.name+'] ASC)'
+			from sys.key_constraints d
+				inner join sys.index_columns f
+					on f.object_id=d.parent_object_id
+				inner join sys.columns e
+					on e.column_id=f.column_id
+					and e.object_id=d.parent_object_id
+			where d.parent_object_id=a.type_table_object_id
+			for xml path('')),'')+')', a.name, 'table_types', 8
+	--select * 
+	from sys.table_types a
+		inner join sys.schemas b
+			on a.schema_id=b.schema_id
+	where b.schema_id<>1 and b.principal_id=1 
+
+	declare @sqlstr nvarchar(max)
+
+	if @isdebug=1 
+		select * 
+		from #tocreate
+		order by orderno
+
+	DECLARE #cur CURSOR
+	READ_ONLY
+	FOR 
+		select createScript, createName, createType 
+		from #tocreate
+		order by orderno
+
+	DECLARE @script nvarchar(max), @name varchar(50), @oType varchar(50), @ret bit=0
+	OPEN #cur
+
+	FETCH NEXT FROM #cur INTO @script, @name, @oType
+	WHILE (@@fetch_status <> -1)
+	BEGIN
+		IF (@@fetch_status <> -2)
+		BEGIN
+			set @sqlstr='if exists(select * from '+@dbmove+'.sys.'+@oType+' where name='''+@name+''') set @ret=1 else set @ret=0'
+			exec sp_executesql @sqlstr, N'@ret bit output', @ret output
+			
+			if @ret=0 begin
+				print @sqlstr
+				set @sqlstr='
+					exec '+@dbmove+'.dbo.sp_executesql @s'
+				print @script
+				exec sp_executesql @sqlstr, N'@s nvarchar(max)', @script
+			end
+		END
+		FETCH NEXT FROM #cur INTO @script, @name, @oType
+	END
+
+	CLOSE #cur
+	DEALLOCATE #cur
+
+	declare @db varchar(50)
+	select @db=databasename 
+	from acctdbse b
+		inner join acct a on a.AccountGUID=b.AccountGUID
+	where a.accountid='kitashop' and ismaster=1
+
+	exec [gen].[restoreScriptProcedures] @db, 0, @isdebug
+
+

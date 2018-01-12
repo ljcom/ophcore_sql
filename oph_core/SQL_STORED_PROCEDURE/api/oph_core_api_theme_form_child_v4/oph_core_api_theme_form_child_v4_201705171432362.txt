@@ -1,0 +1,43 @@
+
+CREATE procedure [api].[theme_form_child_v4] @accountid varchar(50), @code nvarchar(max), @db nvarchar(max), @settingmode nvarchar(1), @childxml xml output, @isdebug bit=0
+--WITH ENCRYPTION
+as
+	declare @sqlstr nvarchar(max)='
+
+	select @xml = (
+		select lower(a.moduleid) as code, ModuleDescription as childTitle, b.colname as parentkey,
+			(
+				select (
+					select b1.infovalue allowbrowse, b2.infovalue allowadd,
+						b3.infovalue allowedit, --b4.infovalue allowhold,
+						b5.infovalue allowdelete--, b6.infovalue allowwipe, b7.infovalue allowbatch 
+					from modl a
+						left join modlinfo b1 on a.moduleguid=b1.moduleguid and (b1.infokey=''AllowBrowse'' or b1.infokey=''AllowAccess'')
+						left join modlinfo b2 on a.moduleguid=b2.moduleguid and b1.infokey=''allowadd''
+						left join modlinfo b3 on a.moduleguid=b3.moduleguid and b1.infokey=''allowedit''
+						--left join modlinfo b4 on a.moduleguid=b4.moduleguid and b1.infokey=''allowhold''
+						left join modlinfo b5 on a.moduleguid=b5.moduleguid and b1.infokey=''allowdelete''
+						--left join modlinfo b6 on a.moduleguid=b6.moduleguid and b1.infokey=''allowwipe''
+						--left join modlinfo b7 on a.moduleguid=b7.moduleguid and b1.infokey=''allowbatch''
+					where moduleid='''+@code+''' for xml path(''permission''),type)
+			) as info
+		from modl a --child
+			inner join (
+				select moduleguid, d.name colname
+				from modl
+					inner join sys.objects c on modl.moduleid=c.name
+					inner join sys.columns d on c.object_id=d.object_id and d.column_id=1
+				where modl.moduleid like '''+@code+'''
+				) b
+				on a.parentmoduleGUID = b.moduleguid
+		for xml path(''child''),type,root(''children'')) '
+
+	print @sqlstr
+
+	EXECUTE sp_executesql @sqlstr,N'@xml xml output', @xml = @childxml output
+
+
+
+
+
+

@@ -1,0 +1,54 @@
+
+
+
+
+
+
+
+CREATE procedure [gen].[update_item]
+as
+
+	DECLARE ccc CURSOR
+	READ_ONLY
+	FOR 
+		select x.itemGUID, y.itemGUID
+		from xxxxmoPRODISKU x
+			inner join moPRODISKU y
+				on x.itemCode=y.itemCOde
+		where x.itemGUID&lt;&gt;y.itemGUID
+			and y.itemGUID not IN ('A3083C88-58A5-4672-A62E-64B950206875',
+				'554D9975-9603-45CC-9AC2-EBDD20759A27','805685AB-D0CA-48F4-8214-5D5E10C2ECD8',
+				'C1BF8EE4-907A-4BB8-83D8-F8C6E73E81FC')
+
+
+	DECLARE @x uniqueidentifier, @y uniqueidentifier
+	DECLARE @message varchar(1000)
+	OPEN ccc
+
+	FETCH NEXT FROM ccc INTO @x, @y
+	WHILE (@@fetch_status &lt;&gt; -1)
+	BEGIN
+		IF (@@fetch_status &lt;&gt; -2)
+		BEGIN
+	--		PRINT 'add user defined code here'
+	--		eg.
+			
+			set @message='update idcorpidfs17.ef_rf2009.dbo.moPRODISKU set itemGUID='''+convert(nvarchar(100), @x)+''' where itemGUID='''+convert(nvarchar(100),@y)+''';'
+			print @message
+			exec (@message)
+
+		END
+		FETCH NEXT FROM ccc INTO @x, @y
+	END
+
+	CLOSE ccc
+	DEALLOCATE ccc
+
+
+
+
+
+
+
+
+

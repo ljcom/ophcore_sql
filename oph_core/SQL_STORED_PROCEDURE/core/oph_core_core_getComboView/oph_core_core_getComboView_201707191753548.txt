@@ -1,0 +1,18 @@
+CREATE procedure [core].[getComboView] @accountid nvarchar(50), @datadb nvarchar(50)
+as
+
+	declare @sqlstr nvarchar(max)
+	set @sqlstr='
+	select a.moduleid, z.colKey, x.infokey, x.infovalue 
+	from eform_data.dbo.modlcolminfo x 
+		left join '+@datadb+'.dbo.modl y on x.infovalue=y.moduleid and y.settingMode<>7
+		inner join '+@datadb+'.dbo.modlcolm z on z.ColumnGUID=x.ColumnGUID
+		inner join '+@datadb+'.dbo.modl a on z.ModuleGUID=a.ModuleGUID 
+	where x.infokey=''combotable'' and y.moduleguid is null and infovalue not like ''par%''
+
+	select *
+	from '+@datadb+'.dbo.modlinfo x 
+	where infokey like ''script%'' and (infokey like ''%custom'' or infokey like ''%after'' or infokey like ''%before'')'
+
+	exec sp_executesql @sqlstr
+

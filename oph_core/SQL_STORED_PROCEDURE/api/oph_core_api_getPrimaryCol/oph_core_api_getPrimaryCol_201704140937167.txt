@@ -1,0 +1,53 @@
+
+
+
+
+
+
+
+CREATE procedure [api].[getPrimaryCol] @account varchar(50), @code varchar(50), @primaryNo int, @primaryCol varchar(50) OUTPUT
+AS
+BEGIN
+	declare @db varchar(50)=api.fn_checkDB(@code)
+	declare @ver varchar(10), @settingMode int, @typecode varchar(1)
+
+	select @ver=[version], @settingMode=settingMode
+	--select * 
+	from modl a
+		inner join acctdbse	b 
+			on a.accountdbguid=b.accountdbguid
+		inner join acct c
+			on c.AccountGUID=a.AccountGUID
+	where moduleid=@code and c.AccountId=@account
+
+	declare @colname varchar(50)
+	declare @sqlstr nvarchar(max)
+	declare @sqlpar nvarchar(max)='@colname varchar(50) OUTPUT'
+	if @ver='3.0' begin
+		set @sqlstr='
+			select @colname=colname
+			from '+@db+'.gen.cotabl a 
+				inner join '+@db+'.gen.cotablfiel b
+					on a.tableguid=b.tableguid
+			where a.tablename like '''+@code+''' and primarycol='+cast(@primaryno as varchar(1))
+	end
+	else if @ver='4.0' begin
+		set @sqlstr='
+			select @colname=b.colKey 
+			from '+@db+'.dbo.modl a
+				inner join '+@db+'.dbo.modlcolm b on a.ModuleGUID=b.moduleguid
+				inner join '+@db+'.dbo.modlcolminfo c on b.ColumnGUID=c.ColumnGUID and c.InfoKey=''PrimaryCol''
+			where a.ModuleID='''+@code+''''
+	end
+	exec sp_executesql @sqlstr, @sqlpar, @colname OUTPUT	
+
+	set @primaryCol=isnull(@colname,'')
+END
+
+
+
+
+
+
+
+

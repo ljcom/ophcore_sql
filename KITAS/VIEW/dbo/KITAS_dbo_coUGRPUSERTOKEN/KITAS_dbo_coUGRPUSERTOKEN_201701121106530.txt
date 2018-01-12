@@ -1,0 +1,14 @@
+
+
+
+CREATE VIEW [dbo].[coUGRPUSERTOKEN]
+as
+	--combine user and group
+	select UserUGroupGUID, UGroupGUID, 
+		case when MemberFlag = 'isUser' then MemberUserGUID else MemberGroupGUID end SelectedUserGUID, 
+		CreatedUser, CreatedDate, UpdatedUser, UpdatedDate 
+	from CoUGRPUSER
+
+
+
+

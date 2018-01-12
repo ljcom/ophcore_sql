@@ -1,0 +1,16 @@
+CREATE procedure [gen].[modlinfo_save] @moduleguid uniqueidentifier, @key nvarchar(50), @value nvarchar(max)
+as
+	if exists(select * from modlinfo where moduleguid=@moduleguid and infokey=@key)
+	begin
+		--update
+		update modlinfo
+		set Infovalue=@value
+		where moduleguid=@moduleguid and infokey=@key
+	end
+	else
+	begin
+		--insert
+		insert into modlinfo (moduleguid, infokey, infovalue)
+		values (@moduleguid, @key, @value)
+	end
+

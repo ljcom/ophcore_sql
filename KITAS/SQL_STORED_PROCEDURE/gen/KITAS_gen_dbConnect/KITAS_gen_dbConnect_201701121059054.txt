@@ -1,0 +1,58 @@
+
+
+
+
+CREATE procedure [gen].[dbConnect] @dbNameX nvarchar(20)=null
+as	
+	--dbConnect
+
+	--start insert CoMODL
+	DECLARE #cur CURSOR
+	READ_ONLY
+	FOR 		
+		select DatabaseName, ODBC From CoACCTDBSE
+		where DatabaseName = 'EF_STRD'
+
+	DECLARE @DBname varchar(40), @ODBC varchar(500)
+	OPEN #cur
+
+	FETCH NEXT FROM #cur INTO @DBname, @ODBC
+	WHILE (@@fetch_status &lt;&gt; -1)
+	BEGIN
+		IF (@@fetch_status &lt;&gt; -2)
+		BEGIN
+			declare @ServerName nvarchar(50),@sqlstr varchar (8000)
+			SELECT @ServerName = convert(nvarchar(50),SERVERPROPERTY('ServerName')) 
+
+			set @sqlstr = 'insert into CoMODL			
+			select a.ModuleGUID, a.ModuleId, a.ModuleDescription, a.AutoNumberPrefix1, a.AutoNumberPrefix2, a.AllowBrowse, a.AllowAdd, a.AllowEdit, a.AllowHold, a.AllowDelete, a.AllowWipe, a.FilterByCaption1, a.FilterByStr1, a.FilterByFieldKey1, a.FilterByFieldId1, a.FilterByFieldName1, a.FilterByCaption2, a.FilterByStr2, a.FilterByFieldKey2, a.FilterByFieldId2, a.FilterByFieldName2, a.FilterByLinkNo2, a.FilterByCaption3, a.FilterByStr3, a.FilterByFieldKey3, a.FilterByFieldId3, a.FilterByFieldName3, a.FilterByLinkNo3, a.FilterByCaption4, a.FilterByStr4, a.FilterByFieldKey4, a.FilterByFieldId4, a.FilterByFieldName4, a.FilterByLinkNo4, a.NbRecords, a.OrderByStr, a.ModuleRelatedGUID, a.pictureFlag, a.isAutoWord, a.isManualPicture, a.PictureAttachment, a.LastDataDate,'''+ @ODBC+''',  a.isDeleted, a.DeletedDate, a.CreatedDate, a.UpdatedDate, a.DeletedUser, a.CreatedUser, a.UpdatedUser from '+@ServerName+'.'+@DBname+'.dbo.Comodl a
+			left join CoMODL b
+			on a.ModuleId = b.ModuleId
+			where b.ModuleId is null'
+			exec (@sqlstr)
+			print @sqlstr
+			
+			declare @DbMain nvarchar(256)
+			select @DbMain =  DB_NAME(db_id())
+			--exec [gen].[dbConnect_SynonymUpdate] @DbMain ,@DBname, 'dbo'  -- such as 'dbo'
+
+			--exec [gen].[dbConnect_ViewsUpdate] @DBname, 'dbo'  -- such as 'dbo'
+
+			
+			
+		END
+		FETCH NEXT FROM #cur INTO @DBname, @ODBC
+	END
+
+	CLOSE #cur
+	DEALLOCATE #cur
+	--end 
+
+
+	--start create synonyms and create view
+
+	--end
+
+
+
+

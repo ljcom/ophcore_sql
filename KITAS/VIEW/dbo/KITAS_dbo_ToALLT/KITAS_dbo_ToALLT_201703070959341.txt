@@ -1,0 +1,19 @@
+CREATE view dbo.ToALLT
+as --automatic creation by system, you have to remove this comment to customize this view
+ 	select PCSOGUID docGUID, DocDate docDate, 
+		DocNo docNo, DocRefNo docRefNo, 'TaPCS2' docType, isnull(cast(DocNo as varchar(max)),'''')+isnull(cast(TotalSales as varchar(max)),'''') docFields,
+		--(select 'DocNo' as 'field/textbox/@name','DocNo' 'field/textbox/Caption/*',  DocNo 'field/textbox/value/*', null, 'TotalSales' as 'field/textbox/@name','TotalSales' 'field/textbox/Caption/*',  TotalSales 'field/textbox/value/*', null from KITAS.oph.TaPCS2 for xml path(''), type) docXML,
+	status, statuscomment, createddate, createduser, updateddate, updateduser, isdeleted, deleteddate, deleteduser 
+	from KITAS.oph.TaPCS2 
+	union all
+	select PCSOGUID docGUID, DocDate docDate, 
+		DocNo docNo, DocRefNo docRefNo, 'TaPCS3' docType, isnull(cast(DocNo as varchar(max)),'''')+isnull(cast(TotalQty as varchar(max)),'''')+isnull(cast(TotalSales as varchar(max)),'''')+isnull(cast(comments as varchar(max)),'''') docFields,
+		--(select 'DocNo' as 'field/textbox/@name','Order No' 'field/textbox/Caption/*',  DocNo 'field/textbox/value/*', null, 'DocDate' as 'field/textbox/@name','Date' 'field/textbox/Caption/*',  DocDate 'field/textbox/value/*', null, 'TotalQty' as 'field/textbox/@name','Total Qty' 'field/textbox/Caption/*',  TotalQty 'field/textbox/value/*', null, 'TotalSales' as 'field/textbox/@name','Total Sales' 'field/textbox/Caption/*',  TotalSales 'field/textbox/value/*', null, 'comments' as 'field/textbox/@name','Status' 'field/textbox/Caption/*',  comments 'field/textbox/value/*', null from KITAS.oph.TaPCS3 for xml path(''), type) docXML,
+	status, statuscomment, createddate, createduser, updateddate, updateduser, isdeleted, deleteddate, deleteduser 
+	from KITAS.oph.TaPCS3 
+	union all
+	select PCSOGUID docGUID, DocDate docDate, 
+		DocNo docNo, DocRefNo docRefNo, 'TaPCSO' docType, isnull(cast(DocNo as varchar(max)),'''')+isnull(cast(DocRefNo as varchar(max)),'''')+isnull(cast(CarolGUIDcbId as varchar(max)),'''')+isnull(cast(CarolGUIDcbNm as varchar(max)),'''')+isnull(cast(EVGRGUIDcbId as varchar(max)),'''')+isnull(cast(EVGRGUIDcbNm as varchar(max)),'''') docFields,
+		--(select 'DocNo' as 'field/textbox/@name','Doc No' 'field/textbox/Caption/*',  DocNo 'field/textbox/value/*', null, 'DocRefNo' as 'field/textbox/@name','Doc Ref No' 'field/textbox/Caption/*',  DocRefNo 'field/textbox/value/*', null, 'DocDate' as 'field/datebox/@name','Date' 'field/datebox/Caption/*',  DocDate 'field/datebox/value/*', 40 'field/datebox/type/*', null, 'CarolGUID' as 'field/autosuggestbox/@name','Customer' 'field/autosuggestbox/Caption/*', CarolGUID 'field/autosuggestbox/value/*', CarolGUIDcbId 'field/autosuggestbox/ref/id/*', CarolGUIDcbNm 'field/autosuggestbox/ref/name/*', null, null, null, 'EVGRGUID' as 'field/autosuggestbox/@name','Event Group' 'field/autosuggestbox/Caption/*', EVGRGUID 'field/autosuggestbox/value/*', EVGRGUIDcbId 'field/autosuggestbox/ref/id/*', EVGRGUIDcbNm 'field/autosuggestbox/ref/name/*', null, null, null from KITAS.oph.TaPCSO for xml path(''), type) docXML,
+	status, statuscomment, createddate, createduser, updateddate, updateduser, isdeleted, deleteddate, deleteduser 
+	from KITAS.oph.TaPCSO 

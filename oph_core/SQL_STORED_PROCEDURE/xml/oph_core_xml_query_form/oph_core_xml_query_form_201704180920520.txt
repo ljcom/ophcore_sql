@@ -1,0 +1,66 @@
+
+
+
+
+CREATE procedure [xml].[query_form] @accountid varchar(50), @dbcore varchar(50),
+	@code varchar(50), @GUID uniqueidentifier, @xmlQuery xml OUTPUT, @isDebug bit=0
+--WITH ENCRPYTION
+as	
+
+	declare @ver varchar(10), @db varchar(50), @typecode varchar(1)
+	exec gen.getDBInfo @accountid, @dbcore, @code, @ver output, @db output, @typecode output
+
+	declare @sqlstr nvarchar(max), @primary varchar(50)
+
+	if @ver = '3.0'
+		set @sqlstr = 'use '+@db+' 
+			select @prim = colname from gen.cotablfiel a 
+				join gen.cotabl b on a.tableguid = b.tableguid 
+			where primarycol= 1 and tablename = ''' +@code+''''
+
+	exec sp_executesql @sqlstr, N'@prim nvarchar(max) output', @prim = @primary output
+
+	if @typecode='T' and exists(select * from modl where moduleid=@code and ParentModuleGUID is null) begin
+		declare @oCode varchar(20), @tblCode varchar(20), @stateID int, @elsql nvarchar(MAX)
+		set @oCode = STUFF(@code, 2, 1, 'o')
+		set @elsql = 'select @stats=[Status] from '+@db+'.dbo.'+@oCode + ' where ' + @primary + '=''' + cast(@guid as varchar(50)) + ''''
+		print @elsql
+		execute sp_executesql @elsql, N'@stats int output', @stats=@stateID output	
+		print 'stateID : ' + cast(@stateID as varchar(5))
+
+		if @stateID is NOT NULL begin
+			set @tblCode = STUFF(@code, 2, 1, 
+				case @stateID 
+					when 400 then 'e'
+					when 500 then 'c'
+					else 'a'
+				end
+			) print '@tblCode: ' + @tblCode
+		end
+	end
+
+	print @tblCode
+	set @xmlQuery = (
+		select @primary+':'+ cast(@GUID as varchar(50)) [reports/@parameter], (
+			select 
+				case LEFT(b.ModuleID, 1)
+					when 'T' then case SUBSTRING(b.ModuleID, 2, 1) when 'a' then '100' when 'e' then '400' when 'c' then '500' end
+				end [@state],
+				b.ModuleID [code], b.ModuleDescription [description], 
+				case 
+					when (AllowPDF = 1 AND AllowXLS = 0) then PDFTitleName 
+					when (AllowPDF = 0 AND AllowXLS = 1) then XLSTitleName 
+				end [reportName], 
+				AllowPDF [allowPDF], AllowXLS [allowXLS], QuerySQL [querySQL]
+			--select *
+			from modl a
+				inner join modl b ON a.ModuleGUID = b.ParentModuleGUID 
+				inner join qury c ON b.ModuleGUID = c.ModuleGUID
+				--inner join acctdbse d ON b.AccountDBGUID = d.AccountDBGUID
+			where (a.ModuleID = @tblCode or b.ModuleID = @tblCode) AND b.settingMode = 5 AND QueryTypeFlag = 'isReport'
+			for xml path('report'), type
+		) [reports] for xml path('query'), type
+	)
+
+
+

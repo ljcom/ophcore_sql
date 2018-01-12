@@ -1,0 +1,53 @@
+
+CREATE procedure [core].[addModule_v4] @accountid nvarchar(50), @db nvarchar(50), @isdebug bit=0
+--WITH ENCRYPTION
+as
+	--declare @account varchar(50)='KITASHOP', @db varchar(50)='oph_core'
+	declare @accountguid uniqueidentifier, @accountdbGUID uniqueidentifier, @dbname varchar(50), @masterDB varchar(50), @curMaster bit 
+
+	select @accountguid=a.AccountGUID, @accountdbGUID=AccountDBGUID, 
+		@dbname=b.DatabaseName, @curMaster=isMaster
+	from acct a
+		inner join acctdbse b
+			on a.AccountGUID=b.AccountGUID
+	where accountid=@accountid and b.DatabaseName=@db
+	
+	declare @sqlstr nvarchar(max), @sqlpar nvarchar(max)
+
+	--for ismaster=1
+	-- ismaster=1: semua modl yang digunakan adalah dari database tersebut
+	set @sqlstr='
+		insert into '+@db+'.dbo.modl (ModuleGUID, AccountGUID, ModuleID, ModuleDescription, settingMode, AccountDBGUID, ParentModuleGUID, OrderNo, needLogin, ThemePageGUID)
+		select newid(), '''+cast(@accountguid as varchar(50))+''', a.name, null, 0, '''+cast(@accountdbGUID as varchar(50))+''', null, null, 1, null
+		from '+@db+'.sys.objects a
+			left join '+@db+'.dbo.modl m on a.name=m.ModuleID
+		where a.type=''U'' and m.ModuleGUID is null'
+
+	if @isdebug=1 print @sqlstr
+	exec sp_executesql @sqlstr
+	 
+	set @sqlstr='
+		insert into '+@db+'.dbo.modlcolm (ColumnGUID, ModuleGUID, colKey, colType, colOrder, titlecaption)
+		select newid(), a.moduleguid, a.colname, a.system_type_id, a.column_id, null
+		from (	
+			select m.moduleguid, m.ModuleID, b.name colname, b.column_id, b.system_type_id
+			from '+@db+'.dbo.modl m
+				inner join '+@db+'.sys.objects a on m.moduleid=a.name
+				inner join '+@db+'.sys.columns b on a.object_id=b.object_id
+			--where ThemePageGUID is null
+			) a 
+		
+			left join (
+				select c.ModuleID, d.colKey 
+				from '+@db+'.dbo.modl c 
+					inner join '+@db+'.dbo.modlcolm d on c.ModuleGUID=d.moduleguid
+				) e
+				on e.colkey=a.colname and e.moduleid=a.ModuleID
+		where e.moduleid is null'
+	
+	if @isdebug=1 print @sqlstr
+	exec sp_executesql @sqlstr
+--select * from oph_core.sys.columns
+
+
+

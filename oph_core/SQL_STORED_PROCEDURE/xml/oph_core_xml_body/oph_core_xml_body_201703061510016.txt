@@ -1,0 +1,24 @@
+
+CREATE procedure [xml].[body]
+	@UserGUID uniqueidentifier, @ModuleGUID uniqueidentifier, @mode int, @xmlBody xml OUTPUT, @debug int=0
+as	--CreatedBy eLs ON Dec, 2016
+
+	--declare 
+	--	@UserGUID uniqueidentifier = gen.getUserHost(gen.gethost('ap\restu.widiati', null)), 
+	--	@ModuleGUID uniqueidentifier = '6EE876EE-38F1-44E7-8378-B770533E224E', 
+	--	@mode int = 20,
+	--	@xmlBody xml, @debug int=1
+
+	declare @sideBars nvarchar(MAX)
+	
+	declare @contents nvarchar(MAX)
+
+	declare @body nvarchar(MAX)
+
+	set @body = isNULL(@sideBars, '&lt;sidebars/&gt;') + isNULL(@contents, '&lt;contents/&gt;')
+
+	select convert(xml, @body)
+	for xml path('body')
+
+	
+

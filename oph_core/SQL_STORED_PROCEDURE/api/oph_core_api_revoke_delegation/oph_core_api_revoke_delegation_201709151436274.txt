@@ -1,0 +1,45 @@
+CREATE PROCEDURE api.revoke_delegation @hostGUID uniqueidentifier, @code varchar(20)
+as	--CreatedBy eLs for revoking delegation on delegatorModal
+
+--declare @hostGUID uniqueidentifier = gen.getHost('ap\iman.satyagraha'), @code varchar(20) = 'TaDEDU'
+begin try
+	declare @UserDelegateGUID uniqueidentifier, @ModuleGUID varchar(50), @tkModule varchar(MAX)
+	declare dcur cursor for
+		select UserDelegateGUID, CAST(a.ModuleGUID as varchar(50)), TokenModule from modl a
+			inner join userdele b ON b.TokenModule like '%' + CAST(a.ModuleGUID as varchar(50)) + '%'
+		where ModuleID = @code AND b.UserGUID = gen.getUserHost(@hostGUID)
+	open dcur fetch next from dcur into @UserDelegateGUID, @ModuleGUID, @tkModule
+	while (@@FETCH_STATUS = 0) begin
+		begin try
+			if charindex('*', @tkModule) > 0 begin
+				update userdele set 
+					TokenModule = REPLACE(REPLACE(TokenModule, @ModuleGUID, ''), '**', '*')
+				where UserDelegateGUID = @UserDelegateGUID
+				--
+				update userdele set
+					TokenModule = SUBSTRING(TokenModule, 2, LEN(TokenModule))
+				where UserDelegateGUID = @UserDelegateGUID AND LEFT(TokenModule, 1) = '*'
+				--
+				update userdele set
+					TokenModule = REVERSE(SUBSTRING(REVERSE(TokenModule), 2, LEN(TokenModule)))
+				where UserDelegateGUID = @UserDelegateGUID AND RIGHT(TokenModule, 1) = '*'
+				
+				--select 'ERROR' break
+			end
+			else begin
+				delete userdele where UserDelegateGUID = @UserDelegateGUID
+			end
+		end try
+		begin catch
+			break
+			print ERROR_MESSAGE()
+		end catch
+	fetch next from dcur into @UserDelegateGUID, @ModuleGUID, @tkModule
+	end
+	close dcur deallocate dcur
+end try
+begin catch
+	print 'ERROR'
+	select isNULL(ERROR_MESSAGE(), 'ERROR')
+end catch
+

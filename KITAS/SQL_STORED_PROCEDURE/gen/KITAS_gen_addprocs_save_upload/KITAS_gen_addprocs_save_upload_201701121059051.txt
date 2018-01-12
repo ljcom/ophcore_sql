@@ -1,0 +1,183 @@
+
+
+
+
+
+
+
+CREATE procedure [gen].[addprocs_save_upload] @tablename varchar(50), @otablename varchar(50), @colname varchar(50), 
+	@status varchar(50), @updatestr varchar(max), @valuestr varchar(max),
+	@insertstr varchar(max), @par varchar(max), @tableApproveName varchar(50), @debug int=0, @isEnc bit=1, @isdebug bit=0
+as
+	declare @primaryDate nvarchar(50), @autonumbercol nvarchar(50), @refno nvarchar(50), @valuestrcursor varchar(max), @parstr varchar(max)
+	declare @primaryDateEdit int
+	
+	declare @attachmentField nvarchar(50), @fieldkey nvarchar(50), @combofieldkey varchar(50)
+
+	declare @content varchar(max)
+	declare @content1 varchar(max)
+	declare @content2 varchar(max)
+	
+	declare @sp varchar(max)
+	declare @parameter varchar(max)
+
+--	if @status &lt;&gt; ''
+--	begin
+		set @valuestrcursor=@valuestr
+		set @parstr=@par
+		--only enable to save or insert
+		if @updatestr &lt;&gt; '' and @insertstr &lt;&gt; '' and @par &lt;&gt; '' 
+		begin
+			select @primarydate = colname 
+			from gen.cotablfiel a
+				inner join gen.cotabl b
+					on a.tableguid=b.tableguid	
+			where tablename = @tablename and primarycol=2
+
+			select @PrimaryDateEdit=isnull(iseditable,0) 
+			from gen.cotablfiel a
+				inner join gen.cotabl b
+					on a.tableguid=b.tableguid	
+			where tablename = @tablename and primarycol=2
+			
+			--set @primarydateedit=isnull(@primarydateedit,0)
+
+			select @autonumbercol = colname 
+			from gen.cotablfiel a
+				inner join gen.cotabl b
+					on a.tableguid=b.tableguid	
+			where tablename = @tablename and primarycol=3
+
+			select @attachmentField = colname 
+			from gen.cotablfiel a
+				inner join gen.cotabl b
+					on a.tableguid=b.tableguid	
+			where tablename = @tablename and (ComboType=5 or combotype=50)
+
+			select @fieldkey = colname 
+			from gen.cotablfiel a
+				inner join gen.cotabl b
+					on a.tableguid=b.tableguid	
+			where tablename = @tablename and a.colorder=10
+
+			declare @sqlstr varchar(max)='', @combofield varchar(50), @tablenamex varchar(50), @fieldGUID uniqueidentifier, @deklarasi varchar(max)='',
+			@otablenamex varchar(50), @combofieldid varchar(50)
+			declare @fieldkeyParent nvarchar(50)
+
+			select @fieldkeyParent = colname 
+			from gen.cotablfiel a
+				inner join gen.cotabl b
+					on a.tableguid=b.tableguid	
+			where tablename = @tablename and a.isEditable=3
+
+			DECLARE csr cursor FOR
+
+			select  colname, combotable, combofieldid, combofieldkey
+			from gen.cotablfiel a
+				inner join gen.cotabl b
+					on a.tableguid=b.tableguid	
+			where tablename = @tablename and a.ComboType=12
+
+			OPEN csr
+			FETCH next from csr into @combofield, @tablenamex , @combofieldid, @combofieldkey  
+			WHILE @@fetch_status =0
+			BEGIN
+				set @oTableName=left(@tablenamex,1)+'o'+substring(@tablenamex, 3, len(@tablenamex)-2)
+				set @valuestrcursor=replace(@valuestrcursor,@combofield,@combofield+'cbid')
+				set @parstr=replace(@par,@combofield +' uniqueidentifier', @combofield+'cbid varchar(100)')
+				if @sqlstr='' begin
+					set @deklarasi= 'Declare @'+@combofield+'cbid varchar(100)'
+				end else begin
+					set @deklarasi= ', @'+@combofield+'cbid varchar(100)'
+				end
+				
+				if @sqlstr='' begin
+					set @sqlstr= ' select @'+@combofield+'='+@combofieldkey+' from '+@otablename+' where '+@combofieldid+'= @'+@combofield+'cbid '  + char(13) + char(10)   
+				end else begin
+					set @sqlstr= @sqlstr + ' select @'+@combofield+'='+@combofieldkey+' from '+@otablenamex+' where '+@combofieldid+'= @'+@combofield+'cbid '  + char(13) + char(10)  
+				end
+			FETCH next from csr into @combofield, @tablenamex , @combofieldid, @combofieldkey  
+			END
+			CLOSE csr
+			DEALLOCATE csr 
+
+			set @content = ''
+			set @sp = '' + @tableName + '_save_upload'
+			set @parameter = char(9) + '@hostGUID uniqueidentifier, @FILENAMEFULL nvarchar(500), @FILEPATH nvarchar(500), @FILENAME nvarchar(500)' 
+set @content    =	'declare @FIELDTERMINATOR nvarchar (10)='','', @sqlstr nvarchar(max), @userguid uniqueidentifier' + char(13) + char(10) +
+				char(9) + 'declare @UplDOCM table (  '+ char(13) + char(10) +
+				char(9) +char(9) +' '+@fieldkey+' uniqueidentifier, '+ char(13) + char(10) +
+				char(9) +char(9) + replace(''+@parstr+'','@','') + char(13) + char(10) +
+				char(9) +'); '+ char(13) + char(10) +
+				char(9) + char(13) + char(10) +
+
+				char(9) + 'declare @sql varchar(max) = ''' + char(13) + char(10) +
+				char(9) + 'create table #tmp ( '+ char(13) + char(10) +
+				char(9) +char(9) +'	'+@fieldkey+' uniqueidentifier, '+ char(13) + char(10) +
+				char(9) +char(9) + replace(''+@parstr+'','@','') + char(13) + char(10) +
+				char(9) +'	); '+ char(13) + char(10) +
+				char(9) + char(13) + char(10) +
+	
+				char(9) + 'bulk insert #tmp '+ char(13) + char(10) +
+				char(9) +char(9) +'		from ''''''+@FILENAMEFULL+'''''' '+ char(13) + char(10) +
+				char(9) +char(9) +'		with (FirstRow = 2, FIELDTERMINATOR ='''','''', ROWTERMINATOR =''''\n'''' '+ char(13) + char(10) +
+				char(9) +char(9) +'	) '+ char(13) + char(10) +
+				char(9) +char(9) +'	select * from #tmp '+ char(13) + char(10) +
+				char(9) +char(9) +'	''; '+ char(13) + char(10) +
+				char(9) + char(13) + char(10) +
+	
+				char(9) + 'insert into @UplDOCM '+ char(13) + char(10) +
+				char(9) + 'exec(@sql); '+ char(13) + char(10) +
+				char(9) + char(13) + char(10) +
+	
+				char(9) + 'declare @'+@fieldkey+' uniqueidentifier, '+ char(13) + char(10) +
+				char(9) + ''+@PAR+''+ char(13) + char(10) +
+				char(9) + ''+@deklarasi+''+ char(13) + char(10) +
+				char(9) + char(13) + char(10) +
+	
+				char(9) + 'DECLARE csr cursor FOR '+ char(13) + char(10) +
+				char(9) + char(13) + char(10) +
+	
+				char(9) + ' select '+@fieldkey+' , ' + replace(replace(replace(@valuestrcursor, ')', ''), 'dbo.fn_round(', ''),'@','')+ char(13) + char(10) +
+				char(9) + ' from @UplDOCM '+ char(13) + char(10) +
+				char(9) + char(13) + char(10) +
+	
+				char(9) + ' OPEN csr '+ char(13) + char(10) +
+				char(9) + 'FETCH next from csr into @'+@fieldkey+' , ' + replace(replace(@valuestrcursor, ')', ''), 'dbo.fn_round(', '')+ char(13) + char(10) +
+				char(9) + 'WHILE @@fetch_status =0'+ char(13) + char(10) +
+			char(9) + 'BEGIN '+ char(13) + char(10) +
+				char(9) +char(9) +'	'+@sqlstr+' '+ char(13) + char(10) +
+				--char(9) +char(9) +'	where currencyname=@CurrencyGUIDcbid '+ char(13) + char(10) +
+		char(9) +char(9) +'if len(@'+@fieldkey+') =36 begin '+ char(13) + char(10) +
+				char(9) +char(9) +'		exec oph.'+@tablename+'_save @'+@fieldkey+', @hostGUID, ' + replace(replace(@valuestr, ')', ''), 'dbo.fn_round(', '')+ char(13) + char(10) +
+				char(9) +char(9) +'	end else begin '+ char(13) + char(10) +
+				char(9) +char(9) +'		set @'+@fieldkey+'=newid()'+ char(13) + char(10) +
+				char(9) +char(9) +'		exec oph.'+@tablename+'_save @'+@fieldkey+', @hostGUID, ' + replace(replace(@valuestr, ')', ''), 'dbo.fn_round(', '')+ char(13) + char(10) +
+				char(9) +char(9) +'	end'+ char(13) + char(10) +
+				char(9) +char(9) +'FETCH next from csr into @'+@fieldkey+', ' + replace(replace(@valuestrcursor, ')', ''), 'dbo.fn_round(', '')+ char(13) + char(10) +
+				char(9) +char(9) +'END'+ char(13) + char(10) +
+				char(9) +char(9) +'CLOSE csr'+ char(13) + char(10) +
+				char(9) +char(9) +'DEALLOCATE csr '+ char(13) + char(10) +
+				char(9) + char(13) + char(10) +
+
+				char(9) +char(9) +'set @FILENAME=substring(@filename,1,len(@filename)-4)'+ char(13) + char(10) +
+				char(9) + char(13) + char(10) +
+
+				char(9) +char(9) +'exec dbo.move_file @FILENAME, @FILEPATH'+ char(13) + char(10) --char(9) + CHAR(9) + 'exec dbo.'+@tablename+'_save_custom @GUID, @hostGUID, ' + char(13) + char(10) 
+		set @content2=''
+
+			exec gen.addproc @sp, @parameter, @content, @content1, @content2, @isEnc=@isenc
+		end
+
+
+
+
+
+
+
+
+
+
+
+
+

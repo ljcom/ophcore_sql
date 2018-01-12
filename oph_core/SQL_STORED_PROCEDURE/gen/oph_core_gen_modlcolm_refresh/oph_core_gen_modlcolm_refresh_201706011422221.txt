@@ -1,0 +1,78 @@
+
+
+create procedure gen.[modlcolm_refresh] @columnGUID uniqueidentifier, @isdebug bit=0
+--WITH ENCRYPTION
+as
+	insert into modlcolminfo (ColumnInfoGUID, ColumnGUID, InfoKey, InfoValue)
+	select newid(), b.ColumnGUID, 'PageNo', 1 
+	--select *
+	from modl a
+		inner join modlcolm b on a.moduleguid=b.moduleguid --and a.moduleid='acct'
+		inner join modlcolminfo c on b.columnguid=c.columnguid and c.InfoKey='isviewable' and c.InfoValue='1'
+		left join modlcolminfo d1 on b.columnguid=d1.columnguid and d1.InfoKey='PageNo' 
+	where b.columnguid=@columnguid and d1.columnguid is null 
+
+	insert into modlcolminfo (ColumnInfoGUID, ColumnGUID, InfoKey, InfoValue)
+	select newid(), b.ColumnGUID, 'SectionNo', 1 
+	from modl a
+		inner join modlcolm b on a.moduleguid=b.moduleguid
+		inner join modlcolminfo c on b.columnguid=c.columnguid and c.InfoKey='isviewable' and c.InfoValue='1'
+		left join modlcolminfo d1 on b.columnguid=d1.columnguid and d1.InfoKey='SectionNo' 
+	where b.columnguid=@columnguid and  d1.columnguid is null 
+
+	insert into modlcolminfo (ColumnInfoGUID, ColumnGUID, InfoKey, InfoValue)
+	select newid(), b.ColumnGUID, 'ColNo', 1 
+	from modl a
+		inner join modlcolm b on a.moduleguid=b.moduleguid
+		inner join modlcolminfo c on b.columnguid=c.columnguid and c.InfoKey='isviewable' and c.InfoValue='1'
+		left join modlcolminfo d1 on b.columnguid=d1.columnguid and d1.InfoKey='ColNo' 
+	where b.columnguid=@columnguid and  d1.columnguid is null 
+
+	insert into modlcolminfo (ColumnInfoGUID, ColumnGUID, InfoKey, InfoValue)
+	select newid(), b.ColumnGUID, 'RowNo', 1 
+	from modl a
+		inner join modlcolm b on a.moduleguid=b.moduleguid
+		inner join modlcolminfo c on b.columnguid=c.columnguid and c.InfoKey='isviewable' and c.InfoValue='1'
+		left join modlcolminfo d1 on b.columnguid=d1.columnguid and d1.InfoKey='RowNo' 
+	where b.columnguid=@columnguid and  d1.columnguid is null 
+
+	insert into modlcolminfo (ColumnInfoGUID, ColumnGUID, InfoKey, InfoValue)
+	select newid(), b.ColumnGUID, 'fieldNo', b.colOrder 
+	from modl a
+		inner join modlcolm b on a.moduleguid=b.moduleguid
+		inner join modlcolminfo c on b.columnguid=c.columnguid and c.InfoKey='isviewable' and c.InfoValue='1'
+		left join modlcolminfo d1 on b.columnguid=d1.columnguid and d1.InfoKey='fieldNo' 
+	where b.columnguid=@columnguid and  d1.columnguid is null
+
+	insert into modlcolminfo (ColumnInfoGUID, ColumnGUID, InfoKey, InfoValue)
+	select newid(), b.ColumnGUID, 'colType', 11
+	from modl a
+		inner join modlcolm b on a.moduleguid=b.moduleguid
+		inner join modlcolminfo c on b.columnguid=c.columnguid and c.InfoKey='isviewable' and c.InfoValue='1'
+		left join modlcolminfo d1 on b.columnguid=d1.columnguid and d1.InfoKey='colType' 
+	where b.columnguid=@columnguid and  d1.columnguid is null
+
+	insert into modlcolminfo (ColumnInfoGUID, ColumnGUID, InfoKey, InfoValue)
+	select newid(), b.ColumnGUID, 'isPreview', 0
+	from modl a
+		inner join modlcolm b on a.moduleguid=b.moduleguid
+		inner join modlcolminfo c on b.columnguid=c.columnguid and c.InfoKey='isviewable' and c.InfoValue='1'
+		left join modlcolminfo d1 on b.columnguid=d1.columnguid and d1.InfoKey='isPreview' 
+	where b.columnguid=@columnguid and  d1.columnguid is null
+
+	insert into modlcolminfo (ColumnInfoGUID, ColumnGUID, InfoKey, InfoValue)
+	select newid(), b.ColumnGUID, 'isEditable', 0
+	from modl a
+		inner join modlcolm b on a.moduleguid=b.moduleguid
+		inner join modlcolminfo c on b.columnguid=c.columnguid and c.InfoKey='isviewable' and c.InfoValue='1'
+		left join modlcolminfo d1 on b.columnguid=d1.columnguid and d1.InfoKey='isEditable' 
+	where b.columnguid=@columnguid and  d1.columnguid is null
+
+	update b2
+	set infovalue='0'
+	--select * 
+	from modlcolm a	
+		inner join modlcolminfo b1 on a.columnGUID=b1.columnGUID and b1.infokey='coltype' and b1.infovalue='33'
+		inner join modlcolminfo b2 on a.columnGUID=b2.columnGUID and b2.infokey='isbrowsable' and b2.infovalue='1'
+	where a.columnguid=@columnguid 
+

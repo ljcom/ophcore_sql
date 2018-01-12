@@ -1,0 +1,709 @@
+
+CREATE procedure [gen].[setsyscolumns_ex]
+as
+--build 20141031
+
+	--gen activeTable
+	select * 
+	into #activeTable
+	from (
+		select a.tableGUID, y.name colname, x.object_id id, y.column_id*10 colOrder, a.TableName, 
+			y.max_length size, y.is_nullable isnullable, y.system_type_id xtype
+		from sys.objects x
+			inner join sys.columns y
+				on x.object_id = y.object_id
+			inner join gen.cotabl a
+				on left(x.name,1)+'a'+substring(x.name,3,len(x.name)-2) = a.tablename
+				and x.type in ('U', 'V') 
+				and substring(x.name,2,1) in ('o')
+		--order by a.tablename, colOrder
+		union all
+		select c.tableGUID, b.colname+'parId', b.id, (b.colorder*10)+1, c.TableName, 100, 0, 0
+		from gen.cotabl a
+			inner join gen.cotablfiel b
+				on a.TableGUID=b.tableGUID
+			inner join gen.cotabl c
+				on left(a.tablename,1)+'a'+substring(a.tablename,3,len(a.tablename)-2) = c.tablename
+		where b.combotype in (11) and substring(a.tablename, 2,1)='o'
+		--order by c.tablename, colOrder
+		union all
+		select c.tableGUID, b.colname+'parVal', b.id, (b.colorder*10)+2, c.TableName, 100, 0, 0
+		from gen.cotabl a
+			inner join gen.cotablfiel b
+				on a.TableGUID=b.tableGUID
+			inner join gen.cotabl c
+				on left(a.tablename,1)+'a'+substring(a.tablename,3,len(a.tablename)-2) = c.tablename
+		where b.combotype in (11) and substring(a.tablename, 2,1)='o'
+		union all
+		select c.tableGUID, b.colname+'cbId', b.id, (b.colorder*10)+1, c.TableName, 100, 0, 0
+		from gen.cotabl a
+			inner join gen.cotablfiel b
+				on a.TableGUID=b.tableGUID
+			inner join gen.cotabl c
+				on left(a.tablename,1)+'a'+substring(a.tablename,3,len(a.tablename)-2) = c.tablename
+		where b.combotype in (10,12,13) and substring(a.tablename, 2,1)='o'
+		union
+		select c.tableGUID, b.colname+'cbNm', b.id, (b.colorder*10)+2, c.TableName, 100, 0, 0
+		from gen.cotabl a
+			inner join gen.cotablfiel b
+				on a.TableGUID=b.tableGUID
+			inner join gen.cotabl c
+				on left(a.tablename,1)+'a'+substring(a.tablename,3,len(a.tablename)-2) = c.tablename
+		where b.combotype in (10,12,13) and substring(a.tablename, 2,1)='o'	
+		union
+		select c.tableGUID, b.colname+'cbEx1', b.id, (b.colorder*10)+2, c.TableName, 100, 0, 0
+		from gen.cotabl a
+			inner join gen.cotablfiel b
+				on a.TableGUID=b.tableGUID
+			inner join gen.cotabl c
+				on left(a.tablename,1)+'a'+substring(a.tablename,3,len(a.tablename)-2) = c.tablename
+		where b.combotype in (10,12,13) and substring(a.tablename, 2,1)='o'	
+		union
+		select c.tableGUID, b.colname+'cbEx2', b.id, (b.colorder*10)+2, c.TableName, 100, 0, 0
+		from gen.cotabl a
+			inner join gen.cotablfiel b
+				on a.TableGUID=b.tableGUID
+			inner join gen.cotabl c
+				on left(a.tablename,1)+'a'+substring(a.tablename,3,len(a.tablename)-2) = c.tablename
+		where b.combotype in (10,12,13) and substring(a.tablename, 2,1)='o'	
+		) x
+
+	--o
+	insert into gen.coTABL (tableGUID, tablename)
+	select newid(), x.name 
+	from sysobjects x
+		inner join sys.schemas y
+			on x.uid=y.schema_id
+			and x.xtype in ('U', 'V') 
+			and substring(x.name,2,1) in ('o')
+			and y.name='dbo'
+		left join gen.coTABL a
+			on left(x.name,1)+'o'+substring(x.name,3,len(x.name)-2) = a.tablename
+	where a.tableGUID is null 
+
+	--a		
+	insert into gen.coTABL (tableGUID, tablename)
+	select newid(), left(x.name,1)+'a'+substring(x.name,3,len(x.name)-2)
+	from sysobjects x
+		inner join sys.schemas y
+			on x.uid=y.schema_id
+			and y.name='dbo'
+			and substring(x.name,2,1) in ('o')
+			and x.xtype in ('U', 'V') 
+		left join gen.coTABL a
+			on left(x.name,1)+'a'+substring(x.name,3,len(x.name)-2) = a.tablename
+	where a.tableGUID is null
+
+	--delete
+	--o
+	delete from a
+	--select * 
+	from gen.coTABL a
+		left join sysobjects x
+			on left(x.name,1)+'o'+substring(x.name,3,len(x.name)-2) = a.tablename
+	where substring(a.tablename,2,1)='o' and x.name is null	
+	--a
+	delete from a
+	--select * 
+	from gen.coTABL a
+		left join gen.coTABL b
+			on left(a.tablename,1)+'o'+substring(a.tablename,3,len(a.tablename)-2) = b.tablename
+	where substring(a.tablename,2,1)='a' and b.tablename is null	
+
+	-- new columns
+	--o
+	insert into gen.cotablfiel (tableGUID, colname, id, colorder)
+	select a.tableGUID, y.name, x.id, y.colorder
+	from sysobjects x
+		inner join syscolumns y
+			on x.id = y.id
+		inner join gen.cotabl a
+			on left(x.name,1)+'o'+substring(x.name,3,len(x.name)-2) = a.tablename
+			and x.xtype in ('U', 'V') 
+			and substring(x.name,2,1) in ('o')
+		left join gen.cotablfiel b
+			on a.tableguid=b.tableGUID
+			and y.name = b.colname
+	where b.id is null 
+	--a
+	insert into gen.cotablfiel (tableGUID, colname, id, colorder)
+	select aa.tableGUID, aa.colname, aa.id, aa.colorder
+	from #activeTable aa
+		left join gen.cotablfiel bb
+			on aa.tableguid=bb.tableGUID
+			and aa.colname = bb.colname
+	where bb.id is null 
+
+	--delete fields
+	--o
+	delete from b
+	--select a.tablename, b.colname
+	from gen.cotablfiel b
+		inner join gen.cotabl a
+			on b.tableguid=a.TableGUID
+			and substring(a.tablename,2,1)='o'
+		left join (
+				select x.name tablename, y.name colname 
+				from sys.objects x 
+					inner join sys.columns y
+						on x.object_id=y.object_id) y
+			on y.colname = b.colname
+			and y.tablename=a.tablename
+	where y.tablename is null 
+	--a
+	delete from b
+	--select a.tablename, b.colname
+	from gen.cotablfiel b
+		inner join gen.cotabl a
+			on b.tableguid=a.TableGUID
+			and substring(a.tablename,2,1)='a'
+		left join #activeTable y
+			on y.colname = b.colname
+			and y.tablename=a.tablename
+	where y.tablename is null 
+	--order by a.tablename, b.colname
+
+	-- xtype
+	--o
+	update gen.cotablfiel
+	set xtype = y.system_type_id,
+		isnullable = y.is_nullable,
+		colorder = y.column_id,
+		colSize=y.max_length
+	--select * 
+	from sys.objects x
+		inner join sys.columns y
+			on x.object_id = y.object_id
+		inner join gen.cotabl a
+			on left(x.name,1)+'o'+substring(x.name,3,len(x.name)-2) = a.tablename
+		inner join gen.cotablfiel b
+			on a.tableGUID=b.tableGUID
+			and b.colname = y.name
+	where isnull(b.isnullable,2) &lt;&gt; y.is_nullable 
+		or isnull(b.xtype,0) &lt;&gt; y.system_type_id
+		or isnull(b.colorder,0) &lt;&gt; y.column_id
+		or y.system_type_id is null
+		or b.colSize &lt;&gt; y.max_length
+	--a
+	update b
+	set xtype = z.xtype,
+		isnullable = z.isnullable,
+		colorder = z.colorder,
+		colsize=z.size
+	--select a.tablename, b.colname, isnull(b.isnullable,2), z.isnullable, isnull(b.xtype,0), z.xtype, isnull(b.colorder,0), z.colorder  
+	from gen.cotabl x
+		--inner join gen.cotablfiel y
+		--	on x.TableGUID = y.tableGUID
+		inner join gen.cotabl a
+			on left(x.tablename,1)+'a'+substring(x.tablename,3,len(x.tablename)-2) = a.tablename
+			and substring(x.tablename,2,1)='o'
+		inner join gen.cotablfiel b
+			on a.tableGUID=b.tableGUID
+			--and b.colname = y.colname
+		inner join #activeTable z
+			on a.tableguid=z.tableguid
+			and b.colname=z.colname
+	where isnull(b.colorder,0) &lt;&gt; z.colorder 
+		or isnull(b.isnullable,2) &lt;&gt; z.isnullable 
+		or isnull(b.xtype,0) &lt;&gt; z.xtype 
+		--or z.xtype is null
+		or b.colSize&lt;&gt;z.size
+	
+	-- combo 'o'
+	update b
+	set comboType = 0, 
+		comboTable = a1.tablename,
+		comboFieldKey = b1.colname
+	--select * 
+	from gen.cotablfiel b
+		inner join gen.cotabl a
+			on b.tableguid=a.tableguid
+		inner join gen.cotablfiel b1
+			on b1.colname = b.colname
+			and b1.colorder=1
+		inner join gen.cotabl a1
+			on b1.tableguid=a1.tableguid
+			and substring(a.tablename,2,1)='o'
+			and substring(a1.tablename,2,1)='o'
+	where b.colname like '%GUID'
+		and b.colorder &gt;1 and b.comboType is null
+		and (b.comboType &lt;&gt; 0 or b.comboTable &lt;&gt; a1.tablename 
+			or b.comboFieldKey &lt;&gt; b1.colname)
+	
+-- combo &lt;&gt; 'o'
+	update b
+	set comboType = 0, 
+		comboTable = a1.tablename,
+		comboFieldKey = b1.colname
+	--select * 
+	from gen.cotablfiel b
+		inner join gen.cotabl a
+			on b.tableguid=a.tableguid
+		inner join gen.cotablfiel b1
+			on b1.colname = b.colname
+			and b1.colorder=1
+		inner join gen.cotabl a1
+			on b1.tableguid=a1.tableguid
+			and substring(a.tablename,2,1)&lt;&gt;'o'
+			and substring(a1.tablename,2,1)='a'
+	where b.colname like '%GUID'
+		and b.colorder &gt;1 and b.comboType is null
+		and (b.comboType &lt;&gt; 0 or b.comboTable &lt;&gt; a1.tablename 
+			or b.comboFieldKey &lt;&gt; b1.colname)
+			
+	--updateable
+--	update dbo.syscolumns_ex
+--	set isupdatable = 1
+--	WHERE     (colorder &gt; 1) AND (ColName NOT IN ('isdeleted', 'createddate', 'updateddate', 'deleteddate', 'deleteduser', 'createduser', 'updateduser'))
+
+	-- length
+	update gen.cotablfiel
+	set browsecolWidth = y.length
+	--select * 
+	from sysobjects x
+		inner join syscolumns y 
+			on x.id = y.id
+		inner join gen.cotablfiel b 
+			on b.id = y.id
+			and b.colname = y.name
+	where x.xtype='V' and browsecolwidth is null
+		and b.browsecolWidth &lt;&gt; y.length
+
+/*
+	-- copy from a to others
+	update b 
+	set TitleCaption = b1.TitleCaption, 
+		TitleShort = b1.TitleShort, 
+		--isBrowsable = b1.isBrowsable, 
+		BrowseColWidth = b1.BrowseColWidth, 
+--		BrowseOrder = b1.BrowseOrder, 
+		BrowseFilter = b1.BrowseFilter, 
+--		isUpdatable = b1.isUpdatable, 
+		isSumable = b1.isSumable, 
+		ComboType = b1.ComboType, 
+		ComboTable = b1.ComboTable, 
+		ComboFieldKey = b1.ComboFieldKey, 
+		ComboFieldName = b1.ComboFieldName
+	--select * 
+	FROM gen.cotablfiel b
+		inner join gen.cotabl a
+			on b.tableguid=a.tableguid
+		inner join gen.cotablfiel b1
+			on b.colname = b1.colname
+		inner join gen.cotabl a1
+			on b1.tableguid=a1.tableguid
+			and left(a.tablename,1) = left(a1.tablename,1)
+			and substring(a.tablename, 3, len(a.tablename)-2) = substring(a1.tablename, 3, len(a1.tablename)-2) 			
+	where substring(a.tablename,2,1)= 'h'
+		and substring(a1.tablename,2,1)= 'a' 
+		and (b.TitleCaption &lt;&gt; b1.TitleCaption  
+			or b.TitleShort &lt;&gt; b1.TitleShort 
+			or b.BrowseColWidth &lt;&gt; b1.BrowseColWidth 
+			or b.BrowseFilter &lt;&gt; b1.BrowseFilter 
+			or b.isSumable &lt;&gt; b1.isSumable 
+			or b.ComboType &lt;&gt; b1.ComboType 
+			or b.ComboTable &lt;&gt; b1.ComboTable 
+			or b.ComboFieldKey &lt;&gt; b1.ComboFieldKey 
+			or b.ComboFieldName &lt;&gt; b1.ComboFieldName)
+			
+	update b 
+	set 	TitleCaption = b1.TitleCaption, 
+		TitleShort = b1.TitleShort, 
+		--isBrowsable = b1.isBrowsable, 
+		BrowseColWidth = b1.BrowseColWidth, 
+--		BrowseOrder = b1.BrowseOrder, 
+		BrowseFilter = b1.BrowseFilter, 
+--		isUpdatable = b1.isUpdatable, 
+		isSumable = b1.isSumable, 
+		ComboType = b1.ComboType, 
+		ComboTable = b1.ComboTable, 
+		ComboFieldKey = b1.ComboFieldKey, 
+		ComboFieldName = b1.ComboFieldName
+	--select * 
+	FROM gen.cotablfiel b
+		inner join gen.cotabl a
+			on b.tableguid=a.tableguid
+		inner join gen.cotablfiel b1
+			on b.colname = b1.colname
+		inner join gen.cotabl a1
+			on b1.tableguid=a1.tableguid
+			and left(a.tablename,1) = left(a1.tablename,1)
+			and substring(a.tablename, 3, len(a.tablename)-2) = substring(a1.tablename, 3, len(a1.tablename)-2) 
+			
+	where substring(a.tablename,2,1)= 'd'
+		and substring(a1.tablename,2,1)= 'a' 
+		and (b.TitleCaption &lt;&gt; b1.TitleCaption  
+			or b.TitleShort &lt;&gt; b1.TitleShort 
+			or b.BrowseColWidth &lt;&gt; b1.BrowseColWidth 
+			or b.BrowseFilter &lt;&gt; b1.BrowseFilter 
+			or b.isSumable &lt;&gt; b1.isSumable 
+			or b.ComboType &lt;&gt; b1.ComboType 
+			or b.ComboTable &lt;&gt; b1.ComboTable 
+			or b.ComboFieldKey &lt;&gt; b1.ComboFieldKey 
+			or b.ComboFieldName &lt;&gt; b1.ComboFieldName)
+
+	update b 
+	set 	TitleCaption = b1.TitleCaption, 
+		TitleShort = b1.TitleShort, 
+		--isBrowsable = b1.isBrowsable, 
+		BrowseColWidth = b1.BrowseColWidth, 
+--		BrowseOrder = b1.BrowseOrder, 
+		BrowseFilter = b1.BrowseFilter, 
+--		isUpdatable = b1.isUpdatable, 
+		isSumable = b1.isSumable, 
+		ComboType = b1.ComboType, 
+		ComboTable = b1.ComboTable, 
+		ComboFieldKey = b1.ComboFieldKey, 
+		ComboFieldName = b1.ComboFieldName
+	--select * 
+	FROM gen.cotablfiel b
+		inner join gen.cotabl a
+			on b.tableguid=a.tableguid
+		inner join gen.cotablfiel b1
+			on b.colname = b1.colname
+		inner join gen.cotabl a1
+			on b1.tableguid=a1.tableguid
+			and left(a.tablename,1) = left(a1.tablename,1)
+			and substring(a.tablename, 3, len(a.tablename)-2) = substring(a1.tablename, 3, len(a1.tablename)-2) 
+		
+	where substring(a.tablename,2,1)= 'tc'
+		and substring(a1.tablename,2,1)= 'ta'
+		and (b.TitleCaption &lt;&gt; b1.TitleCaption  
+			or b.TitleShort &lt;&gt; b1.TitleShort 
+			or b.BrowseColWidth &lt;&gt; b1.BrowseColWidth 
+			or b.BrowseFilter &lt;&gt; b1.BrowseFilter 
+			or b.isSumable &lt;&gt; b1.isSumable 
+			or b.ComboType &lt;&gt; b1.ComboType 
+			or b.ComboTable &lt;&gt; b1.ComboTable 
+			or b.ComboFieldKey &lt;&gt; b1.ComboFieldKey 
+			or b.ComboFieldName &lt;&gt; b1.ComboFieldName)
+			
+	--update parameter 
+	update b
+	set ComboType = b1.ComboType, 
+		ComboTable = b1.ComboTable, 
+		ComboFieldKey = null,
+		ComboFieldName = null
+	--select * 
+	FROM gen.cotablfiel b
+		inner join gen.cotabl a
+			on b.tableguid=a.tableguid
+		inner join gen.cotablfiel b1
+			on b.colname = b1.colname
+		inner join gen.cotabl a1
+			on b1.tableguid=a1.tableguid
+			and left(a.tablename,1) = left(a1.tablename,1)
+			and substring(a.tablename, 3, len(a.tablename)-2) = substring(a1.tablename, 3, len(a1.tablename)-2) 
+		
+	where substring(a.tablename,2,1)&lt;&gt;'o'
+		and substring(a1.tablename,2,1)= 'o' and b1.ComboType=2	
+		and (b.ComboType &lt;&gt; b1.ComboType or b.ComboTable &lt;&gt; b1.ComboTable) 
+		and (b.ComboType &lt;&gt; b1.ComboType 
+			or b.ComboTable &lt;&gt; b1.ComboTable 
+			or b.ComboFieldKey is not null
+			or b.ComboFieldName is not null)
+*/
+
+	update gen.cotablfiel
+	set viewpageno = 0
+	where viewpageno is null
+
+	update gen.cotablfiel
+	set isEditable=99
+	from gen.cotablfiel b
+		inner join gen.cotabl a
+			on b.tableguid=a.tableguid
+	where colorder=1
+		and substring(a.tablename,2,1)&lt;&gt; 'o'
+		and isEditable&lt;&gt;99
+		
+	update gen.cotablfiel
+	set ViewPageNo=9, isViewable=1, isEditable=99, ViewRowNo=1, ViewColNo=1, ViewColWidth=1
+	from gen.cotablfiel b
+		inner join gen.cotabl a
+			on b.tableguid=a.tableguid
+	where ColName in ('DocStatusDescription', 'StatusComment', 
+		'CreatedDate', 'CreatedUser', 
+		'UpdatedDate','UpdatedUser','isDeleted','DeletedDate','DeletedUser', 'initiatorGUID')
+		and substring(a.tablename,2,1)&lt;&gt; 'o'
+		and viewpageno=0
+
+	update gen.cotablfiel
+	set ViewOrderNo=1, ViewRowTitle='Status', TitleCaption='Status'
+	from gen.cotablfiel b
+		inner join gen.cotabl a
+			on b.tableguid=a.tableguid
+	where ColName in ('DocStatusDescription')
+		and substring(a.tablename,2,1)&lt;&gt; 'o'
+		and isnull(ViewRowTitle,'')=''
+		
+	update gen.cotablfiel
+	set ViewOrderNo=2, TitleCaption='Comment'
+	from gen.cotablfiel b
+		inner join gen.cotabl a
+			on b.tableguid=a.tableguid
+	where ColName ='StatusComment' and substring(a.tablename,2,1)&lt;&gt; 'o' 
+		and isnull(ViewOrderNo,0)&lt;&gt;2
+	
+	update gen.cotablfiel
+	set ViewOrderNo=3, TitleCaption='Created on'
+	from gen.cotablfiel b
+		inner join gen.cotabl a
+			on b.tableguid=a.tableguid
+	where ColName in ('CreatedDate') and substring(tablename,2,1)&lt;&gt; 'o' 
+		and substring(a.tablename,1,1)='t'	
+		and isnull(ViewOrderNo,0)&lt;&gt;3
+
+	update gen.cotablfiel
+	set ViewOrderNo=1, TitleCaption='Created on', ViewRowTitle='Status'
+	from gen.cotablfiel b
+		inner join gen.cotabl a
+			on b.tableguid=a.tableguid
+	where ColName in ('CreatedDate') and substring(a.tablename,2,1)&lt;&gt; 'o' 
+		and substring(a.tablename,1,1)&lt;&gt;'t'
+		and isnull(ViewOrderNo,0)&lt;&gt;1
+
+	update gen.cotablfiel
+	set ViewOrderNo=4, TitleCaption='Initiator by'
+	from gen.cotablfiel b
+		inner join gen.cotabl a
+			on b.tableguid=a.tableguid
+	where ColName in ('initiatorGUID') and substring(a.tablename,2,1)&lt;&gt; 'o' 
+		and isnull(ViewOrderNo,0)&lt;&gt;4
+
+	update gen.cotablfiel
+	set ViewOrderNo=5, TitleCaption='Created by'
+	from gen.cotablfiel b
+		inner join gen.cotabl a
+			on b.tableguid=a.tableguid
+	where ColName in ('CreatedUser') and substring(a.tablename,2,1)&lt;&gt; 'o' 
+		and isnull(ViewOrderNo,0)&lt;&gt;5
+	
+	update gen.cotablfiel
+	set ViewOrderNo=6, TitleCaption='Updated on'
+	from gen.cotablfiel b
+		inner join gen.cotabl a
+			on b.tableguid=a.tableguid
+	where ColName in ('UpdatedDate') and substring(tablename,2,1)&lt;&gt; 'o' 
+		and isnull(ViewOrderNo,0)&lt;&gt;6
+
+	update gen.cotablfiel
+	set ViewOrderNo=7, TitleCaption='Updated by'
+	from gen.cotablfiel b
+		inner join gen.cotabl a
+			on b.tableguid=a.tableguid
+	where ColName in ('UpdatedUser') and substring(tablename,2,1)&lt;&gt; 'o' 
+		and isnull(ViewOrderNo,0)&lt;&gt;7
+
+	update gen.cotablfiel
+	set ViewOrderNo=8, TitleCaption='Is Deleted?'
+	from gen.cotablfiel b
+		inner join gen.cotabl a
+			on b.tableguid=a.tableguid
+	where ColName in ('isDeleted') and substring(tablename,2,1)&lt;&gt; 'o' 
+		and isnull(ViewOrderNo,0)&lt;&gt;8
+		
+	update gen.cotablfiel
+	set ViewOrderNo=9, TitleCaption='Deleted on'
+	from gen.cotablfiel b
+		inner join gen.cotabl a
+			on b.tableguid=a.tableguid
+	where ColName in ('DeletedDate') and substring(tablename,2,1)&lt;&gt; 'o' 
+		and isnull(ViewOrderNo,0)&lt;&gt;9
+
+	update gen.cotablfiel
+	set ViewOrderNo=10, TitleCaption='Deleted by'
+	from gen.cotablfiel b
+		inner join gen.cotabl a
+			on b.tableguid=a.tableguid
+	where ColName in ('DeletedUser') and substring(tablename,2,1)&lt;&gt; 'o' 
+		and isnull(ViewOrderNo,0)&lt;&gt;10
+	update gen.cotablfiel
+	set ComboTable='DSTA', ComboType='11',
+		--ComboFieldKey='parValueId', ComboFieldId='parValueDesc',
+		--isEditable=99, ViewColWidth=0
+		ViewPageNo=9, isViewable=1, isEditable=99, ViewRowNo=1, ViewColNo=1,
+		ViewOrderNo=11,ViewColWidth=0
+	--select * 
+	from gen.cotabl d
+		inner join gen.cotablfiel c
+			on c.tableguid=d.tableguid
+	where c.colname='Status' and left(d.tablename,2)='To' and LEN(d.tablename)=6
+		and (c.ComboType is null or isnull(c.ViewPageNo,0)&lt;&gt;9 or isnull(ComboType,'')='' or isnull(ComboTable,'')='')
+
+
+	update gen.cotablfiel
+	set ComboTable='coUSER', ComboType='10',
+		ComboFieldKey='UserGUID', ComboFieldId='UserId', 
+		ComboFieldName='UserName',
+		ViewPageNo=9, isViewable=1, isEditable=99, ViewRowNo=1, ViewColNo=1,
+		ViewOrderNo=11,ViewColWidth=0
+	--select * 
+	from gen.cotabl d
+		inner join gen.cotablfiel c
+			on c.tableguid=d.tableguid
+	where c.colname='CreatedUser' --and left(d.tablename,2)='To' and LEN(d.tablename)=6
+		and (c.ComboType is null or isnull(c.ViewPageNo,0)&lt;&gt;9)
+
+	update gen.cotablfiel
+	set ComboTable='coUSER', ComboType='10',
+		ComboFieldKey='UserGUID', ComboFieldId='UserId', 
+		ComboFieldName='UserName',
+		--isEditable=99, ViewColWidth=0
+		ViewPageNo=9, isViewable=1, isEditable=99, ViewRowNo=1, ViewColNo=1,
+		ViewOrderNo=11,ViewColWidth=0
+	--select * 
+	from gen.cotabl d
+		inner join gen.cotablfiel c
+			on c.tableguid=d.tableguid
+	where c.colname='UpdatedUser' --and left(d.tablename,2)='To' and LEN(d.tablename)=6
+		and (c.ComboType is null or isnull(c.ViewPageNo,0)&lt;&gt;9)
+
+	update gen.cotablfiel
+	set ComboTable='coUSER', ComboType='10',
+		ComboFieldKey='UserGUID', ComboFieldId='UserId', 
+		ComboFieldName='UserName',
+		--isEditable=99, ViewColWidth=0
+		ViewPageNo=9, isViewable=1, isEditable=99, ViewRowNo=1, ViewColNo=1,
+		ViewOrderNo=11,ViewColWidth=0
+	--select * 
+	from gen.cotabl d
+		inner join gen.cotablfiel c
+			on c.tableguid=d.tableguid
+	where c.colname='DeletedUser' --and left(d.tablename,2)='To' and LEN(d.tablename)=6
+		and (c.ComboType is null or isnull(c.ViewPageNo,0)&lt;&gt;9)
+	--aprv
+	update gen.cotablfiel
+	set ComboType=11, ComboTable='USTA'--, ComboFieldKey='parvalueId', ComboFieldId='parvalueDesc' 
+	--select *
+	from gen.cotablfiel b
+		inner join gen.cotabl a
+			on b.tableguid=a.tableguid
+	where right(tablename,4)='APRV' and SUBSTRING(tablename, 2,1) in ('o','a')
+		and ColName='status'
+		and (isnull(ComboType,'')&lt;&gt;11 or isnull(ComboTable,'')&lt;&gt;'USTA'
+			--or isnull(ComboFieldKey,'')&lt;&gt;'parvalueId' or isnull(ComboFieldId,'')&lt;&gt;'parvalueDesc' 
+		)
+					
+	update gen.cotablfiel
+	set ComboType=12, ComboTable='coUSER',
+		ComboFieldKey='UserGUID', ComboFieldId='UserId', 
+		ComboFieldName='UserName' 
+	--select *
+	from gen.cotablfiel b
+		inner join gen.cotabl a
+			on b.tableguid=a.tableguid
+	where right(tablename,4)='APRV' and SUBSTRING(tablename, 2,1) in ('o','a')
+		and ColName in ('ApprovalUserGUID', 'DelegateUserGUID')
+		and  isnull(ComboType,0)&lt;&gt;12
+
+	--primarycol
+	update gen.cotablfiel set 
+		isEditable = 99
+	where PrimaryCol in (1, 2, 3, 4, 5) and isNULL(iseditable, 0) = 0
+	
+	--parent
+	update b 
+	set isEditable=3
+	--select * 
+	from gen.cotablfiel b
+		inner join gen.cotabl a
+			on b.tableguid=a.tableguid
+		inner join gen.cotablfiel b1
+			on b.ColName=b1.colname
+		inner join gen.cotabl a1
+			on b1.tableguid=a1.tableguid
+			and left(a.tablename,6)=a1.tablename
+			
+	where len(a.tablename)&gt;=10 and b1.colorder=1 and right(a.Tablename,4)&lt;&gt;'APRV'
+		and b1.isEditable=0 and b1.isViewable&lt;&gt;1	-- JANGAN &lt;&gt;3 yah. Pengaruh ke caUGRPMODL dan caUGRPUSER
+
+
+	--update browsecolWidth
+	update gen.cotablfiel
+	set browseColWidth  = case when totalcolwidth=0 then browseColWidth else gen.cotablfiel.browseColWidth * 100 / totalColWidth end
+	from gen.cotablfiel
+		inner join 
+		(	select tableGUID, isnull(sum(browsecolwidth),0) totalColWidth
+			from gen.cotablfiel a
+			where isbrowsable=1
+			group by tableGUID
+			having sum(browsecolwidth) &gt; 0) x
+		on gen.cotablfiel.tableGUID = x.tableGUID
+	where isbrowsable=1
+		and browseColWidth &lt;&gt; case when totalcolwidth=0 then browseColWidth else gen.cotablfiel.browseColWidth * 100 / totalColWidth end
+	
+	--update non table fields
+	update gen.cotablfiel 
+	set isEditable=99
+	from gen.cotablfiel a
+		inner join gen.cotabl b1
+			on a.tableguid=b1.tableGUID
+		left join (	
+				select a.colname, b1.tablename 
+				from gen.cotablfiel a
+					inner join gen.cotabl b1
+						on a.tableguid=b1.tableGUID
+			) b
+			on substring(b1.Tablename,3, len(b1.tableName)-2)=substring(b.Tablename,3,len(b.tableName)-2)
+			and substring(b1.tablename,2,1)&lt;&gt;'o' and substring(b.tablename,2,1)='o'
+			and a.ColName=b.colname
+	where b.Tablename is null
+		and a.isEditable&lt;&gt;99
+
+	--update identity field
+	update y
+	set iseditable=99
+	--select x.tablename, y.colname 
+	from sys.columns b
+		inner join sys.objects a
+			on a.object_id=b.object_id
+		inner join gen.cotabl x
+			on x.tablename=a.name
+		inner join gen.cotablfiel y
+			on x.tableguid=y.tableguid
+			and y.colname=b.name
+	where is_identity=1 --and y.iseditable&lt;&gt;98
+	/*
+	update y
+	set iseditable=99
+	--select a.tablename, b.colname, b.iseditable, x.tablename, y.colname, y.iseditable  
+	--select * 
+	from gen.cotablfiel b
+		inner join gen.cotabl a
+			on a.tableguid=b.tableguid
+		inner join gen.cotabl x
+			on left(x.tablename,1)+'o'+substring(x.tablename,3,len(x.tablename)-2)=a.tablename
+			and substring(x.tablename,2,1)='a'
+		inner join gen.cotablfiel y
+			on x.tableguid=y.tableguid
+			and y.colname=b.colname
+	where b.iseditable=98
+	*/
+
+	update gen.coTABLFIEL
+	set viewcolwidth=
+				case 
+					when xtype in (231, 167) then 40
+					when xtype in (36, 58, 61, 259, 267, 271, 260, 266, 272) then 40
+					when xtype  in (56, 60, 52, 48, 62, 59) then 20
+					when xtype in (104, 265) then 1
+					when xtype in (165, 35) then 0
+				end
+	where ViewColWidth is null
+
+	update gen.cotablfiel
+	set combotype=10
+	where combotype=1
+
+	update gen.cotablfiel
+	set combotype=11
+	where combotype=2
+
+	update gen.cotablfiel
+	set combotype=12
+	where combotype=3
+
+	update gen.CoTABLFIEL set isNullable = 1 where PrimaryCol = 5
+	update gen.CoTABLFIEL set isNullable = 1 where isEditable in(0, 99)
+

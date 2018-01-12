@@ -1,0 +1,17 @@
+CREATE function [gen].[splitDelimeter](@str nvarchar(max), @delimeter nvarchar(10)='*')
+returns @r table(val nvarchar(max))
+as
+begin
+
+	declare @x nvarchar(max)=@str
+	set @x='<m>'+replace(@x, @delimeter, '</m><m>')+'</m>'
+
+	declare @xx xml=cast(@x as xml)
+
+	insert @r(val)
+	SELECT Tbl.Col.value('.', 'nvarchar(max)') id
+	FROM @xx.nodes('/m') Tbl(Col)
+
+	return 
+end
+

@@ -1,0 +1,139 @@
+CREATE procedure [core].[addModule_insertScript] @accountid nvarchar(50), @dataDB nvarchar(50), @isdebug bit=0
+as
+	
+	DECLARE #cur CURSOR
+	READ_ONLY
+	FOR	select b.DatabaseName, isnull(b.serverName, @@servername), a.AccountGUID, b.AccountDBGUID
+		from acct a
+			inner join acctdbse b on a.AccountGUID=b.AccountGUID
+		where (b.[version]='3.0') and a.AccountId=@accountid
+
+	declare @sqlstr nvarchar(max)='', @accountGUID uniqueidentifier, @accountDBGUID uniqueidentifier
+	DECLARE @v3DB nvarchar(50), @svr nvarchar(50)
+	OPEN #cur
+
+	FETCH NEXT FROM #cur INTO @v3DB, @svr, @accountGUID, @accountDBGUID
+	WHILE (@@fetch_status <> -1)
+	BEGIN
+		IF (@@fetch_status <> -2)
+		BEGIN
+			select @sqlstr='
+				insert into '+@dataDB+'.dbo.modlinfo (ModuleInfoGUID, ModuleGUID, InfoKey, InfoValue, createdDate, updatedDate)
+				select newid(), b.moduleguid, ''script_''+replace(a.name, b.moduleid+''_'', '''') , 	
+					replace((select text+'''' 
+					from '+@svr+'.'+@v3DB+'.sys.syscomments d
+					where a.object_id=d.id
+					order by colid
+					for xml path('''')
+					), ''&#x0D;'', '''') script, a.modify_date, a.modify_date
+				from '+@svr+'.'+@v3DB+'.sys.objects a
+					inner join '+@svr+'.'+@v3DB+'.sys.schemas s on a.schema_id=s.schema_id
+					inner join '+@dataDB+'.dbo.modl b
+						on b.moduleid+''_''=left(a.name, len(b.moduleid)+1)
+					left join '+@dataDB+'.dbo.modlinfo c
+						on b.moduleguid=c.moduleguid and c.infokey=''script_''+replace(a.name, b.moduleid+''_'', '''')
+				where a.type=''P'' and s.name=''dbo'' and datediff(dd, a.modify_date, isnull(c.updateddate, ''1/1/2000''))<0
+
+				update c
+				set InfoValue= replace((
+					select text+'''' 
+					from '+@svr+'.'+@v3DB+'.sys.syscomments d
+					where a.object_id=d.id
+					order by colid
+					for xml path('''')
+					), ''&#x0D;'', ''''), 
+					updatedDate=a.modify_date
+				--select *
+				from '+@svr+'.'+@v3DB+'.sys.objects a
+					inner join '+@svr+'.'+@v3DB+'.sys.schemas s on a.schema_id=s.schema_id
+					inner join '+@dataDB+'.dbo.modl b
+						on b.moduleid+''_''=left(a.name, len(b.moduleid)+1)
+					inner join '+@dataDB+'.dbo.modlinfo c
+						on b.moduleguid=c.moduleguid and c.infokey=''script_''+replace(a.name, b.moduleid+''_'', '''')
+				where a.type=''P'' and s.name=''dbo'' --and datediff(dd, a.modify_date, isnull(c.updateddate, ''1/1/2000''))<0
+
+
+				--view
+				--insert into '+@dataDB+'.dbo.modl (ModuleGUID, AccountGUID, ModuleID, ModuleDescription, settingMode, AccountDBGUID, 
+				--	ParentModuleGUID, OrderNo, needLogin, ThemePageGUID, ModuleStatusGUID, ModuleGroupGUID, triggerAction, createdDate, updatedDate)
+				--select newid(), @accountGUID, a.name, null, 7, @accountDBGUID, 
+				--	null, 0, 0, null, null, null, null, a.modify_date, a.modify_date
+				--from '+@svr+'.'+@v3DB+'.sys.objects a
+				--	inner join '+@svr+'.'+@v3DB+'.sys.schemas s on a.schema_id=s.schema_id
+				--	left join '+@dataDB+'.dbo.modl b
+				--		on b.moduleid=a.name
+				--where a.type=''V'' and s.name=''dbo'' and (a.name not like ''%ALLT%'' and a.name not like ''%APRV%'')
+				--	and left(a.name,2) in (''Mo'', ''So'', ''To'') and b.moduleguid is null
+
+				--insert into '+@dataDB+'.dbo.modlinfo (ModuleInfoGUID, ModuleGUID, InfoKey, InfoValue, createdDate, updatedDate)
+				--select newid(), b.moduleguid, ''script_view'',
+				--	replace((select text+'''' 
+				--	from '+@svr+'.'+@v3DB+'.sys.syscomments d
+				--	where a.object_id=d.id
+				--	order by colid
+				--	for xml path('''')
+				--	), ''&#x0D;'', '''') script, a.modify_date, a.modify_date
+				--from '+@svr+'.'+@v3DB+'.sys.objects a
+				--	inner join '+@svr+'.'+@v3DB+'.sys.schemas s on a.schema_id=s.schema_id
+				--	inner join '+@dataDB+'.dbo.modl b
+				--		on b.moduleid=a.name
+				--	left join '+@dataDB+'.dbo.modlinfo c
+				--		on b.moduleguid=c.moduleguid and c.infokey=''script_view''
+				--where a.type=''V'' and s.name=''dbo'' and datediff(dd, a.modify_date, isnull(c.updateddate, ''1/1/2000''))<0
+
+			'
+			if @isdebug=1 print @sqlstr
+			exec sp_executesql @sqlstr, N' @accountGUID uniqueidentifier, @accountDBGUID uniqueidentifier', @accountGUID, @accountDBGUID
+
+			set @sqlstr='
+				update c
+				set InfoValue= replace((
+					select text+'''' 
+					from '+@svr+'.'+@v3DB+'.sys.syscomments d
+					where a.object_id=d.id
+					order by colid
+					for xml path('''')
+					), ''&#x0D;'', ''''), 
+					updatedDate=a.modify_date
+				--select *
+				from '+@svr+'.'+@v3DB+'.sys.objects a
+					inner join '+@svr+'.'+@v3DB+'.sys.schemas s on a.schema_id=s.schema_id
+					inner join '+@dataDB+'.dbo.modl b
+						on b.moduleid=a.name
+					inner join '+@dataDB+'.dbo.modlinfo c
+						on b.moduleguid=c.moduleguid and c.infokey=''script_view''
+				where a.type=''V'' and s.name=''dbo'' --and datediff(dd, a.modify_date, isnull(c.updateddate, ''1/1/2000''))<0
+
+				update i
+				set infovalue=replace(i.infovalue, code_old, stuff(code, 2, 1, ''a''))
+				--select i.moduleinfoguid, stuff(code, 2, 1, ''a'') code, code_old, i.infovalue, replace(i.infovalue, code_old, stuff(code, 2, 1, ''a''))
+				from (
+					select x.moduleinfoguid, left(value, charindex('' '', value)-1) code_old, replace(replace(replace(replace(replace(replace(replace(left(value, charindex('' '', value)), ''[dbo].'', ''''), ''[oph].'', ''''), ''oph.'', ''''), ''dbo.'', ''''), ''['', ''''), '']'', ''''), '')'', '''') code
+					from (
+						SELECT moduleinfoguid, LTRIM(RTRIM(replace(replace(replace(Split.a.value(''.'', ''VARCHAR(100)''), char(10), '' ''), char(13), '' ''), char(9), '' ''))) ''Value'' 
+						FROM  
+						(     
+							SELECT moduleinfoguid, CAST (''<M>'' + REPLACE(infovalue+'' --'', ''view '', ''</M><M>'') + ''</M>'' AS XML) AS Data            
+							from '+@dataDB+'.dbo.modlinfo 
+							where infokey=''script_view''
+						) AS A 
+						CROSS APPLY Data.nodes (''/M'') AS Split(a)
+					) x
+					where value not like ''create%'' and value not like ''(%'' and value not like ''%[cm]oprmt%'' 
+				) y
+					inner join '+@dataDB+'.dbo.modlinfo i on y.moduleinfoguid=i.moduleinfoguid
+				where code not like ''%.%'' and isnull(code,'''')<>'''' and code not like ''[cp]%''
+
+			'
+			if @isdebug=1 print @sqlstr
+			exec sp_executesql @sqlstr, N' @accountGUID uniqueidentifier, @accountDBGUID uniqueidentifier', @accountGUID, @accountDBGUID
+		END
+		FETCH NEXT FROM #cur INTO @v3DB, @svr, @accountGUID, @accountDBGUID
+	END
+
+	CLOSE #cur
+	DEALLOCATE #cur
+
+
+
+

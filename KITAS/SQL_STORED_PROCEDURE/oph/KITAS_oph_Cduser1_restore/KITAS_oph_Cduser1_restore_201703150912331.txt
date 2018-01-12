@@ -1,0 +1,7 @@
+CREATE procedure oph.Cduser1_restore
+	@GUID uniqueidentifier, @hostGUID uniqueidentifier
+as --automatic creation by system, you have to remove this comment to customize this procedure
+ 	update Couser1
+	set isDeleted = 0, deletedDate = null, deletedUser = null 
+	where UserGUID = @GUID
+	select '' restored

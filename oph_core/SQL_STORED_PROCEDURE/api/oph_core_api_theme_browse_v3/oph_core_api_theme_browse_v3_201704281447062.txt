@@ -1,0 +1,755 @@
+CREATE procedure [api].[theme_browse_v3] @accountid varchar(50), @dbcore varchar(50), 
+	@hostGUID uniqueidentifier,
+	@code varchar(100), 
+	@sqlFilter varchar(max)='', 
+	@searchText varchar(max)='', 
+	@pgNo int=1, 
+	@nbRows int=10,
+	@sortOrder varchar(max)='', 
+	@stateid varchar(10)=null, 
+	@isdebug int=0
+--WITH ENCRYPTION
+as
+	declare @ver varchar(10), @db varchar(50), @typecode varchar(1), @theme varchar(50)
+	exec gen.getDBInfo @accountid, @dbcore, @code, @ver output, @db output, @typecode output, @theme output
+
+
+	if @sqlfilter !='' 
+		set @sqlFilter = 'and ' +@sqlfilter
+
+	declare @statecode varchar(1)='a'
+	declare @setstatus nvarchar(100)
+	declare @userGUID uniqueidentifier, @accountGUID uniqueidentifier
+
+	select @userGUID=a.userGUID 
+	from userhost a 
+		inner join [user] b on a.userguid=b.userguid
+	where hostguid=@hostguid
+
+	if ISNUMERIC(@stateid)= 0 OR @stateid is null begin
+		set @stateid = null
+		set @setstatus = 'and status is not null '
+	end
+	else begin
+		set @setstatus = 'and status ='+@stateid+' '
+	end
+
+	if @stateid is null
+	begin
+		set @stateid=(
+			select top 1 c.StateID
+			from modl a
+				inner join mstastat c on c.modulestatusguid=a.ModuleStatusGUID
+			where a.ModuleID=@code
+			order by isDefault desc)
+	end
+
+
+	if (convert(int,@stateid) < 400) set @statecode  ='a'
+	else if (convert(int,@stateid) > 499) set @statecode  ='c'
+	else if (convert(int,@stateid) < 500 and convert(int,@stateid) > 399)  set @statecode = 'e'
+	else set @statecode = 'a'
+
+	if @isdebug=1 print 'statecode: ' + @statecode
+
+	declare @acode varchar(14), @tblCode varchar(20)
+	set @acode= left(@code,1)+'a'+substring(@code,3,len(@code)-2)
+	set @tblCode = left(@code,1)+@statecode+substring(@code,3,len(@code)-2)
+	if @isdebug=1 print 'acode: ' + @acode
+	if @isdebug=1 print 'tblCode:' + @tblCode
+
+	declare @totalPages int=0
+	declare @sqlstr nvarchar(max), @sqlpar nvarchar(max), @docNo varchar(50), @refNo varchar(50), @docDate varchar(50), 
+		@formGUID varchar(50),@id nvarchar(50)
+
+	exec [api].[getPrimaryKey] @accountid, @dbcore, @code, @formGUID OUTPUT
+	--exec [api].[getPrimaryCol] @code, 1, @formGUID OUTPUT
+	exec [api].[getPrimaryCol] @accountid, @dbcore, @code, 2, @docDate OUTPUT
+	exec [api].[getPrimaryCol] @accountid, @dbcore, @code, 3, @docNo OUTPUT
+	exec [api].[getPrimaryCol] @accountid, @dbcore, @code, 4, @refNo OUTPUT
+	exec [api].[getPrimaryCol] @accountid, @dbcore, @code, 5, @id OUTPUT
+
+	--Stateid for detail
+	declare @PARNMODLGUID uniqueidentifier, @PARNCODE varchar(20), @PARNSTATE varchar(5)
+	select @PARNMODLGUID = ParentModuleGUID from modl where ModuleID = @code
+
+	if @PARNMODLGUID is NOT NULL AND @typecode = 'T' begin
+		print 'xxx'
+		select @PARNCODE = ModuleID from modl where ModuleGUID = @PARNMODLGUID
+		print @PARNCODE 
+		set @sqlstr = 'select @stats=cast([Status] as varchar(5)) from '+@db+'.dbo.'+STUFF(@PARNCODE,2,1,'o')+' where 1=1 '+@sqlFilter
+		print @sqlstr
+		exec sp_executesql @sqlstr, N'@stats varchar(5) OUTPUT', @stats = @PARNSTATE OUTPUT
+		print 'Parent State: '+@PARNSTATE
+	end
+
+	declare @needStatus bit=0
+	if exists(select * from modl where ModuleID=@code and @typecode='T' and parentmoduleguid is null) 
+	begin
+		set @needStatus=1
+	end
+
+	declare @isMaster bit =0
+	if exists(select * from modl where ModuleID=@code and @typecode='M' and parentmoduleguid is null)
+	begin 
+		set @isMaster = 1
+		if @sortorder =''
+		set @sortorder = @id
+	end
+	
+	print '@needStatus: ' + cast(@needStatus as varchar)
+	print '@isMaster: ' + cast(@isMaster as varchar)
+
+	if @sortorder = ''
+	begin
+		set @sqlstr = 'select @sortorder = orderbystr from '+@db+'.dbo.comodl where moduleid = '''+@code+''''
+		exec sp_executesql @sqlstr, N'@sortorder nvarchar(max) output', @sortorder OUTPUT
+	end
+
+	declare @selectstr1 nvarchar(max),@selectstr2 nvarchar(max)
+	set @sqlstr='
+		set @selectstr1=stuff((
+			select '', ''+colname
+			--select b.* 
+			from '+@db+'.gen.cotabl a
+				inner join '+@db+'.gen.cotablfiel b
+					on a.TableGUID=b.tableGUID
+			where isbrowsable>0 and primarycol is null and a.TableName like '''+@acode+'''
+			--group by colname
+			order by browseorder
+			for xml path('''')),1,2,'''')
+		set @selectstr2=stuff((
+			select '', isnull(cast(''+case when b.combotype=12 then colname+''cbid''+''+'''' - ''''+''+colname+''cbnm'' else colname end +'' as varchar(max)),'''''''') ''+colname
+			--select b.* 
+			from '+@db+'.gen.cotabl a
+				inner join '+@db+'.gen.cotablfiel b
+					on a.TableGUID=b.tableGUID
+			where isbrowsable>0 and primarycol is null and a.TableName like '''+@acode+'''
+			--group by colname
+			order by browseorder
+			for xml path('''')),1,2,'''')'
+	set @sqlpar='@selectstr1 nvarchar(max) OUTPUT, @selectstr2 nvarchar(max) OUTPUT'
+
+	--PRINT 'xx'
+	if @isdebug=1 print @sqlstr
+	if @isdebug=1 print @selectstr1
+	if @isdebug=1 print @selectstr2
+
+	exec sp_executesql @sqlstr, @sqlpar, @selectstr1 OUTPUT, @selectstr2 OUTPUT
+
+	declare @randomText varchar(50)=replace(cast(newid() as varchar(50)), '-', '')
+
+	print 'select1: ' + @selectstr1	
+	print 'select2: ' + @selectstr2
+
+	--mod sortorder andre
+	declare @typesort nvarchar(5)
+	if (SELECT CHARINDEX(' ', @sortorder)) > 0 begin
+		set @typesort = SUBSTRING(@sortorder, CHARINDEX(' ', @sortorder)+1, 4) 
+		set @sortOrder = left(@sortorder, CHARINDEX(' ', @sortorder)-1)
+	end
+	else begin
+		set @typesort = 'asc'
+		set @sortOrder = @sortorder
+	end
+
+	set @sqlstr='
+		select '+@formGUID+' formGUID, '''+@code+''' moduleid '+case when @needStatus=1 then ', Status, b.statename StatusLabel, StatusComment' else ','''' as Status ,'''' as StatusLabel ,'''' as StatusComment' end+'
+		into ##browserows'+@randomText+'
+		from '+@db+'.oph.'+@tblCode+' a
+			inner join modl c
+				on c.moduleid='''+@code+'''			
+			'+case when @needstatus = 1 then '
+			left join mstastat b
+				on b.modulestatusguid=c.modulestatusguid and b.stateid=a.status' else '' end 
+	
+	set @sqlstr=@sqlstr+'
+		select x.*, titlecaption into ##browsefields'+@randomText+' 
+		from (
+			SELECT formGUID, fextKey, fextString, 0 mandatory
+			FROM	
+				(SELECT formGUID,createddate, '+
+					case when @needstatus = 1 then @docNo+', '+@refNo+', '+@docDate+', ' when @isMaster = 1 then iif(@id='','', @id+', ') else '' end +@selectstr1+'
+				FROM (
+					select '+@formGUID+' formGUID ,isnull(cast(createddate as varchar(max)),'''') createddate,'+
+						case when @needstatus=1 then ' 
+						isnull(cast('+@docNo+' as varchar(max)),'''') '+@docNo+', 
+						isnull(cast('+@refNo+' as varchar(max)),'''') '+@refNo+', 
+						isnull(cast('+@docDate+' as varchar(max)),'''') '+@docDate+', ' 
+						when @isMaster = 1 then
+							iif(@id='','', 'isnull(cast('+@id+' as varchar(max)),'''') '+@id+', ')
+						else '' end +
+						@selectstr2+'
+					from '+@db+'.oph.'+@tblCode+'
+					where 1=1 '+case when @needstatus = 1 then ''+@setstatus+'' else '' end+ @sqlfilter+') to'+@code+') p
+					
+					UNPIVOT
+						(fextString FOR fextKey IN 
+							(createddate,'+case when @needstatus=1 then +@docNo+', '+@refNo+', '+@docDate+', ' when @isMaster = 1 then iif(@id='','', @id+', ') else '' end +@selectstr1+')
+					)AS unpvt
+				) x 
+					inner join '+@db+'.gen.cotablfiel b
+						on x.fextKey=b.colname				
+					inner join '+@db+'.gen.cotabl a
+						on a.TableGUID=b.tableGUID
+				where  tablename like '''+@acode+''''
+
+	set @sqlstr=@sqlstr+'
+		update x
+		set mandatory=primarycol
+		--select colname, primarycol 
+		from '+@db+'.gen.cotabl a
+			inner join '+@db+'.gen.cotablfiel b
+				on a.TableGUID=b.tableGUID
+			inner join ##browsefields'+@randomText+' x 
+				on x.fextKey=b.colname
+		where primarycol is not null and tablename like '''+@acode+''''
+
+	set @sqlstr=@sqlstr+'
+		update x
+		set mandatory=1
+		--select colname, primarycol 
+		from '+@db+'.gen.cotabl a
+			inner join '+@db+'.gen.cotablfiel b
+				on a.TableGUID=b.tableGUID
+			inner join ##browsefields'+@randomText+' x 
+				on x.fextKey=b.colname			
+		where b.colname like''Status%'' and tablename like '''+@acode+''''
+
+	set @sqlstr=@sqlstr+'
+		delete from ##browsefields'+@randomText+'  where formguid not in(
+			select distinct formguid From ##browsefields'+@randomText+'  where 1=1 and  (fextstring  like ''%'+@searchText+'%'' ))'
+
+	set @sqlstr=@sqlstr+'
+		delete from ##browserows'+@randomText+' where formguid not in(
+			select distinct formguid From ##browsefields'+@randomText+'  where 1=1 and  (fextstring  like ''%'+@searchText+'%''))
+		
+			--select * from ##browserows'+@randomText+'
+			--select * from ##browsefields'+@randomText+'
+
+			--drop table ##browserows'+@randomText+'
+			--drop table ##browsefields'+@randomText+'
+
+			'+case when @sortorder !='' and not(@sortorder is null) 
+				then 'select @isnumeric = isnumeric(fextstring) from ##browsefields'+@randomText+' where fextkey='''+@sortorder+'''' else '' end 
+
+	if @isdebug=1 print @sqlstr
+	
+	declare @isnumeric bit =0
+
+	declare @bl api.browseList, @bfl api.browseFieldList
+	set @sqlpar=''--@bl as api.browseList OUTPUT, @bfl as api.browseFieldList OUTPUT'
+
+	if @isdebug=1 print @sqlstr
+
+	exec sp_executesql @sqlstr,N'@isnumeric bit output',@isnumeric output --, @sqlpar--, @bl OUTPUT, @bfl OUTPUT
+
+	set @sqlstr = 'select @TotalRows = count(*) from ##browserows'+@randomText+''
+
+	declare @TotalRows int
+
+	exec sp_executesql @sqlstr,N'@TotalRows int output',@TotalRows output
+
+	set @sqlstr = 
+	case when @sortorder ='' or @sortorder is null then 'select RN as ordernumber,a.* from ##browserows'+@randomText+ ' as a join (select formguid,Rn from (select row_number() over(order by convert(datetime,fextstring) desc) as RN,formguid from (select fextstring as fextstring,formguid from ##browsefields'+@randomText+' where fextkey=''createddate'') as x )as y where RN>'+convert(nvarchar(max),(@pgNo-1)*@nbRows)+' and RN<='+convert(nvarchar(max),((@pgNo-1)*@nbRows)+@nbRows)+') as b on a.formguid = b.formguid'
+	else 'select RN as ordernumber,
+					a.* 
+			from ##browserows'+@randomText+ ' as a 
+			join (select formguid,Rn 
+						from (select row_number() over(order by '+case when @isnumeric = 1 then 'convert(money,fextstring) 'else 'fextstring ' end +@typesort+') as RN,
+									formguid 
+							from (select fextstring as fextstring,formguid 
+									from ##browsefields'+@randomText+' 
+									where fextkey='''+@sortorder+''') as x )
+							as y 
+						where RN>'+convert(nvarchar(max),(@pgNo-1)*@nbRows)+' and RN<='+convert(nvarchar(max),((@pgNo-1)*@nbRows)+@nbRows)+') 
+						as b 
+			on a.formguid = b.formguid'
+	end
+	if @isdebug=1 print @sqlstr
+
+	print 'xx'
+
+	insert into @bl
+	exec sp_executesql @sqlstr
+	
+	print 'xxx'
+	if @isdebug=1 select * from @bl
+	
+	
+	--set @sqlstr = 'select newid(),a.* from ##browsefields'+@randomText+ ' as a join (select formguid from (select row_number() over(order by formguid) as RN,formguid from (select distinct formguid from ##browsefields'+@randomText+')as x ) as y where RN>'+convert(nvarchar(max),(@pgNo-1)*@nbRows)+' and RN<='+convert(nvarchar(max),((@pgNo-1)*@nbRows)+@nbRows)+') as b on a.formguid = b.formguid'
+	set @sqlstr = 'select newid(),a.* from ##browsefields'+@randomText+' a where formguid in(select formguid from @bl)'
+	if @isdebug=1 print @sqlstr
+
+	insert into @bfl
+	exec sp_executesql @sqlstr,N'@bl api.browseList readonly',@bl
+
+		if @isdebug=1 select * from @bfl order by formguid asc
+		if @isdebug=1 select * from @bl order by formguid asc
+
+	--untuk header by andre
+	declare @headers nvarchar(max)
+	set @headers = '
+	select colname,  case when PrimaryCol is not null then 1 else 0 end [mandatory], BrowseColWidth, titlecaption, browseorder, browseColDigit, BrowseColAlign
+	from '+@db+'.gen.cotabl a inner join '+@db+'.gen.cotablfiel b on b.tableGUID = a.tableGUID
+	where a.TableName like '''+@acode+'''
+		and isBrowsable = 1
+	order by BrowseOrder asc'
+		
+
+	if OBJECT_ID('tempdb..#headers') is not null begin
+		drop table #headers
+	end
+	create table #headers (colname nvarchar(30), mandatory int, browsecolwidth int, titlecaption nvarchar(50),browseorder int, browseColDigit int, BrowseColAlign int)
+
+	insert into #headers
+	exec (@headers)
+
+	declare @browsexml xml
+	select @browsexml = 
+		--info
+		--<info>
+		--  <code>VEND</code>
+		--  <description>New Vendor Request</description>
+		--  <state code="0">DRAFT</state>
+		--  <searchText />
+		--  <nbRows>10</nbRows>
+		--  <pageNo>1</pageNo>
+		--  <nbPages>1</nbPages>
+		(select 
+		(select moduleid code, ModuleDescription description, --@searchText searchText, @pgNo pageNo, @nbRows nbRows, @totalPages nbPages,
+		--permission
+		--  <permission>
+		--	<allowAdd>1</allowAdd>
+		--	<allowEdit>1</allowEdit>
+		--	<allowDelete>1</allowDelete>
+		--	<allowWipe>1</allowWipe>
+		--	<allowArchieve>1</allowArchieve>
+		--	<allowBatchInsert>1</allowBatchInsert>
+		--  </permission>
+			'' permission, 
+		--states
+		--  <states>
+		--	<state code="100" name="Pending">
+		--	  <substates>
+		--		<substate code="0">Draft</substate>
+		--		<substate code="100">On Approval</substate>
+		--		<substate code="300">Rejected</substate>
+		--		<substate code="399">Pending Release</substate>
+		--	  </substates>
+		--	</state>
+		--	<state code="400" name="Approved">
+		--	  <substates>
+		--		<substate code="400">Approved</substate>
+		--	  </substates>
+		--	</state>
+		--	<state code="500" name="Closed">
+		--	  <substates>
+		--		<substate code="500">Closed</substate>
+		--	  </substates>
+		--	</state>
+		--	<state code="999" name="Deleted">
+		--	  <substates>
+		--		<substate code="999">Deleted</substate>
+		--	  </substates>
+		--	</state>
+		--  </states>
+			(
+				select top 100 stata.statecode as '@code',statedesc as '@name',(
+					select top 100 stateid as '@code',statename+''  
+					--select * 
+					from mstastat statb
+					where StateCode = stata.StateCode	
+						and modl.ModuleStatusGUID=statb.moduleStatusguid 
+					order by stateid
+					for xml path('substate'),type)  
+				from (
+					select distinct statecode, modulestatusguid, statedesc 
+					from mstastat 
+					where modl.moduleStatusguid=mstastat.moduleStatusguid
+					) as stata
+				order by statecode
+				for xml path('state'),type
+			) as states,
+			isnull(@nbRows,0) nbRows,
+			isnull(@pgNo,0) pageNo,
+			isnull((@totalrows/@nbrows) + case when @totalrows % @nbrows >0 then 1 else 0 end,0) as nbPages,
+			@TotalRows as TotalRows,
+			(	select c.StateCode '@stateCode', c.StateDesc '@stateName', c.StateID '@substateCode', c.StateName '@substateName'
+				from modl a
+					inner join mstastat c on a.modulestatusguid=c.modulestatusguid
+				where moduleid=@code and c.stateid=isNULL(@PARNSTATE, @stateid)
+				for xml path('curState'), type) 
+		--select *
+		from modl 
+		where moduleid=@code
+		for xml path(''), elements, type
+			) info, 
+		(select  colname '@fieldname', mandatory '@mandatory', BrowseColWidth '@width', titlecaption from #headers
+			for xml path('column'), elements, type)
+			header
+		,
+		--</info>
+		--columns
+		--<columns>
+		--  <column fieldName="DocNo" mandatory="1" width="80">Doc No</column>
+		--  <column fieldName="RefNo" mandatory="1" width="80">Ref No</column>
+		--  <column fieldName="DocDate" mandatory="1" width="80">Date</column>
+		--  <column fieldName="VendorNo" mandatory="0">Vendor No</column>
+		--  <column fieldName="VendorName" mandatory="0">Vendor Name</column>
+		--  <column fieldName="PurposeDescription" mandatory="0">Purpose Description</column>
+
+		--case when @needStatus = 1 then 
+		--(select top 1000 fieldname '@fieldName', mandatory '@mandatory', width '@width', docStatus '@docStatus', titleCaption+''  
+		--from (
+		--	select 'DocNo' fieldName, 1 mandatory, 80 width, -4 colOrder, 'No' titleCaption, 0 docStatus union all
+		--	select 'RefNo', 1, 80,-3, 'Ref No', 0 union all
+		--	select 'DocDate', 1, 120, -2, 'Date', 0 union all
+		----  <column fieldName="docStatus" mandatory="0" docStatus="1" width="80" text-align="center">Status</column>
+		--	select 'DocStatus', 2, 80, -1, 'Status', 1 from modl where moduleid=@code and settingmode=0 union all
+		--	select colKey, 0, 0, colOrder, titleCaption, 0  
+		--	from modlcolm a 
+		--		inner join modl b
+		--			on a.ModuleGUID=b.ModuleGUID
+		--	where b.moduleid=@code) x
+		--order by colOrder
+		--for xml path('column'), elements, type) 
+		
+		--when @isMaster = 1 then 
+		--(select top 1000 fieldname '@fieldName', mandatory '@mandatory', width '@width', docStatus '@docStatus', titleCaption+''  
+		--from (
+		--	select 'id' fieldName, 1 mandatory, 80 width, -4 colOrder, 'ID' titleCaption, 0 docStatus
+		--	from modlcolm a 
+		--		inner join modl b
+		--			on a.ModuleGUID=b.ModuleGUID
+		--	where b.moduleid=@code) x
+		--order by colOrder
+		--for xml path('column'), elements, type) 
+
+		--else '' end 'columns', 
+
+		--</columns>
+		--rows
+		--<rows>
+		--  <row code="VEND" GUID="CF549076-2773-4FF8-8129-230B6263479C" edit="1" delete="1" wipe="0" restore="0" force="0" reopen="0" approve="0" reject="0">
+		(select moduleid '@code', formGUID '@GUID', 0 '@edit', 0 '@delete', 0 '@wipe', 0 '@restore', 0 '@force', 0 '@reopen', 0 '@approve', 0 '@reject', 
+		--    <fields>
+		--	    <field caption="Doc No" mandatory="1">VQ10B0017</field>
+		--	    <field caption="Ref No" mandatory="1">VQ10B0007</field>
+		--	    <field caption="Doc Date" mandatory="1">01/01/2015</field>
+		--	    <field caption="Vendor No">VENDORID</field>
+		--	    <field caption="Vendor Name">PT VENDOR NAME</field>
+		--	    <field caption="Purpose Description">THIS IS COMMENT</field>
+		--    </fields>
+			(select top 20 formKey '@caption',caption '@title', case when y.mandatory=0 then 0 else 1 end '@mandatory', browseColDigit '@digit', browseColAlign '@align'
+			, formValue+'' 
+			from @bfl y join #headers h on y.formKey = h.colname
+			where y.formGUID=x.formGUID and y.mandatory<>1
+			order by h.browseorder
+			for xml path('field'), elements, type) fields, 
+			--<docStatus labelColor="success" title="RELEASE">Open/Draft. You cannot generate any Vendor since you don't have any approval level above you. Please make sure y</docStatus>
+			(select case status when 0 then 'info' when 100 then 'warning' when 300 then 'danger' when 400 then 'success' when 500 then 'info' end '@labelColor', 
+				statusLabel '@title',
+				statusComment+'' 
+			from @bl y
+			where y.formGUID=x.formGUID
+			for xml path('docStatus'), elements, type), 
+		--	  <approvals>
+		--      <approval></approval>
+		--    </approvals>
+			'' approvals,
+		--	  <talks>
+		--	    <talk GUID="555209CB-E2E4-47C1-8B09-4025D8DE2349">
+		--		  <Message>88</Message>
+		--		  <userid>Sam</userid>
+		--		  <username>samuel</username>
+		--		  <sentdate>05 Dec 2016</sentdate>
+		--	    </talk>
+		--	    <talk GUID="EF39B46F-4A5F-425D-AF8B-E6C80C39B765">
+		--		  <Message>0000</Message>
+		--		  <userid>Sam</userid>
+		--		  <username>samuel</username>
+		--		  <sentdate>05 Dec 2016</sentdate>
+		--	    </talk>
+		--	  </talks>
+			'' talks
+		from @bl x
+		order by ordernumber
+		for xml path('row'), elements, type) content
+		--  </row>
+		--</rows>
+		for xml path(''), elements, type)
+
+	--select @browsexml
+	
+	print 'theme_header'
+
+	declare @xmlheader as xml
+	exec api.[theme_header] @accountid, @dbcore, @hostguid, @code, null, null, 0, @xmlheader output
+
+	
+	select (
+		select (
+	--info
+	--<info>
+			select (
+	--account
+		--     <account>L'OR?AL</account>
+				select @accountid account 
+				) account, 
+	--themeFolder
+		--     <themeFolder>themeONE</themeFolder>
+				@theme 'themeFolder',
+	--title
+		--     <title></title>
+				(select ModuleDescription from modl where moduleid=@code) title, 
+	--code
+		--     <code>
+		--       <id>HRRC</id>
+		--       <name>REQUEST FOR RECRUITMENT</name>
+		--     </code>
+
+				(
+				select moduleid id, ModuleDescription name, @typecode as settingMode 
+				from modl 
+				where moduleid=@code for xml path(''), elements, type) code, 
+	--user
+		--     <user>
+		--       <userId>Sam</userId>
+		--       <userName>Samuel Surya</userName>
+		--       <userURL></userURL>
+		--       <oriUserId />
+		--       <oriUserName />
+		--       <hostGUID>3394C92E-C9C2-4F29-8889-E705A832C383</hostGUID>
+		--     </user>
+				(select userId, userName, '' userURL, hostGUID 
+				from userhost a
+					inner join [user] b
+						on a.userguid=b.userguid
+				where hostguid=@hostGUID
+				for xml path(''), elements, type) [user]	 
+			for xml path(''), elements, type
+			) info, 
+	--menus
+	--<menus>
+	--  <menu code="sidebar">
+	--    <submenus>
+	--      <submenu mode="label">
+	--        <caption>MAIN NAVIGATION</caption>
+	--      </submenu>
+	--      <submenu GUID="">
+	--        <caption>Dashboard</caption>
+	--        <pageURL>#</pageURL>
+	--        <icon>
+	--          <fa>fa-dashboard</fa>
+	--        </icon>
+	--      </submenu>
+	--      <submenu GUID="" mode="treeroot">
+	--        <caption>Modules</caption>
+	--        <pageURL>#</pageURL>
+	--        <icon>
+	--          <fa>fa-tasks</fa>
+	--        </icon>
+	--        <submenus>
+	--          <submenu GUID="" mode="treeview">
+	--            <mode>treeview</mode>
+	--            <caption>Inventory</caption>
+	--            <pageURL>#</pageURL>
+	--            <icon>
+	--              <fa></fa>
+	--            </icon>
+	--            <submenus>
+	--              <submenu GUID="" mode="treeview">
+	--                <caption>Consignment P&#038;D</caption>
+	--                <pageURL>#</pageURL>
+	--                <icon>
+	--                  <fa></fa>
+	--                </icon>
+	--              </submenu>
+	--              <submenu GUID="" mode="treeview">
+	--                <caption>Direct P &#038; D</caption>
+	--                <pageURL>#</pageURL>
+	--                <icon>
+	--                  <fa></fa>
+	--                </icon>
+	--              </submenu>
+	--              <submenu GUID="" mode="treeview">
+	--                <caption>PR/PVL Purchase</caption>
+	--                <pageURL>#</pageURL>
+	--                <icon>
+	--                  <fa></fa>
+	--                </icon>
+	--              </submenu>
+	--            </submenus>
+	--          </submenu>
+	--          <submenu GUID="" mode="treeview">
+	--            <mode>treeview</mode>
+	--            <caption>SAP Validation</caption>
+	--            <pageURL>#</pageURL>
+	--            <icon>
+	--              <fa></fa>
+	--            </icon>
+	--            <submenus>
+	--              <submenu GUID="" mode="treeview">
+	--                <caption>New Vendor Request</caption>
+	--                <pageURL>#</pageURL>
+	--                <icon>
+	--                  <fa></fa>
+	--                </icon>
+	--              </submenu>
+	--            </submenus>
+	--          </submenu>
+	--        </submenus>
+	--      </submenu>
+	--      <submenu GUID="" mode="treeroot">
+	--        <caption>Reports</caption>
+	--        <pageURL>#</pageURL>
+	--        <icon>
+	--          <fa>fa-book</fa>
+	--        </icon>
+	--      </submenu>
+	--      <submenu GUID="">
+	--        <caption>Settings</caption>
+	--        <pageURL>#</pageURL>
+	--        <icon>
+	--          <fa>fa-cog</fa>
+	--        </icon>
+	--      </submenu>
+	--    </submenus>
+	--  </menu>
+	--  <menu code="newdocument">
+	--    <submenus>
+	--      <submenu GUID="69073C10-AD35-4989-80E8-07B676E62D2E">
+	--        <code>SAPV</code>
+	--        <caption>SAP Validation</caption>
+	--        <pageURL>mode=browse&code=VEND&ndb=1&mg=SAPV&option=4&fact=</pageURL>
+	--        <nbNew>1</nbNew>
+	--        <lvl>10</lvl>
+	--      </submenu>
+	--      <submenu GUID="2C4900AA-4F8F-4E1C-B938-21F735C8CC8B">
+	--        <code>FXAS</code>
+	--        <caption>Fixed Asset</caption>
+	--        <pageURL>mode=browse&code=TaFASC&ndb=1&mg=FSAX&acc=EF_FXAS&option=4&fact=</pageURL>
+	--        <nbNew>0</nbNew>
+	--        <lvl>10</lvl>
+	--      </submenu>
+	--      <submenu GUID="5723268A-98CE-47B7-A005-47105750CA13">
+	--        <code>EHRD</code>
+	--        <caption>Human Resources</caption>
+	--        <pageURL>mode=browse&code=taHRRR&ndb=1&mg=EHRD&acc=EF_EHRD&option=4&fact=</pageURL>
+	--        <nbNew>0</nbNew>
+	--        <lvl>10</lvl>
+	--      </submenu>
+	--      <submenu GUID="24E727CF-29ED-4968-A7C4-8DF5BEE2ED8A">
+	--        <code>ITEQ</code>
+	--        <caption>IT Equipment</caption>
+	--        <pageURL>mode=browse&code=taIERQ&ndb=1&mg=ITEQ&acc=EF_ITEQ&option=4&fact=</pageURL>
+	--        <nbNew>0</nbNew>
+	--        <lvl>10</lvl>
+	--      </submenu>
+	--      <submenu GUID="C96F2DB4-C7CE-444F-91BC-F45ACD31A45A">
+	--        <code>STRD</code>
+	--        <caption>STRAD Scientific</caption>
+	--        <pageURL>mode=browse&code=MaPAD9&ndb=1&mg=STRD&acc=EF_STRD&option=4&fact=</pageURL>
+	--        <nbNew>0</nbNew>
+	--        <lvl>10</lvl>
+	--      </submenu>
+	--      <submenu GUID="29C52B16-622A-42E0-B98B-F9C4EED5C261">
+	--        <code>PROJ</code>
+	--        <caption>Project</caption>
+	--        <pageURL>mode=browse&code=TaPREQ&ndb=1&mg=PROJ&acc=EF_PROJ&option=4&fact=</pageURL>
+	--        <nbNew>0</nbNew>
+	--        <lvl>10</lvl>
+	--      </submenu>
+	--      <submenu GUID="4E2BFE53-00D7-450C-9440-BC1D1790542B">
+	--        <code>FINA</code>
+	--        <caption>Finance</caption>
+	--        <pageURL>mode=browse&code=TaDEDU&ndb=1&mg=FINA&acc=EF_FINA&option=4&fact=</pageURL>
+	--        <nbNew>0</nbNew>
+	--        <lvl>10</lvl>
+	--      </submenu>
+	--    </submenus>
+	--  </menu>
+	--  <menu code="primary">
+	--    <submenus>
+	--      <submenu>
+	--        <caption>xx</caption>
+	--        <pageURL>#</pageURL>
+	--        <submenus>
+	--          <submenu GUID="">
+	--            <caption>My Profile</caption>
+	--            <pageURL>#</pageURL>
+	--          </submenu>
+	--          <submenu GUID="">
+	--            <caption>Account</caption>
+	--            <pageURL>#</pageURL>
+	--          </submenu>
+	--          <submenu GUID="">
+	--            <caption>Log Off</caption>
+	--            <pageURL>#</pageURL>
+	--          </submenu>
+	--        </submenus>
+	--      </submenu>
+	--    </submenus>
+	--  </menu>
+	--  <menu code="footer">
+	--    <submenus>
+	--      <submenu>
+	--        <caption>About Us</caption>
+	--        <pageURL>#</pageURL>
+	--      </submenu>
+	--      <submenu>
+	--        <caption>Help</caption>
+	--        <pageURL>#</pageURL>
+	--      </submenu>
+	--    </submenus>
+	--  </menu>
+	--</menus>
+			(select menucode '@code', 
+				--submenus
+				(select [type] '@type', Tag '@tag', SubMenuDescription [MenuDescription],  caption,  url pageURL, icon_fa fa, icon_url icon_url, 
+					--submenus
+					(select [type] '@type', Tag '@tag', SubMenuDescription [MenuDescription], caption,  url pageURL, icon_fa fa, icon_url icon_url,
+						--submenus
+						(select [type] '@type', Tag '@tag', SubMenuDescription [MenuDescription], caption,  url pageURL, icon_fa fa, icon_url icon_url
+						from menusmnu d
+						where d.uppersubmenuGUID=c.MenudetailGUID
+						order by d.OrderNo, d.caption
+						for xml path('submenu'), elements, type) submenus
+					from menusmnu c
+					where c.uppersubmenuGUID=b.MenudetailGUID
+					order by c.OrderNo, c.caption
+					for xml path('submenu'), elements, type) submenus
+				from menusmnu b
+				where b.menuGUID=a.MenuGUID and b.upperSubmenuGUID is null
+				order by OrderNo, b.caption
+				for xml path('submenu'), elements, type) submenus
+			from menu a
+				--inner join modl b
+					--on a.AccountGUID=b.AccountGUID
+			--where moduleid=@code
+			order by a.MenuDescription
+			for xml path('menu'), elements, type) menus
+		for xml path(''), elements, type
+		--   </info>
+		) header,
+		(select '' dashboard, @browsexml [browse], '' form
+		for xml path('bodyContent'), elements, type) body,
+		'' footer
+	for xml path('sqroot')
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

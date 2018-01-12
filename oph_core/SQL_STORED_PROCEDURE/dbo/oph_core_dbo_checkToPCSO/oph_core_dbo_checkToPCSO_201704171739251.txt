@@ -1,0 +1,33 @@
+
+
+
+
+
+
+CREATE PROCEDURE [dbo].[checkToPCSO] @hostGUID uniqueidentifier, @cartID uniqueidentifier
+--WITH ENCRYPTION
+as
+
+declare @carolGUID uniqueidentifier, @address nvarchar(200), @carolid nvarchar(20)
+select @carolGUID = a.userGUID from [userhost] a 
+inner join [user] b on b.userGUID = a.userGUID
+where a.hostGUID = @hostGUID
+
+select @carolid = carolID from kitas.dbo.couser where userGUID = @carolGUID
+
+select @address = CustomerAddress from kitas.dbo.MoCUS1 where CarolId = @carolid
+ 
+if exists(select 1 from kitas.dbo.toPCSO where PCSOGUID = @cartID) begin
+	update kitas.dbo.toPCSO
+	set carolGUID = @carolGUID,
+		address = @address,
+		paymGUID = '5FE39332-DAB1-4BAA-B9BD-2A664BF22D84'
+	where pcsoGUID = @cartID
+end
+
+
+
+
+
+
+

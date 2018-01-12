@@ -1,0 +1,29 @@
+CREATE TRIGGER [dbo].[tg_acctdbse_updatedDate] 
+   ON  [dbo].[acctdbse]
+   AFTER INSERT, UPDATE
+AS 
+BEGIN
+	set nocount on 
+	if exists(select * from inserted) or exists(select * from deleted) begin
+		declare @guid nvarchar(max)=(
+			select cast(accountdbguid as nvarchar(50))+'*'
+			from inserted
+			for xml path(''))
+
+		update x
+		set updatedDate=getdate()
+		--select * 
+		from inserted i inner join deleted d on i.accountdbguid=d.accountdbguid
+			inner join acctdbse x on x.accountdbguid=i.accountdbguid
+		where isnull(i.updatedDate, '1/1/2000') = isnull(d.updatedDate, '1/1/2000')
+
+	
+		exec gen.timestamp_modifiedDate
+
+		declare @c nvarchar(max)='update: modl, '+@GUID
+
+		INSERT INTO evnt (EventGUID, AccountGUID, moduleGUID, DocGUID, timeRecord, Comment, CreatedDate, CreatedUser)
+		select newid(), null, null, null, 0, @c, getdate(), null
+	end
+END
+

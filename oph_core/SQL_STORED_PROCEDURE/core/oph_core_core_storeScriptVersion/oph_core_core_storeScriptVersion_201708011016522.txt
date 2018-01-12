@@ -1,0 +1,6 @@
+CREATE procedure [core].[storeScriptVersion] @isdebug bit=0
+--WITH ENCRYPTION
+as
+	exec core.[storeScriptVersion_OPH] @isdebug 
+	--exec [storeScriptVersion_Accounts] @isdebug 
+

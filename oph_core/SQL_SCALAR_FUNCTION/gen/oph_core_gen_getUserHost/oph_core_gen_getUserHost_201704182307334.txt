@@ -1,0 +1,12 @@
+CREATE FUNCTION [gen].[getUserHost](@HostGUID uniqueidentifier = NULL)
+RETURNS uniqueidentifier
+--WITH ENCRYPTION
+as	--CreatedBy eLs ON Dec, 2016
+BEGIN
+	Declare @UserGUID uniqueidentifier
+	select @UserGUID = UserGUID from [userhost] where HostGUID = @HostGUID
+	return @UserGUID
+END
+
+
+

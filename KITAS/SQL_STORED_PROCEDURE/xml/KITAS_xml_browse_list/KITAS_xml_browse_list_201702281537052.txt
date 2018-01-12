@@ -1,0 +1,269 @@
+CREATE PROCEDURE [xml].[browse_list] 
+	@hostGUID uniqueidentifier, @tablename varchar(100), @sqlFilter varchar(max), @searchText varchar(max), @pgNo int=1, @nbRows int=10, @sortOrder varchar(max), @debug int=0 
+as	--ModifiedBy eLs ON Oct, 2016
+
+--declare
+--	@hostGUID uniqueidentifier = gen.gethost('OPH', null), @tablename varchar(100) = 'CaUGRP', 
+--	@sqlFilter varchar(max) = '', 
+--	@searchText varchar(max) = '', @pgNo int=1, @nbRows int=20, @sortOrder varchar(max) = '', @debug int=1
+
+	declare 
+		@xhead varchar(max), @xcontent varchar(max), @xfilter varchar(max), @xinfo varchar(max), @xUplBrowse  varchar(max), 
+		@xapproval varchar(max), @xtalk varchar(max), @x2 varchar(max), @skinFolder varchar(100),@tablenameHead varchar(100),
+		@status varchar(100), @tablename3 varchar(100), @userGUID uniqueidentifier, @xstatuscomment varchar(max),
+		@ModuleGUID uniqueidentifier,@userGUID1 uniqueidentifier,@UGroupName  varchar(100),@UGroup int,@msg nvarchar(1000)
+
+	declare 
+		@allowAdd bit, @allowBrowse bit, @allowEdit bit, @allowDelete bit, @allowWipe bit,@otablename nvarchar(100), 
+		@status3 varchar(100), @xRptBrowse varchar(max), @allowForce bit, @isDeletedTable bit, @allowShowAttach bit,
+		@atablename nvarchar(100), @UGroupGUID uniqueidentifier, @y nvarchar(100)
+
+	declare @forwardModule nvarchar(100), @orderByStr nvarchar(100), @ModuleGroupGUID uniqueidentifier
+		
+	--set mode
+	declare @mode int
+	if substring(@tablename,2,1)='d' set @isDeletedTable=1
+	else set @mode = 0
+
+	--set tablename
+	set @atablename= left(@tablename,1)+ 'a' +right(@tablename,len(@tablename)-2 )	
+	set @tablenameHead= SUBSTRING(@atablename,1,6) 
+	set @tablename3=SUBSTRING(@atablename,1,1)
+	set @otablename=left(@tablename,1)+ 'o' +right(@tablename, len(@tablename)-2 )
+
+	--skin
+	select @skinFolder=c.skinFolder, @userGUID=a.userGUID
+	from CoUSER a
+		inner join CoUSERHOST b
+			on a.userguid=b.userguid
+		inner join coSKIN c
+			on a.skinguid=c.skinguid
+		inner join coUGRPUSER d
+			on d.MemberUserGUID=a.UserGUID
+	where b.hostguid=@hostguid 
+
+	--check permission
+	exec gen.verifyAuth @atablename, @hostGUID ,'', @allowadd output , @allowBrowse output, @allowEdit output, 
+		@allowDelete output, @allowWipe output, @allowForce output, @allowShowAttach output, @UGroupGUID output
+
+	declare @allowExport bit
+	if len(@tablename)&gt;6
+	begin
+		select @allowExport=AllowExport 
+		from comodl a
+			inner join oph.CaMODLSMOD b
+				on a.moduleguid=b.ModuleGUID
+		where moduleid = @tablenameHead
+			and b.SubModuleGUIDcbId=@atablename
+	end
+	
+	--Authority for table browse 
+	if isnull(@allowBrowse,0) = 0 begin 	
+		select 'You do not have authority for table browse!'
+		return
+	end
+	else if not exists(
+		select * from gen.coTABL a
+			inner join gen.coTABLFIEL b
+				on a.TableGUID=b.tableGUID
+		where tablename=@atablename and isBrowsable &gt; 0
+	) begin
+		select 'You haven''t create browse list. Please ask administrator.'
+		return
+	end
+		
+	select @ModuleGUID=ModuleGUID, @orderByStr=OrderByStr from CoMODL where moduleid=@atablename
+
+	if @sortOrder='' set @sortOrder = @orderByStr
+
+	declare @b varchar(max), @w varchar(max)
+	exec [gen].[procfields_browse] @atablename, @b output, @w output
+
+	set @w = IIF(isNULL(@searchText, '') = '', '', replace(@w, '''''%''''', '''%'''))
+	set @w = IIF(@w = '', @sqlfilter, @w + IIF(@sqlfilter = '', '', ' and ' + @sqlfilter))
+	
+	declare @aprvProtect varchar(MAX) = ''
+	select @aprvProtect += ' and ' + SqlFilter  from CoAPPR a
+		inner join CoAPPRLVEL b ON a.ApprovalGUID = b.ApprovalGUID
+		inner join CoUGRPUSER1 c ON b.ApprovalGroupGUID = c.UGroupGUID AND Lvl = 0 AND LEN(SqlFilter) &gt; 1
+	where ModuleGUID = @ModuleGUID AND MemberUserGUID = @userGUID
+	group by SqlFilter
+
+	set @aprvProtect = STUFF(@aprvProtect, 1, 5, '(') + ')'
+
+	if @aprvProtect is NOT NULL
+		set @w = IIF(LEN(@w) &gt; 1, ' and ' + @aprvProtect, @aprvProtect)
+
+	--fieldkey
+	declare @fieldKey varchar(100)
+	declare @minCol int
+	select @minCol=min(b.colorder)
+	from gen.coTABL a
+		inner join gen.coTABLFIEL b
+			on a.TableGUID=b.tableGUID
+	where tablename=@atablename 
+
+	select @fieldKey=ColName
+	--select *
+	from gen.coTABL a
+		inner join gen.coTABLFIEL b
+			on a.TableGUID=b.tableGUID
+	where tablename=@atablename and b.colorder=@minCol
+
+	--fieldkey parent table
+	declare @fieldKey1 varchar(100)
+	select @minCol=min(b.colorder)
+	from gen.coTABL a
+		inner join gen.coTABLFIEL b
+			on a.TableGUID=b.tableGUID
+	where tablename=@tablenameHead 
+
+	select @fieldKey1=ColName
+	from gen.coTABL a
+		inner join gen.coTABLFIEL b
+			on a.TableGUID=b.tableGUID
+	where tablename=@tablenameHead and b.colorder=@mincol
+	
+	select @ModuleGroupGUID=a.ModuleGroupGUID from comodgmodl a
+		left join comodl b
+			on b.ModuleGUID=a.ModuleGUID
+	where ModuleId=@tablenameHead
+				
+	--xinfo ModifiedBy eLs!
+	set @xinfo= 'select
+		case when isnull(b.moduleid,'''')='''' then null else b.moduleid end ''tableName'',
+		case when isnull(b.moduleDescription,'''')='''' then null else b.moduleDescription end ''description'',' + 
+		IIF(@searchText = '', '', ''''+@searchText+''' ''searchText'',') +''''+@skinfolder+''' ''skinFolder'',
+		'''+cast(@nbRows as varchar(10))+''' ''nbRows'', '''+cast(@pgNo as varchar(10))+''' ''pageNo'', cast(@nbPages as varchar(10)) ''nbPages'','+
+		cast(isnull(@allowAdd,0) as varchar(1))+' ''permission/allowAdd'','+
+		cast(isnull(@allowEdit,0) as varchar(1))+' ''permission/allowEdit'','+
+		cast(isnull(@allowDelete,0) as varchar(1))+' ''permission/allowDelete'','+
+		cast(isnull(@allowWipe,0) as varchar(1))+' ''permission/allowWipe'','+ 
+		cast(isnull(@allowForce,0) as varchar(1))+' ''permission/allowArchieve'','+ 
+		cast(isnull(@allowShowAttach,0) as varchar(1))+' ''permission/allowShowAttach'','+
+		cast(isnull(@allowExport,0) as varchar(1))+' ''permission/allowExport'','''+
+		isnull(cast(@ModuleGroupGUID as varchar(50)), '')+''' ''permission/ModuleGroup'','+
+		cast(isnull(@UGroup,0) as varchar(1))+' ''permission/Group''
+		from coMODL b 
+		where b.moduleid='''+@atablename+''' 
+		for xml path(''''), type'
+
+	--xhead 
+	set @xhead = 'select 
+			colname ''column/@fieldName'',
+			case when isnull(titleShort,'''')&lt;&gt;'''' then titleShort
+				when isnull(titleCaption,'''')&lt;&gt;'''' then titleCaption
+					else colname end ''column/caption'',
+			browseColWidth ''column/width'', browseColAlign ''column/align''			
+		from gen.coTABL a
+			inner join gen.coTABLFIEL b on a.TableGUID=b.tableGUID
+		where tablename='''+@atablename+''' and isBrowsable &gt; 0
+		order by BrowseOrder
+		for xml path(''''), type'
+
+	--serialize content fields
+	declare @xserial xml
+	select @xserial =(
+		select
+			case 
+				when isnull(comboType,0) in (1,2,3,10,12)
+					then ''''+colname+''' as ''field/autosuggestbox/@name'', '+colname+' ''field/autosuggestbox/value/*'', '
+				when isnull(comboType,0) in (4,40,41,42,43,44,45)
+					then ''''+colname+''' as ''field/datebox/@name'', '+colname+' ''field/datebox/value/*'', '+convert(varchar(4),comboType)+' ''field/datebox/type/*'', '
+				when isnull(comboType,0) in (5) and isnull(ViewColWidth,40)&gt;0
+					then ''''+colname+''' as ''field/fileattachment/@name'', '+colname+' ''field/fileattachment/value/*'', '
+				when isnull(xType,0) in (104)
+					then ''''+colname+''' as ''field/textbox/@name'', case when '+colname+'=1 then ''Yes'' else '''' end ''field/textbox/value/*'', '
+				when isnull(xType,0) in (60)
+					then ''''+colname+''' as ''field/textbox/@name'', cast('+colname+' as varchar(50))''field/textbox/value/*'', '+
+					isnull(cast(BrowseColAlign as varchar(10)),'null')+' ''field/textbox/align/*'', '+
+					isnull(cast(BrowseColDigit as varchar(10)),'null')+' ''field/textbox/digit/*'', '
+				else ''''+colname+''' as ''field/textbox/@name'', '+
+					colname+' ''field/textbox/value/*'', ' end+
+			case 
+				when isnull(comboType,0) in (1,2,3) then
+					case when isnull(comboFieldId,'')&lt;&gt;'' then ''+isnull(comboFieldId,'')+' ''field/autosuggestbox/ref/id/*''' else 'null' end +', '+
+					case when isnull(comboFieldName,'')&lt;&gt;'' then ''+isnull(comboFieldName,'')+' ''field/autosuggestbox/ref/name/*''' else 'null' end +', '+
+					case when isnull(comboFieldNameEx1,'')&lt;&gt;'' then ''+isnull(comboFieldNameEx1,'')+' ''field/autosuggestbox/ref/name1/*''' else 'null' end +', '+
+					case when isnull(comboFieldNameEx2,'')&lt;&gt;'' then ''+isnull(comboFieldNameEx2,'')+' ''field/autosuggestbox/ref/name2/*''' else 'null' end +', ' 
+				when isnull(comboType,0) in (10,12) then
+					case when isnull(comboFieldId,'')&lt;&gt;'' then ''+isnull(ColName,'')+'cbId ''field/autosuggestbox/ref/id/*''' else 'null' end +', '+
+					case when isnull(comboFieldName,'')&lt;&gt;'' then ''+isnull(ColName,'')+'cbNm ''field/autosuggestbox/ref/name/*''' else 'null' end +', '+
+					case when isnull(comboFieldNameEx1,'')&lt;&gt;'' then ''+isnull(comboFieldNameEx1,'')+' ''field/autosuggestbox/ref/name1/*''' else 'null' end +', '+
+					case when isnull(comboFieldNameEx2,'')&lt;&gt;'' then ''+isnull(comboFieldNameEx2,'')+' ''field/autosuggestbox/ref/name2/*''' else 'null' end +', ' 
+				else '' end+
+			'null, '
+		--select *
+		from gen.coTABL a
+			inner join gen.coTABLFIEL b
+				on a.TableGUID=b.tableGUID
+		where tablename=@atablename and isBrowsable&gt;0
+		order by BrowseOrder
+		for xml path('')
+		)
+
+	declare @sortdefault nvarchar(50) = 'UpdatedDate DESC, CreatedDate DESC'
+
+	if @sortOrder &lt;&gt; '' begin
+		declare @ColName Nvarchar(50),@s Nvarchar(10) ,@comboType int, @comboFieldId Nvarchar(50)
+		select @ColName = SUBSTRING (@sortOrder,1,CHARINDEX(' ', @sortOrder, 0))
+		select @s = SUBSTRING (@sortOrder,CHARINDEX(' ', @sortOrder, 0),5)
+		select @comboFieldId = comboFieldId, @comboType=ComboType
+				from gen.coTABL a
+					inner join gen.coTABLFIEL b
+						on a.TableGUID=b.tableGUID
+				where tablename = @tablename and isBrowsable&gt;0
+				and ColName = @ColName		
+				order by BrowseOrder
+
+				if @comboType =3 set @sortOrder = @comboFieldId + @s
+	end
+
+	--combine content
+	set @xcontent = cast(@xserial as varchar(max))
+	if exists(select * from CoMODLSMOD where SubModuleGUID = @ModuleGUID) OR left(@atablename, 1) in('C', 'M', 'S') begin
+		set @sortOrder = IIF(isNULL(@sortOrder, '') = '', @sortDefault, @sortOrder)
+		set @xcontent = 'select '+@fieldKey+' ''@GUID'', ' + CAST(@xserial as varchar(max))
+		set @xcontent = LEFT(@xcontent, LEN(@xcontent) - 1) + '
+				from oph.' +@tablename+ ' ' +QUOTENAME(@tablename) + 
+				iif(@w = '', '', char(10)+char(9)+char(9)+
+				'where ' + @w) + char(10)+char(9)+char(9)+
+				'order by '+ @sortOrder + char(10)+char(9)+char(9)+
+				iif(@searchText = '', 'offset @rowStart rows fetch next '+cast(@nbRows as varchar(5))+' rows only'+char(10)+char(9)+char(9), '')+
+				'for xml path(''row''), type'
+
+		set @x2 = 'SET NOCOUNT ON'+char(10)+
+			'declare @UserHostGUID uniqueidentifier = '''+CAST(@userGUID as varchar(50)) + ''''+char(10)+
+			'declare @rowStart int = 0, @count int = 0, @nbPages int = 0' + IIF(@searchText = '', '', ', @searchText varchar(max) = ''' + @searchText + '''') +char(10)+
+			char(10)+
+			'select @count = COUNT('+isNULL(@fieldKey, '*')+') from '+ IIF(@w = '', @otablename, 'oph.' +@tablename)+ ' ' +QUOTENAME(@tablename) + 
+			IIF(@w = '', '', char(10)+'where ' + @w) +char(10)+char(10)+
+			'set @nbPages = (@count + ' +cast(@nbRows as varchar(5))+ ' - ' +cast(@pgNo as varchar(5))+ ') / ' +cast(@nbRows as varchar(5))+char(10)+
+			'set @rowStart = ('+cast(@pgNo as varchar(5))+ '-1) * '+cast(@nbRows as varchar(5))+char(10)+
+			char(10)+
+			'select (' +char(10)+char(9)+replace(@xinfo, char(9)+char(9), char(9))+char(10)+') [info] into #info' +char(10)+
+			char(10)+
+			'select (' +char(10)+char(9)+replace(@xhead, char(9)+char(9), char(9))+char(10)+') [header] into #header' +char(10)+
+			char(10)+
+			'if @count = 0 '+char(10)+
+			char(9)+'select * from #info, #header for xml path(''browse''), root' +char(10)+
+			'else begin'+char(10)+
+			char(9)+'select (' +char(10)+char(9)+char(9)+replace(@xcontent, char(9)+char(9), char(9))+char(10)+
+			char(9)+') [content] into #content'+char(10)+
+			char(9)+'select * from #info, #header, #content for xml path(''browse''), root' +char(10)+
+			char(9)+'drop table #content'+char(10)+
+			'end'+char(10)+
+			'drop table #info' + char(10)+
+			'drop table #header' 
+	end
+		
+	if @debug=1 begin
+		select @userGUID [UserGUID], @ModuleGUID [ModuleGUID], @allowBrowse [browse], @allowAdd [add], @allowEdit [edit], 
+			@pgNo [pgNo], @nbRows [rows], @skinfolder [skin], @atablename [tblName], @searchText [search], @sqlFilter [sqlFilter]
+		select @aprvProtect [aprvProtected], @b [browseColumn], @w [where], @sortOrder [orderBy]
+		select @x2 [x2], @xinfo [info], @xcontent [content]
+	end
+	else 
+		exec(@x2)
+
+

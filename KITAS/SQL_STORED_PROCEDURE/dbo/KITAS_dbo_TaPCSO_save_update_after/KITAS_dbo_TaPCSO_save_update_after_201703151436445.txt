@@ -1,0 +1,15 @@
+CREATE PROCEDURE [dbo].[TaPCSO_save_update_after] @GUID uniqueidentifier, @hostGUID uniqueidentifier, @isUpdate bit
+as	--CreatedBy eLs ON Jan, 2017
+
+	update ToPCSO set 
+		EVGRGUID = '9573DD6B-DB6F-4153-8A07-9B7CC8C0ADE7' 
+	where PCSOGUID = @GUID AND EVGRGUID is NULL
+	
+	update a set
+		a.Address = b.WorkAddress
+	--select a.Address, b.WorkAddress
+	from ToPCSO a
+		left join CoUSER b ON a.CarolGUID = b.UserGUID
+	where PCSOGUID = @GUID AND LEN(ISNULL(a.Address, '')) = 0
+
+	

@@ -1,0 +1,13 @@
+
+create TRIGGER [dbo].[tg_acctinfo_updatedDate] 
+   ON  [dbo].[acctinfo]
+   AFTER INSERT, UPDATE
+AS 
+BEGIN
+	update acctinfo
+	set updatedDate=getdate()
+	from acctinfo a
+		inner join inserted b on a.AccountInfoGUID=b.AccountInfoGUID
+
+END
+

@@ -1,0 +1,107 @@
+
+CREATE procedure [xml].[report] 
+	@hostGUID uniqueidentifier,
+	@tablename varchar(100), 
+	@QueryCode varchar(100)
+	
+as
+	declare @xhead varchar(max), @xcontent varchar(max), @xfilter varchar(max), @xinfo varchar(max), 
+		@xapproval varchar(max), @xtalk varchar(max), @x2 varchar(max), @skinFolder varchar(100),
+		@xstatusform varchar(max),@xaddtaskmenu varchar(max),@xstatuscomment varchar(max), @templateCode varchar(20)
+
+	declare @allowPDF bit=0, @allowXLS bit=0, @allowDownload bit=0, @isMap bit=0, @tablename1 nvarchar(100),@QueryName nvarchar(100),
+		@ReportName nvarchar(100)
+
+	set @tablename1= left(@tablename,1)+ 'a' +right(@tablename,len(@tablename)-2 )	
+
+	--check permission
+	--select @allowPDF=allowPDF, @allowXLS=allowXLS, @QueryName=QueryName
+	--from coQURY where QueryCode=@QueryCode
+
+	select @allowDownload=case when QueryTypeFlag='isDownload' then 1 else 0 end,
+		@allowPDF=allowPDF, @allowXLS=allowXLS, @isMap=isMap, @QueryName=QueryName, 
+		@ReportName=ReportName, @templateCode=templateCode
+	from coQURY where QueryCode=@QueryCode
+	
+	--skin
+	select @skinFolder=c.skinFolder from CoUSER a
+		inner join CoUSERHOST b
+			on a.userguid=b.userguid
+		inner join coSKIN c
+			on a.skinguid=c.skinguid
+	where b.hostguid=@hostguid
+
+	--temp table
+	declare @b varchar(max), @w varchar(max)
+	exec [gen].[procfields_browse] @tablename, @b output, @w output
+	--set @w=replace(@w, '''''%''''', '''%''')+case when isnull(@sqlfilter,'')&lt;&gt;'' then ' and '+@sqlFilter else '' end
+	declare @fieldKey varchar(100)
+	select @fieldKey=ColName
+		from gen.coTABL a
+			inner join gen.coTABLFIEL b
+				on a.TableGUID=b.tableGUID
+		where tablename=@tablename and b.colorder=1
+	--select @skinfolder, @allowPDF,@allowXLS
+
+	--xinfo
+	set @xinfo= '
+		select
+		case when queryTypeFlag = ''isReport'' then ''report filter''
+				else ''uploader''   end
+				as ''headcaps'',
+		'+
+		cast(isnull(@allowPDF,0) as varchar(1))+' ''allowPDF'','+
+		cast(isnull(@allowXLS,0) as varchar(1))+' ''allowXLS'','+
+		cast(isnull(@allowDownload,0) as varchar(1))+' ''allowDownload'','+
+		cast(isnull(@isMap,0) as varchar(1))+' ''isMAP'','''+
+		cast(isnull(@ReportName,'') as varchar(100))+''' ''ReportName'','''+
+		cast(isnull(@TemplateCode,'') as varchar(100))+''' ''TemplateCode'','''+
+		cast(isnull(@QueryName,'') as varchar(100))+''' ''QueryName'','''+
+		cast(isnull(@QueryCode,'') as varchar(100))+''' ''QueryCode''
+		from coQURY a
+		where QueryCode='''+@QueryCode+'''
+		for xml path(''''), type '
+	--select @xinfo
+
+		declare @parameter varchar(max)
+		set @parameter='
+			select	OrderNo,
+				QueryParameterGUID, 
+				 
+				QueryParTypeFlag ''QueryParTypeFlag/@fieldName'',
+				case when QueryParTypeFlag=''isDate'' then QueryParCaption else QueryParCaption end ''QueryParTypeFlag/QueryParCaption'',
+				case when QueryParTypeFlag=''isDate'' then QueryParName else QueryParName end ''QueryParTypeFlag/QueryParName'',
+				case when QueryParTypeFlag=''isSuggestBox'' then b.SuggestBoxFieldKey  else null end ''QueryParTypeFlag/fieldKey'',
+				case when QueryParTypeFlag=''isSuggestBox'' then b.SuggestBoxFieldId  else null end ''QueryParTypeFlag/fieldId'',
+				case when QueryParTypeFlag=''isSuggestBox'' or QueryParTypeFlag=''isDateChoose'' then  b.SuggestBoxFieldDesc else null end ''QueryParTypeFlag/fieldDesc'',
+				case when QueryParTypeFlag=''isSuggestBox'' or QueryParTypeFlag=''isDateChoose'' then b.suggestboxSQL else null end ''QueryParTypeFlag/tablename'',
+				case when QueryParTypeFlag=''isSuggestBox'' then null else getdate() end ''QueryParTypeFlag/value'', 
+				case when QueryParTypeFlag=''isSuggestBox'' then b.whereField else '''' end ''QueryParTypeFlag/filter''
+		from coQURY a
+		inner join coQURYPARA b
+			on b.queryGUID=a.QueryGUID
+		where querycode='''+@QueryCode+''' order by OrderNo
+		for xml path (''view''), type
+		'
+		--select @parameter
+	set @x2='
+	select 
+	(select ('+@xinfo+')
+	for xml path(''''), type) ''permission'',
+	(select ('+@parameter+')
+	for xml path(''''), type) ''parameter''
+	for xml path(''report''), root'
+	--select @x2
+	--print @xcontent
+	exec(@x2)
+
+
+
+
+
+
+
+
+
+
+

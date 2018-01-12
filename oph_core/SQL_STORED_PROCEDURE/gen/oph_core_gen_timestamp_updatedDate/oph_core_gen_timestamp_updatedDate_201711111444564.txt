@@ -1,0 +1,28 @@
+
+
+CREATE procedure [gen].[timestamp_updatedDate] @code nvarchar(50)
+as
+	declare @moduleGUID uniqueidentifier, @settingmode int
+
+	select @moduleGUID=moduleGUID, @settingmode=settingmode
+	from modl where moduleid=@code
+
+	declare @sqlstr nvarchar(max)='
+		declare @updatedTS bigint=(
+			select avg(gen.datetoint(updatedDate)) ud
+			from (	
+				select (isnull(updatedDate, createdDate)) updatedDate
+				from '+iif(@settingmode in (1,3,4), 'doc', 'dbo')+'.'+@code+' m
+			) x
+		)
+
+		exec [gen].[modlinfo_save] '''+cast(@moduleGUID as nvarchar(50))+''', ''ts_ud'', @updatedTS
+		'
+	
+	exec sp_executesql @sqlstr
+	--declare @db nvarchar(50)=db_name()--, @svr nvarchar(50)=@@servername
+	--exec gen.onetimejob @sqlstr, @db--, @svr
+
+
+
+

@@ -1,0 +1,55 @@
+
+CREATE procedure [gen].[createProc]	@ProcName varchar(50), @content nvarchar(max), @schema nvarchar(10)='doc', @isEnc bit=0, @resultText nvarchar(max) output, @isdebug bit=0
+--WITH ENCRYPTION
+as
+-- ver 20170720
+	declare @sqlstr nvarchar(max)=''
+	
+	if exists (select * from sys.objects a
+				inner join syscomments b
+					on a.object_id=b.id
+				inner join sys.schemas c
+					on a.schema_id=c.schema_id
+				where a.name = @ProcName-- and encrypted=1
+					and c.name=@schema)
+	begin
+		if charindex('create procedure', @content)=0 begin
+			set @sqlstr = 'alter procedure ' + @schema + '.' + @ProcName + char(13) + char(10) + 
+				case when @isEnc=1 then 'with encryption'+ char(13) + char(10) else '' end +
+				'as'+char(13)-- --automatic creation by system, you have to remove this comment to customize this Proc' + char(13) + char(10) + ' ' --+
+			set @sqlstr=@sqlstr+@content
+		end
+		else begin 
+			set @sqlstr=replace(@content, 'create procedure', 'alter procedure')
+		end
+	end
+
+	else begin
+		if charindex('create procedure', @content)=0
+			set @sqlstr = 'create procedure ' + @schema + '.' + @ProcName + char(13) + char(10) + 
+				case when @isEnc=1 then 'with encryption'+ char(13) + char(10) else '' end +
+				'as'+char(13)-- --automatic creation by system, you have to remove this comment to customize this Proc' + char(13) + char(10) + ' ' --+
+		else set @sqlstr=''
+
+		set @sqlstr=''+@sqlstr+@content
+		
+	end
+
+	if @isdebug=1 print @sqlstr
+	set @sqlstr=replace(@sqlstr, '%', '%%')
+
+	BEGIN TRY
+		begin transaction
+		exec sp_executesql @sqlstr
+		commit
+	END TRY
+	BEGIN CATCH
+		SET @resulttext=ERROR_MESSAGE()+@sqlstr
+		rollback 
+	END CATCH;
+		
+	
+
+
+
+

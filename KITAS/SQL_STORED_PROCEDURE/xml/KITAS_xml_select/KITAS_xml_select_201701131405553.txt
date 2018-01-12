@@ -1,0 +1,171 @@
+
+
+
+
+
+
+CREATE procedure [xml].[select] @tablename varchar(100), @GUID uniqueidentifier
+as
+	declare @xhead varchar(max), @xcontent varchar(max), @xfilter varchar(max), @xinfo varchar(max), 
+		@xapproval varchar(max), @xtalk varchar(max), @x2 varchar(max)
+
+	--xinfo
+	set @xinfo= '
+		select
+			case when isnull(moduleid,'''')='''' then null else moduleid end ''tableName'',
+			case when isnull(moduleDescription,'''')='''' then null else moduleDescription end ''Description'',
+			'''+convert(varchar(50),@GUID)+''' ''GUID''
+	--select *
+		from coMODL a
+		where moduleid='''+@tablename+'''
+		for xml path(''''), type'
+
+	--fieldkey
+	declare @fieldKey varchar(100)
+	select @fieldKey=ColName
+		from gen.coTABL a
+			inner join gen.coTABLFIEL b
+				on a.TableGUID=b.tableGUID
+		where tablename=@tablename and b.colorder=1
+
+	declare @xViewPage xml
+	set @xViewPage=
+			(
+			select ViewPageNo '@pageno', 
+				(
+				select b1.ViewRowNo 'viewrow/@rowno',
+					(
+					select b2.viewcolno 'viewcol/@colno',
+						(
+						select b3.ViewOrderNo 'vieworder/@orderno',
+							(
+							select 
+								b4.colname 'field/@fieldName',
+	--							''''+b4.colname+''' as ''field/@name'', '+
+								case when b4.xtype in(36) then
+										'#*'+b4.colname+'*#'
+									 else '#!'+b4.colname+'!#' end 'field/value',
+								case when b4.xtype in(36) then '#!'+b4.ComboFieldId+'!#' else null end 'field/id',
+								case when b4.xtype in(36) then '#!'+b4.ComboFieldName+'!#' else null end 'field/name',
+								case when b4.xtype in(36) then b4.ComboTable else null end 'field/comboxmlpath'
+
+							from gen.coTABL a4
+								inner join gen.coTABLFIEL b4
+									on a4.TableGUID=b4.tableGUID
+							where tablename=@tablename and isViewable&gt;0 and b4.ViewPageNo=b3.ViewPageNo 
+								and b4.viewrowno=b3.ViewRowNo and b4.viewColno=b3.ViewColNo and b4.ViewOrderNo=b3.ViewOrderNo
+							group by b4.viewpageno, b4.ViewRowNo, b4.ViewColNo, b4.ViewOrderNo, b4.colname, xtype,
+								combotable, ComboFieldId, ComboFieldName
+							order by b4.viewpageno, b4.ViewRowNo, b4.ViewColNo, b4.ViewOrderNo, b4.colname
+							for xml path(''), type
+							) 'vieworder/fields/*'
+						from gen.coTABL a3
+							inner join gen.coTABLFIEL b3
+								on a3.TableGUID=b3.tableGUID
+						where tablename=@tablename and isViewable&gt;0 and b3.ViewPageNo=b2.ViewPageNo 
+							and b3.viewrowno=b2.ViewRowNo and b3.viewColno=b2.ViewColNo
+						group by b3.viewpageno, b3.ViewRowNo, b3.ViewColNo, b3.ViewOrderNo
+						order by b3.viewpageno, b3.ViewRowNo, b3.ViewColNo, b3.ViewOrderNo
+						for xml path(''), type
+						) 'viewcol/vieworders/*'
+					from gen.coTABL a2
+						inner join gen.coTABLFIEL b2
+							on a2.TableGUID=b2.tableGUID
+					where tablename=@tablename and isViewable&gt;0 and b2.ViewPageNo=b1.ViewPageNo and b2.viewrowno=b1.ViewRowNo
+					group by b2.viewpageno, b2.ViewRowNo, b2.ViewColNo
+					order by b2.viewpageno, b2.ViewRowNo, b2.ViewColNo
+					for xml path(''), type
+					) 'viewrow/viewcols/*'
+				from gen.coTABL a1
+					inner join gen.coTABLFIEL b1
+						on a1.TableGUID=b1.tableGUID
+				where tablename=@tablename and isViewable&gt;0 and b1.ViewPageNo=b.ViewPageNo
+				group by b1.viewpageno, b1.ViewRowNo
+				order by b1.viewpageno, b1.ViewRowNo
+				for xml path(''), type
+				) 'viewrows'
+			from gen.coTABL a
+				inner join gen.coTABLFIEL b
+					on a.TableGUID=b.tableGUID
+			where a.tablename=@tablename and isViewable&gt;0
+			group by b.ViewPageNo
+			order by b.ViewPageNo
+			for xml path('viewpage'), type
+			)
+
+	--xapproval
+	if exists(select * from sysobjects where name=@tablename+'APRV')
+		set @xapproval ='
+			select 
+				(select 
+					y.ApprovalUserGUID ''approval/GUID'',
+					y.lvl ''approval/lvl'',
+					y.Status ''approval/status'', 
+					y.ApprovalUserId ''approval/userid'',
+					y.ApprovalUserName ''approval/username'',
+					y.UpdatedDate ''approval/approvaldate''
+				from '+@tablename+'APRV y
+				where y.'+@fieldKey+'='+@tablename+'.'+@fieldKey+'
+				order by y.lvl
+				for xml path (''''), type) 
+			from (
+				select * from '+@tablename+'
+				where '+@fieldKey+'='''+convert(varchar(50),@GUID)+'''
+			) '+@tablename+' 
+			for xml path (''''), type'								
+	else set @xapproval=''
+
+	--xtalk
+	set @xtalk='
+		select 
+			(select 
+				z.doctalkguid ''talk/GUID'',
+				z.DocComment ''talk/Message'',
+				x.UserId ''talk/userid'',
+				x.UserName ''talk/username'',
+				z.UpdatedDate ''talk/approvaldate''
+			from coTALK z
+				inner join coUSER x
+					on x.createdUser=x.userGUID
+			where z.DocumentGUID='+@tablename+'.'+@fieldKey+'
+			order by z.UpdatedDate
+			for xml path (''''), type)
+		from (
+			select * from '+@tablename+'
+			where '+@fieldKey+'='''+convert(varchar(50),@GUID)+'''
+		) '+@tablename+' 
+		for xml path (''''), type'			
+				
+	set @x2='
+	declare @x xml
+	select @x=
+	'''+replace(replace(replace(replace(cast(@xViewPage as varchar(max)),'#*','''+isnull(convert(varchar(50),'),'*#','),'''')+'''),'#!','''+isnull(cast('),'!#',' as varchar(max)),'''')+''')+'''
+	from '+@tablename+'
+	where salesreturnguid='''+convert(varchar(50),@GUID)+'''
+
+	select 
+		(	select ('+@xinfo+')
+		for xml path(''''), type
+		) ''info'',
+		(	select @x
+			for xml path(''''), type
+		) ''viewpages'',
+		(	select ('+@xapproval+')
+			for xml path(''''), type
+		) ''approvals'',
+		(	select ('+@xtalk+')
+			for xml path(''''), type
+		) ''talks''
+	for xml path(''view'')'
+
+	--select @x2
+	exec(@x2)
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,31 @@
+CREATE PROCEDURE [dbo].[update_price_upload]
+as	--CreatedBy eLs ON Feb, 2017
+
+	set nocount on 
+	declare @fPath varchar(max), @sql nvarchar(MAX), @msg varchar(MAX)
+
+	set @fPath = 'D:\EF_UPLD\document\temp\update_price.xlsx'
+	set @sql= 'select * FROM OPENROWSET(''Microsoft.ace.OLEDB.12.0'', ''Excel 8.0;Database=' + @fPath + ';HDR=YES'', ''SELECT * FROM [Sheet1$]'')'
+
+	if OBJECT_ID('tempdb..#uptbl') is NOT NULL drop table #uptbl
+	create table #uptbl(Material varchar(50), Descriptions varchar(200), EAN varchar(50), Price money, Qty int, Clerence money)
+
+	insert into #uptbl exec(@sql)
+
+	if exists(select * from #uptbl) begin
+		update c set
+			c.Price = 
+				case 
+					when c.EVENGUID in ('9573DD6B-DB6F-4153-8A07-9B7CC8C0ADE7','6A293D44-E76E-4979-BAD6-A598988FB61B')
+						then a.Price
+					else ISNULL(ISNULL(a.Clerence, a.Price), 0)
+				end
+		--select b.PRODGUID, ISNULL(Material, '') + ISNULL(' - ' + Descriptions, ''), c.Price, a.Price [newPrice], d.Name, d.StartDate
+		from #uptbl a
+			left join MoPROD b ON a.Material = b.Code OR a.Descriptions = b.Name
+			inner join MoEVENPSKU c ON b.PRODGUID = c.PRODGUID
+			inner join MoEVEN d ON c.EVENGUID = d.EVENGUID AND d.isDeleted = 0
+		where (d.StartDate is NULL OR CAST(GETDATE() as date) between d.StartDate AND d.EndDate)
+
+	end
+

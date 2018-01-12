@@ -1,0 +1,55 @@
+
+CREATE procedure [api].[checkRecordExist] @accountid varchar(50), @code varchar(50), @GUID uniqueidentifier, @result int OUTPUT
+AS
+BEGIN
+	declare @db varchar(50)=api.fn_checkDB(@accountid, @code)
+	declare @ver varchar(10), @settingMode varchar(1)
+
+	select @ver=[version], @settingMode=api.settingmode(settingmode)
+	--select * 
+	from modl a
+		inner join acctdbse	b 
+			on a.accountdbguid=b.accountdbguid
+		inner join acct c
+			on a.AccountGUID=c.AccountGUID
+	where moduleid=@code and accountid=@accountid
+
+	
+
+	declare @sqlstr nvarchar(max)
+	declare @sqlpar nvarchar(max)
+	if @ver='3.0' begin
+		declare @colname varchar(50)
+		exec [api].[getPrimaryKey] @accountid, @code, @colname OUTPUT
+
+		set @code=left(@code,1)+'o'+substring(@code,3,len(@code)-2)
+
+		set @sqlpar ='@GUID uniqueidentifier, @result int OUTPUT'
+		set @sqlstr ='
+			select @result=Count(1) from '+@db+'.dbo.'+@code+'
+			where '+@colname+' = @GUID'		
+		exec sp_executesql @sqlstr, @sqlpar, @GUID, @result OUTPUT
+
+		print @sqlstr
+	end
+	else if @ver='4.0' and @settingMode<>'C' begin
+		set @sqlpar ='@GUID uniqueidentifier, @result int OUTPUT'
+		set @sqlstr ='
+			select @result=Count(1) from '+@db+'.dbo.oph_form
+			where moduleid='''+@code+''' formGUID= @GUID'
+
+		exec sp_executesql @sqlstr, @sqlpar, @GUID, @result OUTPUT
+	end
+
+
+END
+
+
+
+
+
+
+
+
+
+

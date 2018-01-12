@@ -1,0 +1,33 @@
+create procedure [gen].[dropProc] @ProcName varchar(50), @schema nvarchar(10)='doc', @resultText nvarchar(max) output, @isdebug bit=0
+--WITH ENCRYPTION
+as
+-- ver 20170719
+	declare @sqlstr nvarchar(max)=''
+	
+	if exists (select * from sys.objects a
+				inner join syscomments b
+					on a.object_id=b.id
+				inner join sys.schemas c
+					on a.schema_id=c.schema_id
+				where a.name like @ProcName-- and encrypted=1
+					and c.name=@schema)
+	begin
+		set @sqlstr = 'drop procedure ' + @schema + '.' + @ProcName 
+	end
+
+	if @isdebug=1 print @sqlstr
+
+	BEGIN TRY
+		begin transaction
+		exec sp_executesql @sqlstr
+		commit
+	END TRY
+	BEGIN CATCH
+		SET @resulttext=ERROR_MESSAGE()
+		rollback 
+	END CATCH;
+		
+	
+
+
+

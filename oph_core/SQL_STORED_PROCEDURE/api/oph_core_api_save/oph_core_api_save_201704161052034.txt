@@ -1,0 +1,39 @@
+
+CREATE procedure [api].[save] @accountid varchar(50),
+	@hostGUID uniqueidentifier, 
+	@code varchar(20),
+	@GUID uniqueidentifier,
+	@saveXML xml,
+	@preview int=0,
+	@isDebug bit=0
+as
+
+	--if len(@code) % 4 = 2
+	--set @code = right(@code,len(@code)-2)
+	declare @typecode varchar(1), @ver varchar(10)
+	select @typecode = api.settingmode(settingmode), @ver=b.[version]--, @accountid=d.accountid
+	--select * 
+	from modl a
+		inner join acctdbse	b 
+					on a.accountdbguid=b.accountdbguid
+		inner join acct d
+			on d.accountGUID=a.AccountGUID
+		inner join [user] e
+			on e.AccountGUID=d.AccountGUID
+		inner join userhost c
+			on c.userguid=e.UserGUID
+	where ModuleID=@code and accountid=@accountid
+
+
+
+	declare @db varchar(50)=api.fn_checkDB(@accountid, @code)
+
+	if @ver='3.0' 
+		exec [api].[save_v3] @hostGUID, @code, @GUID, @saveXML, @preview, @isDebug
+	else
+		exec [api].[save_v4] @hostGUID, @code, @GUID, @saveXML, @preview, @isDebug
+		
+
+
+
+

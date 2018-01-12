@@ -1,0 +1,54 @@
+
+
+
+CREATE procedure [gen].[addprocs_select] @tablename varchar(50), @colname varchar(50), @selectstr varchar(8000), @newstr varchar(8000), @isEnc bit=1, @isDebug bit=0
+as
+	declare @selectstr1 varchar(8000)
+	declare @sp varchar(100), @parameter varchar(8000)
+	declare @content varchar(8000)
+	declare @content1 varchar(8000)
+	declare @content2 varchar(8000)
+	
+	set @selectstr1=@selectstr
+
+	set @sp = '' + @tableName + '_select' 
+	set @parameter = char(9) + '@GUID uniqueidentifier, @hostGUID uniqueidentifier, @mode int=0'
+	set @content = 	
+			char(9) + 'if dbo.fn_checkObject(''dbo'','''+@tablename+'_select_custom'')=0 begin' + char(13) + char(10) + 	
+			char(9) + char(9) + 'declare @userGUID uniqueidentifier' + char(13) + char(10) + 
+			char(9) + char(9) + 'select @userGUID=userguid from coUSERHOST where hostGUID=@hostGUID' + char(13) + char(10) + 
+			char(9) + char(9) + 'if @mode=0 begin ' + char(13) + char(10) + 
+			char(9) + char(9) + char(9) + 'select '+ @selectstr1 + char(13) + char(10) + 
+			char(9) + char(9) + char(9) + 'from oph.' + @tableName + ' ' + @tableName + char(13) + char(10) 
+	set @content1 = 
+			char(9) + char(9) + char(9) + 'where ' + @tableName + '.' + @colname + ' = @GUID' + char(13) + char(10) +  
+			char(9) + char(9) + 'end ' + char(13) + char(10) + 
+			char(9) + char(9) + 'if @mode=1 begin ' + char(13) + char(10) + 
+			char(9) + char(9) + char(9) + 'select * '+ char(13) + char(10) + 
+			char(9) + char(9) + char(9) + 'from gen.cotablfiel a' + char(13) + char(10) + 
+			char(9) + char(9) + char(9) + char(9) + 'inner join gen.cotabl b' + char(13) + char(10) + 
+			char(9) + char(9) + char(9) + char(9) + char(9) + 'on a.tableGUID=b.tableGUID' + char(13) + char(10) + 
+			char(9) + char(9) + char(9) + 'where b.tablename = ''' + @tablename + '''' + char(13) + char(10) +  
+			char(9) + char(9) + char(9) + 'order by viewpageno, viewrowno, viewcolno, vieworderno,viewrowtype,viewrowtypeorder' + char(13) + char(10) + 
+			char(9) + char(9) + 'end' 
+	set @content2 =	
+			char(9) + char(9) + 'if @mode=2 begin ' + char(13) + char(10) + 
+			char(9) + char(9) + char(9) + 'select '+ @selectstr + char(13) + char(10) + 
+			char(9) + char(9) + char(9) + 'from oph.' + @tableName + '' + @tableName + char(13) + char(10) + 
+			char(9) + char(9) + char(9) + 'where ' + @colname + ' = newid()' + char(13) + char(10) +  
+			char(9) + char(9) + char(9) + 'union select '+ @newstr + char(13) + char(10) + 
+			char(9) + char(9) + 'end ' + char(13) + char(10) + 
+			char(9) + 'end else' + char(13) + char(10) + 
+			char(9) + CHAR(9) + 'exec dbo.'+@tablename+'_select_custom @GUID, @hostGUID' + char(13) + char(10) 
+			
+	exec gen.addproc @sp, @parameter, @content, @content1, @content2, @isEnc=@isenc, @isdebug=@isdebug
+
+
+
+
+
+
+
+
+
+

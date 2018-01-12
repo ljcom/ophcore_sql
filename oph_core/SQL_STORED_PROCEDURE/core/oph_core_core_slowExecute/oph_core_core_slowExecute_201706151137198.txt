@@ -1,0 +1,45 @@
+CREATE procedure [core].[slowExecute] @sqlstr nvarchar(max), @seq int=0, @isdebug bit=0
+as
+	declare @startTime datetime=current_timestamp
+
+	declare @isExists bit=0, @n int=0
+
+	declare @sqlstr3 nvarchar(max)='
+		set @isExists=iif(exists('+@sqlstr+'),1,0)	'
+	exec sp_executesql @sqlstr3, N'@isExists bit output', @isExists output
+
+	while @isExists=1 and @n<@seq
+	begin
+		set nocount on
+		set @startTime=current_timestamp
+		declare @sqlstr2 nvarchar(max)='
+			DECLARE #cur CURSOR
+			READ_ONLY
+			FOR '+@sqlstr+'
+
+			DECLARE @sqlstr1 nvarchar(max)
+			OPEN #cur
+
+			FETCH NEXT FROM #cur INTO @sqlstr1
+			WHILE (@@fetch_status <> -1)
+			BEGIN
+				IF (@@fetch_status <> -2)
+				BEGIN
+					exec sp_executesql @sqlstr1
+				END
+				FETCH NEXT FROM #cur INTO @sqlstr1
+			END
+
+			CLOSE #cur
+			DEALLOCATE #cur'
+
+		if @isdebug=1 print @sqlstr2
+		exec sp_executesql @sqlstr2
+
+		set @n=@n+1
+		print 'seq:'+cast(@n as nvarchar(10))+' time:'+cast(datediff(s, @starttime, current_timestamp) as nvarchar(10))+' secs'
+
+		exec sp_executesql @sqlstr3, N'@isExists bit output', @isExists output
+	end
+
+

@@ -1,0 +1,9 @@
+CREATE procedure oph.MaPRODFRON_list
+@account nvarchar(20), @GUID uniqueidentifier=null, @hostGUID uniqueidentifier
+as --automatic creation by system, you have to remove this comment to customize this procedure
+ 	declare @newid uniqueidentifier
+	set @newid = newid()
+
+	select MaPRODFRON.Name, MaPRODFRON.ID, MaPRODFRON.divisionName, MaPRODFRON.productphotos, MaPRODFRON.Description, MaPRODFRON.PRODGUID, MaPRODFRON.Availaible, MaPRODFRON.evenname, MaPRODFRON.price, MaPRODFRON.CTGRGUID, MaPRODFRON.cartID
+	from oph.MaPRODFRON MaPRODFRON
+	where isnull(EVENPSKUGUID, @newid)=case when @GUID is null then isnull(EVENPSKUGUID, @newid) else @GUID end

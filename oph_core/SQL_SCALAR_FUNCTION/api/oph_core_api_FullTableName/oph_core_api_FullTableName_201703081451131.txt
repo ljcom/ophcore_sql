@@ -1,0 +1,26 @@
+
+
+CREATE FUNCTION [api].FullTableName
+(
+@code nvarchar(max),@secondletter nvarchar(1)
+)
+RETURNS nvarchar(max)
+AS
+BEGIN
+
+--fieldNo
+declare @settingmode nvarchar(1)
+
+select @settingMode= api.SettingMode(settingmode)
+--select * 
+from modl a
+	inner join acctdbse	b 
+		on a.accountdbguid=b.accountdbguid
+where moduleid=@code
+
+
+
+return @settingmode + @secondletter+@code
+
+END
+

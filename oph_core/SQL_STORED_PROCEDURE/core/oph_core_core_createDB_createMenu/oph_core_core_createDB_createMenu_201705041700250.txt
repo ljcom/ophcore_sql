@@ -1,0 +1,89 @@
+CREATE procedure [core].[createDB_createMenu] @accountId varchar(50), @dataDB nvarchar(50), @isdebug bit=0
+as
+	--delete from '+@dataDB+'.dbo.menusmnu; delete from '+@dataDB+'.dbo.menu where menucode='sidebar'  
+	declare @v3db nvarchar(50), @accountGUID uniqueidentifier
+
+	select @v3db=DatabaseName, @accountGUID=a.accountGUID 
+	from acctdbse a
+		inner join acct b on a.accountguid=b.accountguid
+	where isMaster=1 and version='3.0' and b.accountId=@accountid
+
+	declare @sqlstr nvarchar(max)='
+		if not exists(select * from '+@dataDB+'.dbo.menu where menucode=''sidebar'') begin
+			declare @menuGUID uniqueidentifier=newid()
+
+			insert into '+@dataDB+'.dbo.menu (menuGUID, accountGUID, menuID, menuCode, MenuDescription) 
+			values (@menuGUID, @accountGUID, 1, ''sidebar'', ''Sidebar Menu'')
+
+			insert into '+@dataDB+'.dbo.menusmnu (MenuDetailGUID, MenuGUID, SubMenuDescription, tag, url, orderno, caption,[type], upperSubmenuGUID, icon_fa, icon_url)
+			select newid(), @menuGUID, modulegroupName, null, ''#'', sortOrder, modulegroupDescription, ''treeroot'', null, null, null 
+			--select *
+			from '+@v3db+'.oph.camodg'
+
+	set @sqlstr=@sqlstr+'
+
+			insert into '+@dataDB+'.dbo.menusmnu (MenuDetailGUID, MenuGUID, SubMenuDescription, tag, url, orderno, caption,[type], upperSubmenuGUID, icon_fa, icon_url)
+			select newid(), @menuGUID, ''Transactions'', null, ''#'', 1, ''Transactions'', ''treeview'', c.MenuDetailGUID, null, null 
+			--select *
+			from '+@v3db+'.oph.camodg a
+				--inner join '+@v3db+'.oph.camodgmodl b on a.modulegroupguid=b.modulegroupguid
+				--inner join '+@v3db+'.oph.camodl d on d.moduleguid=b.moduleguid
+				inner join '+@dataDB+'.dbo.menusmnu c on c.SubMenuDescription=a.modulegroupName --and c.menuguid=@menuguid
+
+			insert into '+@dataDB+'.dbo.menusmnu (MenuDetailGUID, MenuGUID, SubMenuDescription, tag, url, orderno, caption,[type], upperSubmenuGUID, icon_fa, icon_url)
+			select newid(), @menuGUID, ''Master Lists'', null, ''#'', 2, ''Master Lists'', ''treeview'', c.MenuDetailGUID, null, null 
+			from '+@v3db+'.oph.camodg a
+				--inner join '+@v3db+'.oph.camodgmodl b on a.modulegroupguid=b.modulegroupguid
+				--inner join '+@v3db+'.oph.camodl d on d.moduleguid=b.moduleguid
+				inner join '+@dataDB+'.dbo.menusmnu c on c.SubMenuDescription=a.modulegroupName --and c.menuguid=@menuguid'
+
+	set @sqlstr=@sqlstr+'
+
+			insert into '+@dataDB+'.dbo.menusmnu (MenuDetailGUID, MenuGUID, SubMenuDescription, tag, url, orderno, caption,[type], upperSubmenuGUID, icon_fa, icon_url)
+			select newid(), @menuGUID, ''Reports'', null, ''#'', 3, ''Reports'', ''treeview'', c.MenuDetailGUID, null, null 
+			from '+@v3db+'.oph.camodg a
+				--inner join '+@v3db+'.oph.camodgmodl b on a.modulegroupguid=b.modulegroupguid
+				--inner join '+@v3db+'.oph.camodl d on d.moduleguid=b.moduleguid
+				inner join '+@dataDB+'.dbo.menusmnu c on c.SubMenuDescription=a.modulegroupName --and c.menuguid=@menuguid
+
+			insert into '+@dataDB+'.dbo.menusmnu (MenuDetailGUID, MenuGUID, SubMenuDescription, tag, url, orderno, caption,[type], upperSubmenuGUID, icon_fa, icon_url)
+			select newid(), @menuGUID, d.ModuleDescription, null, ''?code=''+d.moduleid, sortOrder, d.ModuleDescription, ''label'', e.MenuDetailGUID, null, null 
+			from '+@v3db+'.oph.camodg a
+				inner join '+@v3db+'.oph.camodgmodl b on a.modulegroupguid=b.modulegroupguid
+				inner join '+@v3db+'.oph.camodl d on d.moduleguid=b.moduleguid
+				inner join '+@dataDB+'.dbo.menusmnu c on c.SubMenuDescription=a.modulegroupName --and c.menuguid=@menuguid
+				inner join '+@dataDB+'.dbo.menusmnu e on e.upperSubmenuGUID=c.MenuDetailGUID
+			where left(d.ModuleId,1)=''t'' and e.SubMenuDescription=''Transactions'''
+
+	set @sqlstr=@sqlstr+'
+
+			insert into '+@dataDB+'.dbo.menusmnu (MenuDetailGUID, MenuGUID, SubMenuDescription, tag, url, orderno, caption,[type], upperSubmenuGUID, icon_fa, icon_url)
+			select newid(), @menuGUID, d.ModuleDescription, null, ''?code=''+d.moduleid, sortOrder, d.ModuleDescription, ''label'', e.MenuDetailGUID, null, null 
+			from '+@v3db+'.oph.camodg a
+				inner join '+@v3db+'.oph.camodgmodl b on a.modulegroupguid=b.modulegroupguid
+				inner join '+@v3db+'.oph.camodl d on d.moduleguid=b.moduleguid
+				inner join '+@dataDB+'.dbo.menusmnu c on c.SubMenuDescription=a.modulegroupName --and c.menuguid=@menuguid
+				inner join '+@dataDB+'.dbo.menusmnu e on e.upperSubmenuGUID=c.MenuDetailGUID
+			where left(d.ModuleId,1)=''m'' and e.SubMenuDescription=''Master Lists''
+
+			insert into '+@dataDB+'.dbo.menusmnu (MenuDetailGUID, MenuGUID, SubMenuDescription, tag, url, orderno, caption,[type], upperSubmenuGUID, icon_fa, icon_url)
+			select newid(), @menuGUID, d.queryname, null, ''?code=''+d.querycode, sortOrder, d.queryname, ''label'', e.MenuDetailGUID, null, null 
+			from '+@v3db+'.oph.camodg a
+				--inner join '+@v3db+'.oph.camodgmodl b on a.modulegroupguid=b.modulegroupguid
+				inner join '+@v3db+'.oph.caqury d on d.modulegroupGUID=a.modulegroupguid
+				inner join '+@dataDB+'.dbo.menusmnu c on c.SubMenuDescription=a.modulegroupName --and c.menuguid=@menuguid
+				inner join '+@dataDB+'.dbo.menusmnu e on e.upperSubmenuGUID=c.MenuDetailGUID
+			where left(d.querycode,1)=''y'' and e.SubMenuDescription=''Reports''
+		end'
+		
+		if @isdebug=1 select @sqlstr
+		exec sp_executesql @sqlstr, N'@accountGUID uniqueidentifier', @accountGUID
+	--select * from '+@dataDB+'.dbo.menu
+	--select * from '+@dataDB+'.dbo.menusmnu where menuguid='012C06FE-7497-41A9-9FB8-04B2D4AF2B28'
+	--select * from '+@v3db+'.oph.camodgmodl
+
+	--select * from '+@dataDB+'.dbo.menusmnu where menuguid='012C06FE-7497-41A9-9FB8-04B2D4AF2B28'
+	--select * from '+@v3db+'.oph.camodg
+
+
+

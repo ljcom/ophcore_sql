@@ -1,0 +1,69 @@
+CREATE PROCEDURE [dbo].[MaCTGR_insert_values]
+as	--CreatedBy eLs ON Feb, 2017
+	
+	delete MoCTGR
+
+	-- 1st Parent (AXE)
+	insert into MoCTGR(Name, PARNCTGRGUID, isParent)
+	select SIGNAXESGUIDcbNm, NULL [parentGUID], 1 [isParent]
+	from oph.MaPROD a
+		left join MoCTGR_1 b ON a.SIGNAXESGUIDcbNm = b.Name
+	where SIGNAXESGUID is NOT NULL AND b.CTGRGUID is NULL
+	group by SIGNAXESGUIDcbNm
+
+	-- 2nd Child-Parent (Sub AXE)
+	insert into MoCTGR(Name, PARNCTGRGUID, isParent)
+	select SubAxes, b.CTGRGUID, 1 [isParent] 
+	from oph.MaPROD a
+		left join MoCTGR_1 b ON a.SIGNAXESGUIDcbNm = b.Name
+	where SubAxes is NOT NULL
+	group by SubAxes, b.CTGRGUID
+
+	-- 3rd Child-Parent (Product Function)
+	insert into MoCTGR(Name, PARNCTGRGUID, isParent)
+	select ProdFunction, b.CTGRGUID, 1 [isParent] 
+	from oph.MaPROD a
+		left join MoCTGR_2 b ON a.SubAxes = b.Name
+	where ProdFunction is NOT NULL
+	group by ProdFunction, b.CTGRGUID
+
+	-- 4th Child-Parent (Signature)
+	insert into MoCTGR(Name, PARNCTGRGUID, isParent)
+	select SIGNGUIDcbNm, b.CTGRGUID, 0 [isParent] 
+	from oph.MaPROD a
+		left join MoCTGR_3 b ON a.SubAxes = b.Name
+	where SIGNGUID is NOT NULL and b.CTGRGUID is NOT NULL
+	group by SIGNGUIDcbNm, b.CTGRGUID
+		
+/*
+	-- 1st Parent (AXE)
+	insert into MoCTGR(CTGRGUID, Name, PARNCTGRGUID, isParent)
+	select DISTINCT
+		a.SIGNAXESGUID, UPPER(a.Name), NULL, IIF(b.SIGNAXESSUBAGUID is NULL, 0, 1)
+	from MoSIGNAXES a
+		left join MoSIGNAXESSUBA b ON a.SIGNAXESGUID = b.SIGNAXESGUID
+
+	-- 2nd Child-Parent (Sub AXE)
+	insert into MoCTGR(CTGRGUID, Name, PARNCTGRGUID, isParent)
+	select DISTINCT
+		a.SIGNAXESSUBAGUID, UPPER(a.Name), a.SIGNAXESGUID, IIF(b.SIGNAXESSUBAFUNCGUID is NULL, 0, 1)
+	from MoSIGNAXESSUBA a
+		left join MoSIGNAXESSUBAFUNC b ON a.SIGNAXESSUBAGUID = b.SIGNAXESSUBAGUID
+
+	-- 3rd Child-Parent (Product Function)
+	insert into MoCTGR(CTGRGUID, Name, PARNCTGRGUID, isParent)
+	select DISTINCT
+		a.SIGNAXESSUBAFUNCGUID, UPPER(a.Name), a.SIGNAXESSUBAGUID, IIF(c.SIGNGUID is NULL, 0, 1)
+	from MoSIGNAXESSUBAFUNC a
+		left join MoSIGNAXESSUBA b ON a.SIGNAXESSUBAGUID = b.SIGNAXESSUBAGUID
+		left join MoSIGNAXES c ON b.SIGNAXESGUID = c.SIGNAXESGUID
+
+	-- 4th Child-Parent (Signature)
+	insert into MoCTGR(Name, PARNCTGRGUID, isParent)
+	select DISTINCT
+		UPPER(a.Name), d.SIGNAXESSUBAFUNCGUID, 0
+	from MoSIGN a
+		inner join MoSIGNAXES b ON a.SIGNGUID = b.SIGNGUID
+		inner join MoSIGNAXESSUBA c ON b.SIGNAXESGUID = b.SIGNAXESGUID
+		inner join MoSIGNAXESSUBAFUNC d ON c.SIGNAXESSUBAGUID = d.SIGNAXESSUBAGUID
+*/

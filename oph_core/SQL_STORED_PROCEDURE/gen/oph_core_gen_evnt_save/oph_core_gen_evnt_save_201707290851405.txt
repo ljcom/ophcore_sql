@@ -1,0 +1,17 @@
+CREATE procedure [gen].[evnt_save] @hostguid uniqueidentifier, @code nvarchar(50), @guid uniqueidentifier, 
+	@startRec datetime, @comment nvarchar(max), @err nvarchar(max)=null
+as
+	declare @accountGUID uniqueidentifier
+	exec gen.getDBInfo @hostguid, @code, @accountGUID=@accountGUID output
+
+	declare @userguid uniqueidentifier
+	select @userguid=userguid from userhost where hostguid=@hostguid
+
+	declare @moduleGUID uniqueidentifier, @curRec int=datediff(ms, @startRec, current_timestamp)
+	select @moduleguid=moduleguid from modl where moduleid=@code
+
+	set @comment = @comment + iif(@err is not null, ' ERROR: '+isnull(@err, ''), '')
+
+	insert into evnt(accountGUID, moduleGUID, DocGUID, timeRecord, comment, createdUser)
+	values (@accountGUID, @moduleguid, @guid, @curRec, @comment, @userGUID)
+

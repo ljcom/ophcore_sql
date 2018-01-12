@@ -1,0 +1,112 @@
+
+
+
+CREATE procedure [core].[migrateData_eachDB_v3] @accountid nvarchar(50), @coreDB nvarchar(50), 
+	@dataDB nvarchar(50), @svr nvarchar(50), @v3db nvarchar(50)
+as
+
+	create table #migrate (DocGUID uniqueidentifier, AccountGUID uniqueidentifier, ModuleGUID uniqueidentifier, 
+		DocNo nvarchar(50), DocRefNo nvarchar(50), DocDate datetime, DocSummary nvarchar(50), ID nvarchar(50), [Description] nvarchar(50), [Status] int, 
+		StatusComment nvarchar(max), CreatedDate datetime, CreatedUser uniqueidentifier, isClosed bit, isDeleted bit)
+
+	declare @accountGUID uniqueidentifier
+	select @accountguid=AccountGUID 
+	from acct where accountid=@accountid
+	
+	declare @uGUID uniqueidentifier=newid()	
+	declare @sqlstr nvarchar(max)=N'
+
+		select N''
+			insert into '+@dataDB+'.dbo.docm (DocGUID, AccountGUID, ModuleGUID, DocNo, DocRefNo, DocDate, ID, 
+				Description, DocSummary, Status, StatusComment, CreatedDate, updatedDate, isClosed, isDeleted, oldId)
+			select ''+isnull(cast(d1.colKey as nvarchar(50)),''null'')+'', '''''+cast(@accountguid as nvarchar(50))+''''', 
+				''''''+isnull(cast(c.moduleguid as nvarchar(50)),''null'')+'''''', ''+isnull(d3.colkey, ''null'')+'', 
+				''+isnull(d4.colkey, ''null'')+'', ''+isnull(d2.colkey, ''null'')+'', ''+isnull(d5.colkey, ''null'')+'', 
+				''+isnull(d6.colkey, ''null'')+'', null, ISNULL(''+isnull(d7.colkey, ''0'')+'',0), 
+				''+isnull(d8.colkey, ''null'')+'', isnull(''+isnull(d9.colkey, ''getdate()'')+'', getdate()), ''+isnull(d10.colkey, ''null'')+'', 0, isnull(''+isnull(d11.colkey, ''0'')+'', 0), 
+				''+isnull(cast(d1.colKey as nvarchar(50)),''null'')+''  
+			from '+@v3db+'.dbo.''+b.name+'' a
+				left join (select docguid from '+@dataDB+'.dbo.docm) b 
+					on a.''+isnull(cast(d1.colKey as nvarchar(50)),''null'')+'' = b.docGUID
+			where b.docGUID is null
+			'' Insertstr, c.moduleid tablename, b2.name APRVTableName
+		into ##tempInsert'+replace(cast(@uGUID as nvarchar(50)), '-', '')+'
+		from '+@v3db+'.dbo.coatab a
+			inner join '+@v3db+'.sys.objects b on a.TableName=stuff(b.name, 2, 1, ''a'') and b.type=''U''
+			left join '+@v3db+'.sys.objects b2 on stuff(a.TableName, 2, 1, ''o'')+''APRV''=b2.name and b2.type=''U''
+			inner join '+@dataDB+'.dbo.modl c on moduleid=a.TableName
+			inner join '+@dataDB+'.dbo.modlcolm d1 on c.moduleguid=d1.ModuleGUID 
+				and colorder=(select min(colOrder) from '+@dataDB+'.dbo.modlcolm a where a.ModuleGUID=c.ModuleGUID)
+			left join (
+				select colkey, moduleguid 
+				from '+@dataDB+'.dbo.modlcolm d2 
+					inner join '+@dataDB+'.dbo.modlcolminfo e2 on d2.ColumnGUID=e2.ColumnGUID and e2.InfoKey=''primaryCol'' and e2.InfoValue=''2'') d2
+				on c.moduleguid=d2.ModuleGUID 
+			left join (
+				select colkey, moduleguid 
+				from '+@dataDB+'.dbo.modlcolm d3 
+					inner join '+@dataDB+'.dbo.modlcolminfo e3 on d3.ColumnGUID=e3.ColumnGUID and e3.InfoKey=''primaryCol'' and e3.InfoValue=''3'') d3
+				on c.moduleguid=d3.ModuleGUID 
+			left join (
+				select colkey, moduleguid 
+				from '+@dataDB+'.dbo.modlcolm d4 
+					inner join '+@dataDB+'.dbo.modlcolminfo e4 on d4.ColumnGUID=e4.ColumnGUID and e4.InfoKey=''primaryCol'' and e4.InfoValue=''4'') d4
+				on c.moduleguid=d4.ModuleGUID 
+			left join (
+				select colkey, moduleguid 
+				from '+@dataDB+'.dbo.modlcolm d5 
+					inner join '+@dataDB+'.dbo.modlcolminfo e5 on d5.ColumnGUID=e5.ColumnGUID and e5.InfoKey=''primaryCol'' and e5.InfoValue=''5'') d5
+				on c.moduleguid=d5.ModuleGUID 
+			left join (
+				select colkey, moduleguid 
+				from '+@dataDB+'.dbo.modlcolm d6 
+					inner join '+@dataDB+'.dbo.modlcolminfo e6 on d6.ColumnGUID=e6.ColumnGUID and e6.InfoKey=''primaryCol'' and e6.InfoValue=''6'') d6
+				on c.moduleguid=d6.ModuleGUID 
+			left join '+@dataDB+'.dbo.modlcolm d7 on c.moduleguid=d7.ModuleGUID and d7.colkey=''Status''
+			left join '+@dataDB+'.dbo.modlcolm d8 on c.moduleguid=d8.ModuleGUID and d8.colkey=''StatusComment''
+			left join '+@dataDB+'.dbo.modlcolm d9 on c.moduleguid=d9.ModuleGUID and d9.colkey=''createdDate''
+			left join '+@dataDB+'.dbo.modlcolm d10 on c.moduleguid=d10.ModuleGUID and d10.colkey=''updatedDate''
+			left join '+@dataDB+'.dbo.modlcolm d11 on c.moduleguid=d11.ModuleGUID and d11.colkey=''isDeleted''
+		where left(a.tablename,1) not in (''C'', ''P'')'
+	
+	print @sqlstr
+	exec sp_executesql @sqlstr
+	set @sqlstr='
+	
+		DECLARE #cur CURSOR
+		READ_ONLY
+		FOR select insertStr, tablename, APRVTableName from ##tempInsert'+replace(cast(@uGUID as nvarchar(50)), '-', '')+'
+
+		DECLARE @insertStr nvarchar(max), @tblName nvarchar(50), @aTblName nvarchar(50)
+		OPEN #cur
+
+		FETCH NEXT FROM #cur INTO @insertStr, @tblName, @aTblName
+		WHILE (@@fetch_status <> -1)
+		BEGIN
+			IF (@@fetch_status <> -2)
+			BEGIN
+				print @tblName
+				print @insertStr
+				exec sp_executesql @insertStr
+				exec core.migrateData_addColumns '''+@accountid+''', '''+@coreDB+''',  '''+@datadb+''', '''+@v3db+''', @tblName
+				
+				if isnull(@aTblName, '''')<>'''' begin
+					exec core.migrateData_addApproval '''+@accountid+''', '''+@coreDB+''',  '''+@datadb+''', '''+@v3db+''', @tblName
+				end
+			END
+			FETCH NEXT FROM #cur INTO @insertStr, @tblName, @aTblName
+		END
+
+		CLOSE #cur
+		DEALLOCATE #cur
+
+		--talk migrate sekaligus
+		exec core.migrateData_addTalk '''+@accountid+''', '''+@coreDB+''',  '''+@datadb+''', '''+@v3db+'''
+	'
+	--print @sqlstr
+	exec sp_executesql @sqlstr
+
+
+
+
+

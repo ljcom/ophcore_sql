@@ -1,0 +1,22 @@
+
+
+
+
+
+CREATE procedure [api].[save_v4]
+
+	@hostGUID uniqueidentifier, 
+	@code varchar(20),
+	@GUID uniqueidentifier,
+	@saveXML xml,
+	@preview int=0,
+	@isDebug bit=0
+as
+
+	print 'v4'
+
+
+
+
+
+

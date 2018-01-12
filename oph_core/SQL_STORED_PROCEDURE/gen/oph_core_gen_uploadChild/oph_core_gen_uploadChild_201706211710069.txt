@@ -1,0 +1,186 @@
+
+CREATE procedure [gen].[uploadChild] @hostGUID uniqueidentifier, @code nvarchar(50), @GUID uniqueidentifier, @filepath nvarchar(max), @isdebug bit=0
+as
+	declare @ver varchar(10), @db varchar(50), @typecode varchar(1)
+	exec gen.getDBInfo @hostguid, @code, @ver output, @db output, @typecode output
+
+	declare @sqlstr varchar(max), @typename varchar(10)
+
+	--set @typename=left(@code,1)+'t'+substring(@code, 3, len(@code)-2)
+	--exec gen.createType @typename
+
+	declare @updateList xml
+
+	set @updateList= (
+		select 
+			case when b.colType=36 and colType.infovalue in (32) then '
+				select @'+b.colkey+'='+combofieldkey.infovalue+' 
+				from '+@db+'.'+combotable.infovalue+' where '+comboFieldId.InfoValue+'=@'+b.colKey+'CbId'+char(10)
+				else '' end
+		--select *
+		from modl a
+			inner join modlcolm b on a.moduleguid=b.moduleguid
+			inner join modlcolminfo isEditable on b.columnguid=isEditable.ColumnGUID and isEditable.InfoKey='isEditable'
+			inner join modlcolminfo isviewable on b.columnguid=isviewable.ColumnGUID and isviewable.InfoKey='isviewable'
+			inner join modlcolminfo colType on b.columnguid=colType.ColumnGUID and colType.InfoKey='colType'
+			left join modlcolminfo comboTable on b.columnguid=comboTable.ColumnGUID and comboTable.InfoKey='comboTable'
+			left join modlcolminfo comboFieldKey on b.columnguid=comboFieldKey.ColumnGUID and comboFieldKey.InfoKey='comboFieldKey'
+			left join modlcolminfo comboFieldId on b.columnguid=comboFieldId.ColumnGUID and comboFieldId.InfoKey='comboFieldId'
+			left join modlcolminfo comboFieldName on b.columnguid=comboFieldName.ColumnGUID and comboFieldName.InfoKey='comboFieldName'
+			left join modlcolminfo pageNo on b.columnguid=pageNo.ColumnGUID and pageNo.InfoKey='pageNo'
+			left join modlcolminfo sectionNo on b.columnguid=sectionNo.ColumnGUID and sectionNo.InfoKey='sectionNo'
+			left join modlcolminfo colNo on b.columnguid=colNo.ColumnGUID and colNo.InfoKey='colNo'
+			left join modlcolminfo fieldNo on b.columnguid=fieldNo.ColumnGUID and fieldNo.InfoKey='fieldNo'
+		where moduleid=@code 
+			and ((isEditable.InfoValue in (1,2,4) and isviewable.InfoValue=1))-- or colorder=10 or isEditable=3)
+			and colType.infovalue in (32)
+		order by pageno.infovalue, sectionNo.infovalue, colno.infovalue, fieldno.infovalue--, viewrowtype, viewrowtypeorder
+		for xml path(''), type)
+
+		declare @updateList1 varchar(max)
+		set @updateList1=cast(@updateList as varchar(max))
+		set @updateList1=left(@updateList1, len(@updateList1)-1)
+
+	declare @x xml
+	set @x= (
+		select 
+			case when b.colType=36 and colType in (32) then '@'+colkey+' uniqueidentifier, @'+colkey+'cbId varchar(max), @'+colkey+'cbNm varchar(max), '
+				--when b.coltype=36 and colType.infovalue in (11) then '@'+colkey+' uniqueidentifier, @'+colkey+'parId varchar(max), @'+colkey+'parNm varchar(max), '
+				when b.coltype=60 then '@'+colkey+' money, '
+				else '@'+colkey+' varchar(max)'+', ' end
+		--select *
+		from modl a
+			inner join modlcolm b on a.moduleguid=b.moduleguid
+			inner join modlcolminfo isEditable on b.columnguid=isEditable.ColumnGUID and isEditable.InfoKey='isEditable'
+			inner join modlcolminfo isviewable on b.columnguid=isviewable.ColumnGUID and isviewable.InfoKey='isviewable'
+			inner join modlcolminfo colType on b.columnguid=colType.ColumnGUID and colType.InfoKey='colType'
+			left join modlcolminfo comboTable on b.columnguid=comboTable.ColumnGUID and comboTable.InfoKey='comboTable'
+			left join modlcolminfo comboFieldKey on b.columnguid=comboFieldKey.ColumnGUID and comboFieldKey.InfoKey='comboFieldKey'
+			left join modlcolminfo comboFieldId on b.columnguid=comboFieldId.ColumnGUID and comboFieldId.InfoKey='comboFieldId'
+			left join modlcolminfo comboFieldName on b.columnguid=comboFieldName.ColumnGUID and comboFieldName.InfoKey='comboFieldName'
+			left join modlcolminfo pageNo on b.columnguid=pageNo.ColumnGUID and pageNo.InfoKey='pageNo'
+			left join modlcolminfo sectionNo on b.columnguid=sectionNo.ColumnGUID and sectionNo.InfoKey='sectionNo'
+			left join modlcolminfo colNo on b.columnguid=colNo.ColumnGUID and colNo.InfoKey='colNo'
+			left join modlcolminfo fieldNo on b.columnguid=fieldNo.ColumnGUID and fieldNo.InfoKey='fieldNo'
+		where moduleid=@code and ((isEditable.InfoValue in (1,2,4) and isviewable.InfoValue=1))-- or colorder=10 or isEditable=3)
+		order by pageno.infovalue, sectionNo.infovalue, colno.infovalue, fieldno.infovalue--, viewrowtype, viewrowtypeorder
+		for xml path(''), type)
+
+		declare @declareList varchar(max)
+		set @declareList=cast(@x as varchar(max))
+		set @declareList=left(@declareList, len(@declareList)-1)
+		--print @declareList
+
+	declare @y xml
+	set @y= (
+		select 
+			case when b.coltype=36 and colType.infovalue in (32) then '@'+colkey+'cbId, @'+colkey+'cbNm, '
+				--when b.coltype=36 and colType.infovalue in (11) then '@'+colkey+'parId, @'+colkey+'parNm, '
+				when b.coltype=60 then '@'+colkey+', '
+				else '@'+colkey+''+', ' end
+		--select *
+		from modl a
+			inner join modlcolm b on a.moduleguid=b.moduleguid
+			inner join modlcolminfo isEditable on b.columnguid=isEditable.ColumnGUID and isEditable.InfoKey='isEditable'
+			inner join modlcolminfo isviewable on b.columnguid=isviewable.ColumnGUID and isviewable.InfoKey='isviewable'
+			inner join modlcolminfo colType on b.columnguid=colType.ColumnGUID and colType.InfoKey='colType'
+			left join modlcolminfo comboTable on b.columnguid=comboTable.ColumnGUID and comboTable.InfoKey='comboTable'
+			left join modlcolminfo comboFieldKey on b.columnguid=comboFieldKey.ColumnGUID and comboFieldKey.InfoKey='comboFieldKey'
+			left join modlcolminfo comboFieldId on b.columnguid=comboFieldId.ColumnGUID and comboFieldId.InfoKey='comboFieldId'
+			left join modlcolminfo comboFieldName on b.columnguid=comboFieldName.ColumnGUID and comboFieldName.InfoKey='comboFieldName'
+			left join modlcolminfo pageNo on b.columnguid=pageNo.ColumnGUID and pageNo.InfoKey='pageNo'
+			left join modlcolminfo sectionNo on b.columnguid=sectionNo.ColumnGUID and sectionNo.InfoKey='sectionNo'
+			left join modlcolminfo colNo on b.columnguid=colNo.ColumnGUID and colNo.InfoKey='colNo'
+			left join modlcolminfo fieldNo on b.columnguid=fieldNo.ColumnGUID and fieldNo.InfoKey='fieldNo'
+		where moduleid=@code and ((isEditable.infovalue in (1,2,4) and isviewable.infovalue=1))-- or colorder=10 or isEditable=3)
+		order by pageno.infovalue, sectionNo.infovalue, colno.infovalue, fieldno.infovalue--, viewrowtype, viewrowtypeorder
+		for xml path(''), type)
+
+		declare @colList varchar(max)
+		set @colList=cast(@y as varchar(max))
+		set @colList=left(@colList, len(@colList)-1)
+
+	
+	declare @z xml
+	set @z= (
+		select 
+			case when b.coltype=36 and colType.infovalue in (10,12) then '@'+colkey+', '
+				when b.coltype=36 and colType.infovalue in (11) then '@'+colkey+', '
+				when b.coltype=60 then '@'+colkey+', '
+				else '@'+colkey+''+', ' end
+		--select *
+		from modl a
+			inner join modlcolm b on a.moduleguid=b.moduleguid
+			inner join modlcolminfo isEditable on b.columnguid=isEditable.ColumnGUID and isEditable.InfoKey='isEditable'
+			inner join modlcolminfo isviewable on b.columnguid=isviewable.ColumnGUID and isviewable.InfoKey='isviewable'
+			inner join modlcolminfo colType on b.columnguid=colType.ColumnGUID and colType.InfoKey='colType'
+			left join modlcolminfo comboTable on b.columnguid=comboTable.ColumnGUID and comboTable.InfoKey='comboTable'
+			left join modlcolminfo comboFieldKey on b.columnguid=comboFieldKey.ColumnGUID and comboFieldKey.InfoKey='comboFieldKey'
+			left join modlcolminfo comboFieldId on b.columnguid=comboFieldId.ColumnGUID and comboFieldId.InfoKey='comboFieldId'
+			left join modlcolminfo comboFieldName on b.columnguid=comboFieldName.ColumnGUID and comboFieldName.InfoKey='comboFieldName'
+			left join modlcolminfo pageNo on b.columnguid=pageNo.ColumnGUID and pageNo.InfoKey='pageNo'
+			left join modlcolminfo sectionNo on b.columnguid=sectionNo.ColumnGUID and sectionNo.InfoKey='sectionNo'
+			left join modlcolminfo colNo on b.columnguid=colNo.ColumnGUID and colNo.InfoKey='colNo'
+			left join modlcolminfo fieldNo on b.columnguid=fieldNo.ColumnGUID and fieldNo.InfoKey='fieldNo'		
+		where moduleid=@code and ((isEditable.infovalue in (1,2,4) and isviewable.infovalue=1))-- or colorder=10 or isEditable=3)
+		order by pageno.infovalue, sectionNo.infovalue, colno.infovalue, fieldno.infovalue--, viewrowtype, viewrowtypeorder
+		for xml path(''), type)
+
+		declare @saveList varchar(max)
+		set @saveList=cast(@z as varchar(max))
+		set @saveList=left(@saveList, len(@saveList)-1)
+
+	if gen.fn_checkFile(@filepath)=1
+	begin
+		set @sqlstr=
+			'
+			--declare @t '+@typename+'
+			declare @GUID uniqueidentifier='''+cast(@GUID as varchar(50))+'''	
+			declare @hostGUID uniqueidentifier='''+cast(@hostGUID as varchar(50))+'''	
+			--insert into @t
+			select * 
+			into #t
+			FROM OPENROWSET(
+				''Microsoft.ace.OLEDB.12.0'',
+				''Excel 8.0;Database='+@filepath+';HDR=YES'',
+				''SELECT * FROM ['+@code+'$]'')
+				
+			select * from #t
+
+			DECLARE #cur1 CURSOR
+			READ_ONLY
+			FOR		
+				select * from @t
+
+			'+iif(isnull(@declareList,'')='', '', 'declare '+isnull(@declareList,''))+' 
+
+			OPEN #cur1
+
+			FETCH NEXT FROM #cur1 INTO '+isnull(@colList,'')+'
+
+			WHILE (@@fetch_status <> -1)
+			BEGIN
+				IF (@@fetch_status <> -2)
+				BEGIN
+					
+					'+iif(isnull(@updateList1,'')='','',isnull(@updateList1,''))+'
+
+					exec '+@code+'_save null, @hostGUID, @GUID, '+isnull(@saveList,'')+'
+
+				END
+				FETCH NEXT FROM #cur1 INTO '+isnull(@colList,'')+'
+			END
+
+			CLOSE #cur1
+			DEALLOCATE #cur1
+			'
+
+		if @isdebug=1 print @sqlstr	
+		exec(@sqlstr)
+
+	end
+	else
+		print 'file not found: '+@filepath
+
+
+

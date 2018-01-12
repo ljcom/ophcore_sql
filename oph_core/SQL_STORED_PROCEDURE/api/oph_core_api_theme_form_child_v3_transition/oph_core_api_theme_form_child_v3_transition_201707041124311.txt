@@ -1,0 +1,66 @@
+CREATE PROCEDURE [api].[theme_form_child_v3_transition] 
+	@hostGUID uniqueidentifier, @code nvarchar(max), @GUID uniqueidentifier, @database nvarchar(max), @settingmode nvarchar(1), @childxml xml output, @isdebug bit=0
+--WITH ENCRYPTION
+as
+
+--declare @hostGUID uniqueidentifier = gen.getHost('admin'), @code nvarchar(max) = 'TaHRTA', 
+--	@database nvarchar(max) = 'ef_ehrd', @settingmode nvarchar(1) = 'T', @childxml xml, @isdebug bit=1
+
+	declare @userID nvarchar(50)
+	select @userID = UserID from [user] where UserGUID = gen.getUserHost(@hostGUID)
+
+	declare @cfs nvarchar(MAX), @cfModules nvarchar(MAX), @sqlstr nvarchar(MAX)
+	set @sqlstr = '
+		select @cf = b.infovalue
+		from modl a 
+			inner join modlinfo b
+				on a.moduleguid=b.moduleguid and b.infokey=''childrenFilter'' and isnull(b.infoValue,'''')<>''''
+		where a.moduleID = '''+@code+''''
+
+	exec sp_executesql @sqlstr, N'@cf nvarchar(MAX) output', @cf=@cfs output
+
+	if @cfs is Not NULL begin
+		set @sqlstr = 'use ' + QUOTENAME(@database) + CHAR(10) + 
+			'declare @UserID nvarchar(50) = '''+@userID+'''' + CHAR(10) +
+			'declare @HostGUID uniqueidentifier = gen.getHost(@UserID, NULL)' + CHAR(10) +
+			'declare @GUID uniqueidentifier = '''+CAST(@GUID as nvarchar(50))+'''' + CHAR(10) +
+			'select @sm = (' + CHAR(10) + @cfs + CHAR(10) + ')'
+
+		exec sp_executesql @sqlstr, N'@sm nvarchar(MAX) OUTPUT', @sm = @cfModules OUTPUT
+	end
+
+	set @sqlstr = '
+		select @xml = (
+			select lower(c.moduleid) as code, c.ModuleDescription as childTitle, p2.colkey as parentkey,
+				(
+					select (
+						select b1.infovalue allowbrowse, b2.infovalue allowadd,
+							b3.infovalue allowedit, --b4.infovalue allowhold,
+							b5.infovalue allowdelete--, b6.infovalue allowwipe, b7.infovalue allowbatch 
+						from modl a
+							left join modlinfo b1 on a.moduleguid=b1.moduleguid and (b1.infokey=''AllowBrowse'' or b1.infokey=''AllowAccess'')
+							left join modlinfo b2 on a.moduleguid=b2.moduleguid and b1.infokey=''allowadd''
+							left join modlinfo b3 on a.moduleguid=b3.moduleguid and b1.infokey=''allowedit''
+							left join modlinfo b5 on a.moduleguid=b5.moduleguid and b1.infokey=''allowdelete''
+						where moduleid='''+@code+''' 
+						for xml path(''permission''),type)
+				) as info
+			from modl p
+				inner join modl c on c.ParentModuleGUID=p.ModuleGUID
+				inner join modlcolm p2 on p.ModuleGUID=p2.ModuleGUID 
+				inner join modlcolm c2 on c.ModuleGUID=c2.ModuleGUID and c2.colkey=p2.colkey
+				--inner join modlcolminfo d on d.ColumnGUID=c2.ColumnGUID and d.InfoKey=''isParentKey''
+			where p.moduleid = '''+@code+''' 
+				and p2.colorder=(
+					select min(colorder)
+					from modl a
+						inner join modlcolm b on a.moduleguid=b.moduleguid
+					where a.moduleid='''+@code+''' 
+				)
+				 '+iif(@cfModules is null, '', 'and c.moduleguid in ('+@cfModules+')')+'	--childrenFilter
+			order by c.OrderNo, c.ModuleDescription, c.ModuleID
+			for xml path(''child''),type,root(''children'')) '
+		
+	if @isdebug=1 print @sqlstr
+	EXECUTE sp_executesql @sqlstr,N'@xml xml output', @xml = @childxml output
+

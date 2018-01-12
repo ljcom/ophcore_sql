@@ -1,0 +1,106 @@
+
+CREATE procedure [core].[addModule_v4] @accountid nvarchar(50), @db nvarchar(50), @isdebug bit=0
+--WITH ENCRYPTION
+as
+	--declare @account varchar(50)='KITASHOP', @db varchar(50)='oph_core'
+	declare @accountguid uniqueidentifier, @accountdbGUID uniqueidentifier, @dbname varchar(50), @masterDB varchar(50)=db_name(), @curMaster bit 
+
+	select @accountguid=a.AccountGUID, @accountdbGUID=AccountDBGUID, 
+		@dbname=b.DatabaseName, @curMaster=isMaster
+	from acct a
+		inner join acctdbse b
+			on a.AccountGUID=b.AccountGUID
+	where accountid=@accountid and b.DatabaseName=@db
+	
+	declare @sqlstr nvarchar(max), @sqlpar nvarchar(max)
+
+	--for ismaster=1
+	-- ismaster=1: semua modl yang digunakan adalah dari database tersebut
+	set @sqlstr='
+		insert into '+@db+'.dbo.modl (ModuleGUID, AccountGUID, ModuleID, ModuleDescription, settingMode, AccountDBGUID, ParentModuleGUID, OrderNo, needLogin, ThemePageGUID)
+		select newid(), '''+cast(@accountguid as varchar(50))+''', a.name, x.moduleDescription, 0, '''+cast(@accountdbGUID as varchar(50))+''', null, null, 1, null
+		from '+@db+'.sys.objects a
+			inner join '+@masterDB+'.dbo.modl x on a.name=x.ModuleID
+			left join '+@db+'.dbo.modl m on a.name=m.ModuleID
+		where a.type=''U'' and m.ModuleGUID is null
+		
+		update a
+		set parentModuleGUID=x3.moduleGUID
+		from '+@db+'.dbo.modl a
+			inner join '+@masterDB+'.dbo.modl x on a.moduleid=x.ModuleID
+			inner join '+@masterDB+'.dbo.modl x2 on x2.moduleguid=x.parentModuleGUID
+			inner join '+@db+'.dbo.modl x3 on x2.moduleid=x3.ModuleID
+		where a.ParentModuleGUID is null and x3.ModuleGUID is not null
+
+		update a
+		set moduleDescription=x.moduleDescription
+		from '+@db+'.dbo.modl a
+			inner join '+@masterDB+'.dbo.modl x on a.moduleid=x.ModuleID
+		where a.moduleDescription is null and x.moduleDescription is not null 
+
+		insert into '+@db+'.dbo.modlinfo (ModuleInfoGUID, ModuleGUID, InfoKey, InfoValue)
+		select newid(), a.ModuleGUID, y.InfoKey, y.InfoValue
+		from '+@db+'.dbo.modl a
+			inner join '+@masterDB+'.dbo.modl x on a.ModuleID=x.ModuleID
+			inner join '+@masterDB+'.dbo.modlinfo y on y.ModuleGUID=x.ModuleGUID
+			left join '+@db+'.dbo.modlinfo b on a.moduleGUID=b.moduleGUID and b.infoKey=y.infoKey
+		where b.ModuleGUID is null
+
+		'
+
+	if @isdebug=1 print @sqlstr
+	exec sp_executesql @sqlstr
+	 
+	set @sqlstr='
+		insert into '+@db+'.dbo.modlcolm (ColumnGUID, ModuleGUID, colKey, colType, colOrder, titlecaption)
+		select newid(), a.moduleguid, a.colname, a.system_type_id, a.column_id, a.titleCaption
+		from (	
+			select m.moduleguid, m.ModuleID, b.name colname, b.column_id, b.system_type_id, y.titleCaption
+			from '+@db+'.dbo.modl m
+				inner join '+@masterDB+'.sys.objects a on m.moduleid=a.name
+				inner join '+@masterDB+'.sys.columns b on a.object_id=b.object_id
+				inner join '+@masterDB+'.dbo.modl x on a.name=x.moduleid
+				left join '+@masterDB+'.dbo.modlcolm y on b.name=y.colKey and x.moduleGUID=y.moduleGUID
+			--where ThemePageGUID is null
+			) a 
+		
+			left join (
+				select c.ModuleID, d.colKey 
+				from '+@db+'.dbo.modl c 
+					inner join '+@db+'.dbo.modlcolm d on c.ModuleGUID=d.moduleguid
+				) e
+				on e.colkey=a.colname and e.moduleid=a.ModuleID
+		where e.moduleid is null'
+	
+	if @isdebug=1 print @sqlstr
+	exec sp_executesql @sqlstr
+
+	set @sqlstr='
+		insert into '+@db+'.dbo.modlcolminfo (ColumnInfoGUID, ColumnGUID, InfoKey, InfoValue)
+		select newid(), a.ColumnGUID, a.InfoKey, a.InfoValue
+		from (	
+			select n.columnGUID, n.colKey colname, m.moduleID, z.infokey, z.infoValue
+			from '+@db+'.dbo.modl m
+				inner join '+@db+'.dbo.modlcolm n on m.moduleGUID=n.moduleGUID
+				inner join '+@masterDB+'.dbo.modl x on m.moduleid=x.moduleid
+				inner join '+@masterDB+'.dbo.modlcolm y on x.moduleGUID=y.moduleGUID and n.colKey=y.colKey
+				inner join '+@masterDB+'.dbo.modlcolminfo z on y.columnGUID=z.columnGUID
+			--where ThemePageGUID is null
+			) a 
+		
+			left join (
+				select c.ModuleID, d.colKey, f.infoKey 
+				from '+@db+'.dbo.modl c 
+					inner join '+@db+'.dbo.modlcolm d on c.ModuleGUID=d.moduleguid
+					inner join '+@db+'.dbo.modlcolminfo f on d.columnGUID=f.columnGUID
+				) e
+				on e.colkey=a.colname and e.moduleid=a.ModuleID and e.infoKey=a.infoKey
+		where e.moduleid is null'
+	
+	if @isdebug=1 print @sqlstr
+	exec sp_executesql @sqlstr
+--select * from oph_core.sys.columns
+
+
+
+

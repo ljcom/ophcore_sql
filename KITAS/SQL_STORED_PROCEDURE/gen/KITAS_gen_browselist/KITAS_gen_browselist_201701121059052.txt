@@ -1,0 +1,253 @@
+
+
+
+
+CREATE procedure [gen].[browselist]
+	@nbRec int, @pageNo int, 
+	@tableName varchar(100), 
+	@keyField varchar(100), @selectFields varchar(8000),
+	@searchText varchar(100), 
+	@whereStr varchar(8000) = NULL,
+	@orderType int, @orderField nvarchar(100),
+	@hostGUID uniqueidentifier, @options int=0, @fieldname varchar(50) 	--1=only show the job list only
+as
+-- build 20131228
+
+	declare @sqlstr varchar(4000), @sqlstr1 varchar(4000), @sqlstr2 varchar(4000), @r int, @p int, @nullamount int, @i int,@nullText varchar(1000), @approvalProtected varchar(1000), @userApproval varchar(4000), @userStatusField varchar(200)
+	declare @tableAprv nvarchar(100)
+	declare @atablename nvarchar(100)
+	declare @otablename nvarchar(100)
+	declare @apprx nvarchar(200)
+	declare @userGUID uniqueidentifier
+	set @apprx=''
+	set @approvalProtected=''
+	set @userStatusField=''
+	set @userApproval=''
+	set @otablename=left(@tablename,1) + 'o' + substring(@tablename,3, len(@tablename)-2)
+	set @atablename=left(@tablename,1) + 'a' + substring(@tablename,3, len(@tablename)-2)
+
+	select @userGUID=UserGUID from couserhost where hostguid=@hostGUID	
+	set @i=0
+	set @nullamount=0
+
+	declare @browsestr nvarchar(max)--, @wherestr nvarchar(max)
+	if isnull(@wherestr,'')='' begin
+	exec gen.procfields_browse @aTableName, @browsestr OUTPUT, @wherestr OUTPUT
+	set @wherestr=replace(@wherestr, '''''', '''')
+	end
+
+	print @wherestr
+	
+	while @i&lt;&gt;len(@selectFields)
+	begin
+		if substring(@selectFields,@i,1)= ','
+			set @nullamount=@nullamount+1
+
+		set @i=@i+1
+	end
+	
+	set @nullText='null'
+	set @i=0
+
+	while @i&lt;&gt;@nullamount+1
+	begin
+		set @nullText=@nullText+', null'
+		set @i=@i+1
+	end
+	/*
+	if exists(	select * 
+				from gen.cotablfiel a
+					inner join gen.cotabl b
+						on a.tableguid=b.tableguid
+				where tablename=@tableName and colName='CreatedUser')
+	begin
+
+		if not exists(select * from sysobjects where name=@atablename+'APRV')
+			
+			select @approvalProtected = '
+					left join (
+						select upperguid from CaMODLUSERLVL0
+							inner join (
+								select MemberUserGUID userGUID from caMODLUGRP
+									inner join caUGRPUSER1
+										on caMODLUGRP.approvalugrpGUID=caUGRPUSER1.ugroupGUID
+								where moduleid='''+@atablename+''' and isrequired=0) x
+								on x.userGUID=CaMODLUSERLVL0.upperguid
+						where upperGUID='''+ convert(nvarchar(100), @userGUID) +'''
+						and	moduleid='''+@atablename+'''		
+						group by upperguid
+							) z
+						on z.upperguid = '''+ convert(nvarchar(100), @userGUID) +''''	
+
+		else
+			select @approvalProtected = '
+					left join ' + @atablename + 'APRV 
+						on ' + @atablename + 'APRV.' + @keyField + ' = y.' + @keyField  + ' '+
+					'	and ' + @atablename + 'APRV.approvaluserGUID = ''' + convert(nvarchar(100), @userGUID) + '''
+					left join (
+						select upperguid from CaMODLUSERLVL0
+							inner join (
+								select memberUserGUID userGUID from caMODLUGRP
+									inner join caUGRPUSER1
+										on caMODLUGRP.approvalugrpGUID=caUGRPUSER1.ugroupGUID
+								where moduleid='''+@atablename+''' and isrequired=0) x
+								on x.userGUID=CaMODLUSERLVL0.upperguid
+						where upperGUID='''+ convert(nvarchar(100), @userGUID) +'''
+						and	moduleid='''+@atablename+'''		
+						group by upperguid
+							) z
+						on z.upperguid = '''+ convert(nvarchar(100), @userGUID) +''''	
+
+	end
+	else
+	begin
+		set @approvalProtected=''	--, null, null'
+	end
+	
+	if exists( select * from sysobjects where Name= @atablename+'APRV') and substring(@atablename, 2, 1) = 'a'
+	begin
+		--set @userApproval = 'left join ' + @atablename + 'APRV 
+		--		on ' + @atablename + 'APRV.' + @keyField + ' = y.' + @keyField + ' '+
+		--		'and ' + @atablename + 'APRV.approvaluserGUID = ''' + @userGUID + ''''			
+		set @userApproval = '
+				left join ' + @atablename + 'APRV 
+					on ' + @atablename + 'APRV.' + @keyField + ' = y.' + @keyField  + ' '+
+				'	and ' + @atablename + 'APRV.approvaluserGUID = ''' + convert(nvarchar(100), @userGUID) + '''
+				left join (
+					select upperguid from CaMODLUSERLVL0
+						inner join (
+							select memberUserGUID userGUID from caMODLUGRP
+								inner join caUGRPUSER1
+									on caMODLUGRP.approvalugrpGUID=caUGRPUSER1.ugroupGUID
+							where moduleid='''+@atablename+''' and isrequired=0) x
+							on x.userGUID=CaMODLUSERLVL0.upperguid
+					where upperGUID='''+ convert(nvarchar(100), @userGUID) +''' --and isrequired=0
+					and	moduleid='''+@atablename+'''		
+					group by upperguid
+						) z
+					on z.upperguid = '''+ convert(nvarchar(100), @userGUID) +''''	
+		set @userStatusField = ', ' + @atablename + 'APRV.status userStatus1, ' + @atablename + 'APRV.userStatusDescription userStatusDescription1 '
+		set @apprx='and (' + @atablename + 'APRV.approvaluserGUID is not null or y.CreatedUser=''' + convert(nvarchar(100), @userGUID) + ''' or (z.upperguid='''+ convert(nvarchar(100), @userGUID) +''' and y.status&gt;=4)) '+
+			case when @options=1 then 'and isnull(' + @atablename + 'APRV.status,0)&lt;=2 ' else '' end 
+	end
+	else
+	begin
+		set @userApproval = ''
+		set @userStatusField = ', null userStatus1, null userStatusDescription1 '
+	end
+	*/
+	-- start to find nb of pages
+	declare @n uniqueidentifier
+	set @n=newid()
+	select @sqlstr = 	
+		'create'+' '+'procedure #nbRows'+replace(convert(nvarchar(100), @n),'-','')+' @searchText nvarchar(100), @row int output as
+
+		declare @x int
+		declare @newGUID uniqueidentifier
+		set  @newGUID = newid()
+
+		select @x = count(*) 
+		from (
+			select y.* 
+			from '+@otablename+' y ' + @approvalProtected + '
+			) 
+			 ' + @tableName +
+		case when len(isnull(@whereStr, ''))=0 then '' else ' where ' + @whereStr + ' ' end + '
+		
+		set @row=@x'
+
+	print '--'
+	print @sqlstr
+	PRINT len(@sqlstr)
+	
+--	if exists(select * from tempdb.dbo.sysobjects where name like '#nbRows!_%' escape '!')
+--		drop procedure #nbRows
+	
+	exec (@sqlstr)
+
+	declare @sqlstrx nvarchar(1000), @par nvarchar(1000)
+	set @sqlstrx=N'exec #nbRows'+replace(convert(nvarchar(100), @n),'-','')+' @s, @rr output'
+	set @par=N'@s nvarchar(100), @rr int output'
+print '@sqlstrx'
+print @sqlstrx 
+print @par
+	--exec (@sqlstr)
+	exec sp_executesql @sqlstrx, @par, @s=@searchText, @rr=@r output
+	
+	if exists(select * from tempdb.dbo.sysobjects where name like '#nbRows!_%' escape '!')
+		drop procedure #nbRows
+
+	if @nbRec&gt;0	
+		set @p = (@r+@nbRec-1)/@nbRec
+	else
+		set @p=0
+
+	-- end of find nb of pages
+	if @options=9 begin
+		select @r nbRecords
+	end
+	if @options&lt;&gt;9 begin
+
+		set @nullText=@nullText+', '+convert(nvarchar(10), @p)
+		
+		if @searchText &lt;&gt;'' set @searchText = 'and '+@fieldname+' like ''%' + @searchText + '%'''
+			else set @searchText = '' 
+		
+		select @sqlstr = 	
+			'declare @searchTex nvarchar(100), @newGUID uniqueidentifier
+			
+			
+			set  @newGUID = newid()
+			
+			declare @pg1 int, @pg2 int
+			set @pg1='+convert(nvarchar(10), @pageNo * @nbRec)+'
+			set @pg2='+convert(nvarchar(10), (@pageNo-1) * @nbRec)+''
+			
+
+			
+		select @sqlstr1 = 	
+			'select * from (
+				select y.' + @keyField + ' '+ @keyField + ', ' + @selectFields + ', ' + convert(nvarchar(10), @p) + ' nbPage
+				from (	
+					select top (@pg1)  '+@tableName+ '.* ' + ' 
+					from (select y.* ' + @userStatusField + ' 
+							from ' + @otablename + ' y ' + @userapproval + '
+							where 1=1 ' + @apprx+' '+@searchText+'
+							)
+						 ' + @tableName +
+					case when len(isnull(@whereStr, ''))=0 then '' else ' where ' + @whereStr + ' ' end +
+					case when @orderField &lt;&gt; '' then ' order by ' + @orderField else '' end +
+					''
+		--select @orderField, @whereStr, @apprx, @tablename, @userStatusField, @keyField, @selectFields, @userApproval, @p
+		
+		select @sqlstr2 = 	
+			'		except 	
+						select top (@pg2)  '+@tableName+ '.* ' + ' 
+						from (select y.* ' + @userStatusField + ' 
+							from ' + @otablename + ' y ' + @userapproval + '
+							where 1=1 ' + @apprx+' '+@searchText+'
+							) ' + @tableName +
+						case when len(isnull(@whereStr, ''))=0 then '' else ' where ' + @whereStr + ' ' end + 
+					case when @orderField &lt;&gt; '' then ' order by ' + @orderField else '' end +
+				') y '+
+			'		union
+				select '+ @nullText + ') z ' +
+			case when @orderField &lt;&gt; '' then ' order by ' + @orderField else '' end	
+
+		print '---'	
+		print @sqlstr
+		print @sqlstr1
+		print @sqlstr2
+
+		exec (@sqlstr + @sqlstr1 + @sqlstr2)
+	end
+
+	--select @sqlstr,@sqlstr1,@sqlstr2
+
+
+
+
+
+
+
+

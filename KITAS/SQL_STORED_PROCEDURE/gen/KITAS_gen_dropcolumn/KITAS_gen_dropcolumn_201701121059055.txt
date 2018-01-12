@@ -1,0 +1,43 @@
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+CREATE procedure [gen].[dropcolumn] @tableId int, @tableName nvarchar(50), 
+	@field nvarchar(50)
+as
+	declare @sqlstr varchar(8000)
+	if exists (
+		select * 
+		from syscolumns 
+		where id = @tableId and name = @field) 
+	begin
+		set @sqlstr = 'alter table ' + @tableName + ' drop column ' + @field 
+		print @sqlstr
+		exec (@sqlstr)
+	end
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

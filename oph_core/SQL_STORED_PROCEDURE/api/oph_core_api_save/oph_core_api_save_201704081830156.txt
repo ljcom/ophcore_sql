@@ -1,0 +1,48 @@
+
+
+
+
+
+--USE [oph_core]
+--GO
+--/****** Object:  StoredProcedure [api].[save]    Script Date: 3/9/2017 1:55:05 PM ******/
+--SET ANSI_NULLS ON
+--GO
+--SET QUOTED_IDENTIFIER ON
+--GO
+
+
+CREATE procedure [api].[save]
+
+	@hostGUID uniqueidentifier, 
+	@code varchar(20),
+	@GUID uniqueidentifier,
+	@saveXML xml,
+	@preview int=0,
+	@isDebug bit=0
+as
+
+	--if len(@code) % 4 = 2
+	--set @code = right(@code,len(@code)-2)
+
+
+	declare @db varchar(50)=api.fn_checkDB(@code)
+	declare @ver varchar(10), @settingMode int
+
+	select @ver=[version], @settingMode=settingMode
+	--select * 
+	from modl a
+		inner join acctdbse	b 
+			on a.accountdbguid=b.accountdbguid
+	where moduleid=@code
+
+	if @ver='3.0' 
+		exec [api].[save_v3] @hostGUID, @code, @GUID, @saveXML, @preview, @isDebug
+	else
+		exec [api].[save_v4] @hostGUID, @code, @GUID, @saveXML, @preview, @isDebug
+		
+
+
+
+
+

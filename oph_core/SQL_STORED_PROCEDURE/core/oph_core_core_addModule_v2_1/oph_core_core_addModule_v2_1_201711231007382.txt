@@ -1,0 +1,104 @@
+
+
+CREATE procedure [core].[addModule_v2_1] @accountid nvarchar(50), @v2svr nvarchar(50), @dataDB varchar(50), @isdebug bit=0
+--WITH ENCRYPTION
+as	
+	--module linkedserver -- msaccess
+
+	create table #tables (table_cat nvarchar(50), table_schem nvarchar(50), table_name nvarchar(200), tabletype nvarchar(50), remarks nvarchar(200))
+	insert into #tables
+	exec sp_tables_ex @v2svr
+
+	create table #columns (table_cat nvarchar(50), table_schem nvarchar(50), table_name nvarchar(200), column_name nvarchar(200), 
+		data_type nvarchar(50), [type_name] nvarchar(50), column_size nvarchar(50), buffer_length nvarchar(50), decimal_digits nvarchar(50), 
+		num_prec_radix nvarchar(50), nullable  nvarchar(50), remarks nvarchar(200), column_def nvarchar(50), sql_data_type nvarchar(50), 
+		sql_datetime_sub nvarchar(50), char_octet_length nvarchar(50), ordinal_position nvarchar(50), is_nullable nvarchar(50), ss_data_type nvarchar(50))
+	insert into #columns
+	exec sp_columns_ex @v2svr
+
+	create table #primarykeys (table_cat nvarchar(50), table_schem nvarchar(50), table_name nvarchar(200), column_name nvarchar(200), key_seq nvarchar(50), pk_name nvarchar(50))
+	insert into #primarykeys
+	exec sp_primarykeys @v2svr
+
+	declare @accountguid uniqueidentifier, @accountdbGUID uniqueidentifier--, @curMaster bit 
+
+	--accountdb langsung dipindahkan ke 4.0
+
+	select @accountguid=a.AccountGUID, @accountdbGUID=b2.AccountDBGUID--, @curMaster=isMaster
+	from acct a
+		inner join acctdbse b on a.AccountGUID=b.AccountGUID
+		inner join acctdbse b2 on b.migrateDB=b2.DatabaseName
+	where accountid=@accountid and b.DatabaseName=@v2svr
+	
+	declare @sqlstr nvarchar(max), @sqlpar nvarchar(max)
+	set @sqlstr='
+		insert into '+@dataDB+'.dbo.modl (ModuleGUID, AccountGUID, ModuleID, ModuleDescription, settingMode, AccountDBGUID, needLogin)
+		select newid(), '''+cast(@accountguid as varchar(50))+''', replace(replace(a.table_name, ''-'', ''_''), ''*'', ''_'')+iif(a.table_name in (''profile''), ''0'', ''''), replace(replace(a.table_name, ''-'', ''_''), ''*'', ''_'')+iif(a.table_name in (''profile''), ''0'', ''''), 1, '''+cast(@accountdbGUID as nvarchar(50))+''', 1
+		from #tables a
+			left join '+@dataDB+'.dbo.modl b on replace(replace(a.table_name, ''-'', ''_''), ''*'', ''_'')+iif(a.table_name in (''profile''), ''0'', '''')=b.ModuleID 
+		where a.tabletype=''TABLE'' and b.ModuleGUID is null
+
+		--add modules groups
+		insert into '+@dataDB+'.dbo.modg (ModuleGroupGUID, AccountGUID, ModuleGroupID, ModuleGroupName, ModuleGroupDescription, AccountDBGUID, ImagePath, SortOrder, isDefault)
+		select newid(), '''+cast(@accountguid as varchar(50))+''', a.DatabaseName, a.DatabaseName, a.DatabaseName, a.AccountDBGUID, null, null, 0
+		from acctdbse a 
+			left join '+@dataDB+'.dbo.modg b on a.accountDBGUID=b.accountDBGUID
+		where a.AccountGUID='''+cast(@accountguid as varchar(50))+''' and b.moduleGroupGUID is null
+
+		update a
+		set modulegroupguid=b.modulegroupguid
+		from '+@dataDB+'.dbo.modl a
+			inner join '+@dataDB+'.dbo.modg b on a.accountdbGUID=b.accountdbGUID 
+		where a.modulegroupguid is null
+
+		update '+@dataDB+'.dbo.modl 
+		set 
+			ThemePageGUID = 
+				case settingMode 
+					when 6 then (select ThemePageGUID from '+@dataDB+'.dbo.thmepage where pageURL=moduleid)
+					--when 5 then (select ThemePageGUID from '+@dataDB+'.dbo.thmepage where pageURL=''report'')
+					else (select max(ThemePageGUID) from '+@dataDB+'.dbo.thmepage where isDefault = 1)
+				end
+		where themePageGUID is null
+
+		update '+@dataDB+'.dbo.modl 
+		set 
+			ModuleStatusGUID = case settingMode 
+				when 1 then (select ModuleStatusGUID from '+@dataDB+'.dbo.msta where ModuleStatusName = ''master'')
+				when 4 then (select ModuleStatusGUID from '+@dataDB+'.dbo.msta where ModuleStatusName = ''trx'') 
+				else NULL
+			end
+		where moduleStatusGUID is null
+		'
+
+	if @isdebug=1 print @sqlstr
+	exec sp_executesql @sqlstr
+	 
+	set @sqlstr='
+		insert into '+@dataDB+'.dbo.modlcolm (ColumnGUID, ModuleGUID, colKey, colType, colLength, colOrder, titlecaption)
+		select newid(), c.ModuleGUID, replace(replace(b.column_name, ''-'', ''_''), ''*'', ''_'')+iif(b.column_name in (''status''), ''0'', ''''), max(
+		case b.type_name 
+			when ''varchar'' then	231 
+			when ''GUID'' then 36 
+			when ''Long'' then 56 
+			when ''VarBinary'' then 173
+			when ''Short'' then 56
+			when ''Byte'' then 173
+			when ''Bit'' then 104 
+			when ''smalldatetime'' then 61 
+			when ''Double'' then 60 end), 
+			max(b.buffer_length), max(b.ordinal_position), replace(replace(b.column_name, ''-'', ''_''), ''*'', ''_'')+iif(b.column_name in (''status''), ''0'', '''')
+		from #tables a
+			inner join #columns b ON a.table_name = b.table_name
+			inner join '+@dataDB+'.dbo.modl c ON replace(replace(a.table_name, ''-'', ''_''), ''*'', ''_'')+iif(a.table_name in (''profile''), ''0'', '''') = c.ModuleID and c.AccountDBGUID is Not NULL
+			left join '+@dataDB+'.dbo.modlcolm z ON z.colKey = replace(replace(b.column_name, ''-'', ''_''), ''*'', ''_'')+iif(b.column_name in (''status''), ''0'', '''') 
+				and c.moduleguid=z.moduleguid
+		where z.ColumnGUID is NULL
+		group by c.ModuleGUID, replace(replace(b.column_name, ''-'', ''_''), ''*'', ''_'')+iif(b.column_name in (''status''), ''0'', '''')
+
+		'
+	
+	if @isdebug=1 print @sqlstr 
+	exec sp_executesql @sqlstr
+
+

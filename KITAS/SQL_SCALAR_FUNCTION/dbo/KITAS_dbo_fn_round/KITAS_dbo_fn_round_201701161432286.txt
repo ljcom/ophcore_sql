@@ -1,0 +1,10 @@
+
+
+CREATE FUNCTION [dbo].[fn_round](@money money)
+RETURNS money AS  
+BEGIN 
+
+	return round(@money, 2)
+
+END
+

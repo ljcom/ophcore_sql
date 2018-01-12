@@ -1,0 +1,191 @@
+
+
+CREATE procedure [api].[theme_report] @hostGUID uniqueidentifier, @code varchar(100)
+--WITH ENCRYPTION
+as	--CreatedBy eLs ON Mar, 2017
+
+	--declare @accountid varchar(50)='EGCHRD', @coreDB varchar(50)='oph_core', @hostGUID uniqueidentifier=gen.getHost('els'), @code varchar(100)='YoATTD'
+
+	declare @theme varchar(50), @accountid nvarchar(50)
+	exec gen.getDBInfo @hostguid, @code, @themename=@theme output, @accountid=@Accountid output
+
+	declare @ModuleGUID uniqueidentifier, @desc varchar(250)
+	select @ModuleGUID = ModuleGUID, @desc = IIF(len(ModuleDescription) < 1, ModuleID, ModuleDescription) from modl where ModuleID = @code
+
+	/*XML_BODY_INFO TEMPLATE
+	-------------------------
+	<code>#ModuleID / @Code#</code>
+	<description>#ModuleDescription#</description>
+	<querySQL>#querySQL#</querySQL>
+	<reportName>#PDF / XLS Report Name#</reportName>
+	<permission>
+		<allowPDF>0</allowPDF>
+		<allowXLS>1</allowXLS>
+	</permission>
+	*/
+
+	declare @xmlInfo xml
+	set @xmlInfo = (
+		select 
+			@code [code], @desc [description], [querySQL], case when AllowPDF = 1 and AllowXLS = 0 then reportName
+				when AllowXLS = 1 and AllowPDF = 0 then XLSTitleName else @code end [reportName],
+			AllowPDF [permission/allowPDF], AllowXLS [permission/allowXLS]
+		from (select ModuleGUID, InfoKey, InfoValue from modlinfo where ModuleGUID = @ModuleGUID) x
+			PIVOT(MAX(InfoValue) FOR InfoKey IN ([allowXLS],[allowPDF],[querySQL],[QueryTypeFlag],[XLSTitleName],[reportName])) y			
+		for xml path(''), type
+	) 
+
+	/*XML_BODY_QUERY_ROWS TEMPLATE	
+	------------------------------
+	<queryRows>
+		<queryRow rowNo="1">
+		<fields>
+			<field fieldName="StartDate" isEditable="1" isNullable="0">
+		--case For Date
+			<dateBox>
+				<titlecaption>Start Date</titlecaption>
+				<xBoxTypexType>40</xBoxTypexType>
+				<value>05/02/2017</value>
+			</dateBox>
+		--case for combo AutoSuggest
+			<comboBox>
+				<titlecaption>Start Date</titlecaption>
+				<xBoxTypexType>12</xBoxTypexType>
+				<comboKey>ParameterValueGUID</comboKey>
+				<comboId>ParValueId</comboId>
+				<comboName>ParValueDesc</comboName>
+				<comboTable>PaABSN</comboTable>
+		  	</comboBox>
+			</field>
+		</fields>
+		</queryRow>
+	</queryRows>
+	*/
+
+	declare @xmlParameter xml
+	set @xmlParameter = (
+		select 
+			colOrder [queryRows/queryRow/@rowNo], colKey [queryRows/queryRow/fields/field/@fieldName], 
+			1 [queryRows/queryRow/fields/field/@isEditable], 0 [queryRows/queryRow/fields/field/@isNullable],
+			CONVERT(xml, (case 
+				when colType in (10, 12) then
+					'<comboBox>'+
+						'<titleCaption>'+isNULL(titleCaption, colKey)+'</titleCaption>'+
+						'<comboId>'+isNULL(cbId, '')+'</comboId>' + 
+						'<comboKey>'+isNULL(cbKey, '')+'</comboKey>'+
+						'<comboName>'+isNULL(cbName, '')+'</comboName>' + 
+						'<comboTable>'+isNULL(cbTable, '')+'</comboTable>' + 
+					'</comboBox>' 
+				when colType in (40) then 
+					'<dateBox>'+
+						'<titleCaption>'+isNULL(titleCaption, colKey)+'</titleCaption>'+
+						'<dateType>'+cast(colType as varchar(5))+'</dateType>' + 
+						'<value>'+CONVERT(varchar(50), GETDATE(), 101)+'</value>' + 
+					'</dateBox>'
+			end)) [queryRows/queryRow/fields/field]
+		from (
+			select a.*, InfoKey, InfoValue from modlcolm a
+				left join modlcolminfo b ON a.ColumnGUID = b.ColumnGUID
+			where moduleguid = @ModuleGUID
+		) x 
+		PIVOT (Max(InfoValue) FOR InfoKey IN ([cbId],[cbKey],[cbName],[cbTable])) y
+		order by colOrder
+		for xml path(''), type
+	) 
+
+	set @xmlParameter = (select 1 [queryCols/queryCol/@colNo], @xmlParameter [queryCols/queryCol] for xml path (''))
+	set @xmlParameter = (
+		select 
+			1 [querySections/querySection/@sectionNo], 'Report Parameters' [querySections/querySection/@rowTitle], 
+			@xmlParameter [querySections/querySection]
+		for xml path('')
+	) 
+
+ 	/*XML_HEADER_INFO TEMPLATE
+	--------------------------
+	<account>#account#</account>
+	<themeFolder>#theme#</themeFolder>
+	<title>#ModuleDescription#</title>
+	<code>
+		<id>#code#</id>
+		<name>#ModuleDescription#</name>
+	</code>
+	<user>
+		<userId>#user ID#</userId>
+		<userName>#user Name#</userName>
+		<hostGUID>#GUID#</hostGUID>
+	</user>
+	*/
+	
+	--declare @headInfo xml
+	--set @headInfo = (
+	--	select 
+	--	@accountid [account], @theme [themeFolder], @desc [title], @code [code/id], @desc [code/name], (
+	--		select userId, userName, hostGUID from userhost a
+	--			inner join [user] b on a.userguid = b.userguid
+	--		where hostguid = @hostGUID for xml path(''), elements, type
+	--	) [user] for xml path(''), elements, type
+	--) 
+
+	/*XML_HEADER_MENU TEMPLATE
+	--------------------------
+	<menu code="sidebar">
+	<submenus>
+		<submenu type="treeroot">
+		<caption>Human Resources</caption>
+		<pageURL>#</pageURL>
+		<submenus>
+			<submenu type="treeview">
+			<caption>Transactions</caption>
+			<pageURL>#</pageURL>
+			</submenu>
+			<submenu type="treeview">
+			<caption>Master Lists</caption>
+			<pageURL>#</pageURL>
+			</submenu>
+			<submenu type="treeview">
+			<caption>Reports</caption>
+			<pageURL>#</pageURL>
+			</submenu>
+		</submenus>
+		</submenu>
+	</submenus>
+	</menu>
+	*/
+	declare @headerXML xml
+	exec [api].[theme_header] @hostguid, @code, @headerXML output
+
+	--declare @headMenu xml
+	--set @headMenu = (
+	--	select menucode '@code', 
+	--		--submenus
+	--		(select [type] '@type', Tag '@tag', SubMenuDescription [MenuDescription],  caption,  url pageURL, icon_fa fa, icon_url icon_url, 
+	--			--submenus
+	--			(select [type] '@type', Tag '@tag', SubMenuDescription [MenuDescription], caption,  url pageURL, icon_fa fa, icon_url icon_url,
+	--				--submenus
+	--				(select	
+	--					[type] '@type', Tag '@tag', SubMenuDescription [MenuDescription], caption,  url pageURL, icon_fa fa, icon_url icon_url
+	--				from menusmnu d
+	--				where d.uppersubmenuGUID=c.MenudetailGUID
+	--				order by d.OrderNo, d.caption
+	--				for xml path('submenu'), elements, type) submenus
+	--			from menusmnu c
+	--			where c.uppersubmenuGUID=b.MenudetailGUID
+	--			order by c.OrderNo, c.caption
+	--			for xml path('submenu'), elements, type) submenus
+	--		from menusmnu b
+	--		where b.menuGUID=a.MenuGUID and b.upperSubmenuGUID is null
+	--		order by OrderNo, b.caption
+	--		for xml path('submenu'), elements, type) submenus
+	--	from menu a
+	--	order by a.MenuDescription
+	--	for xml path('menu'), elements, type
+	--) 
+
+	select (@headerXML) header,
+		@xmlInfo [body/bodyContent/query/info], 
+		@xmlParameter [body/bodyContent/query/queryPages/queryPage] 
+	for xml path('sqroot'), type
+
+
+

@@ -1,0 +1,29 @@
+
+
+create TRIGGER [dbo].[tg_modldocn_updatedDate] 
+   ON  [dbo].[modldocn]
+   AFTER INSERT, UPDATE
+AS 
+BEGIN
+	set nocount on 
+
+	declare @guid nvarchar(max)=(
+		select cast(docNumberGUID as nvarchar(50))+'*'
+		from inserted
+		for xml path(''))
+
+	update x
+	set updatedDate=getdate()
+	--select * 
+	from inserted i inner join deleted d on i.docNumberGUID=d.docNumberGUID
+		inner join modldocn x on x.docNumberGUID=i.docNumberGUID
+	where isnull(i.updatedDate, '1/1/2000') = isnull(d.updatedDate, '1/1/2000')
+
+	exec gen.timestamp_modifiedDate
+
+	declare @c nvarchar(max)='update: modldocn, '+@GUID
+
+	INSERT INTO evnt (EventGUID, AccountGUID, moduleGUID, DocGUID, timeRecord, Comment, CreatedDate, CreatedUser)
+	select newid(), null, null, null, 0, @c, getdate(), null
+END
+

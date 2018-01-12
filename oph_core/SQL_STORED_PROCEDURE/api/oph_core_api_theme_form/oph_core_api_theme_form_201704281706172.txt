@@ -1,0 +1,597 @@
+
+
+
+CREATE procedure [api].[theme_form] @accountid varchar(50), @dbcore varchar(50), 
+	@hostGUID uniqueidentifier, @code varchar(50), @GUID uniqueidentifier, @isDebug bit=0
+--WITH ENCRYPTION
+as
+	declare @ver varchar(10), @db varchar(50), @typecode varchar(1)
+	exec gen.getDBInfo @accountid, @dbcore, @code, @ver output, @db output, @typecode output
+
+	declare @moduleguid uniqueidentifier
+	select @moduleguid=a.ModuleGUID
+	from modl a
+	where ModuleID=@code
+
+	declare @fieldkey varchar(50)
+	select @fieldkey=colkey
+	from modl a
+		inner join modlcolm b on a.moduleguid=b.moduleguid
+	--where a.moduleid='menu'
+	where a.moduleguid=@moduleguid
+		and colorder=(
+			select min(colorder)
+			from modl a
+				inner join modlcolm b on a.moduleguid=b.moduleguid
+			where a.moduleguid=@moduleguid
+		)
+
+	declare @child xml, @xmlQuery xml
+
+	--exec api.[theme_header] @accountid, @dbcore, @hostguid, @code, null, @moduleguid, 0, @xmlheader output
+
+	declare @colinfo api.[type]
+	declare @primaryinfo api.[type]
+
+	declare @docDate varchar(50), @docNo varchar(50), @refNo varchar(50), @id varchar(50)
+	exec [api].[getPrimaryCol] @accountid, @dbcore, @code, 2, @docDate OUTPUT
+	exec [api].[getPrimaryCol] @accountid, @dbcore, @code, 3, @docNo OUTPUT
+	exec [api].[getPrimaryCol] @accountid, @dbcore, @code, 4, @refNo OUTPUT
+	exec [api].[getPrimaryCol] @accountid, @dbcore, @code, 5, @id OUTPUT
+
+	print 'Version : ' + isNULL(@ver, 'NULL')
+	if @ver='3.0' begin
+		
+		--with primary
+		if @isdebug = 1 select 'exec api.theme_form_v3 '''+@accountid+''','''+@code+''','''+convert(nvarchar(max),@guid)+''','''+@db+''','''+@typecode+''', 0, '''+convert(nvarchar(max),@isdebug)+'''' as v3Query
+		if @isdebug = 1 select 'exec api.theme_form_v3 '''+@accountid+''','''+@code+''','''+convert(nvarchar(max),@guid)+''','''+@db+''','''+@typecode+''', 1, '''+convert(nvarchar(max),@isdebug)+'''' as v3Query
+		
+		insert into @colinfo
+		exec api.theme_form_v3 @accountid, @code, @guid, @db, @typecode, 0, @isdebug
+
+		insert into @primaryinfo
+		exec api.theme_form_v3 @accountid, @code, @guid, @db, @typecode, 1, @isdebug
+
+		insert into @colinfo
+		values (null, null, 'colvalue', null, null, null)
+
+		--if @isdebug=1 select * from @colinfo where infokey='coltype'
+		if @isdebug=1 select * from @colinfo where TypeGUID='5F0A5C16-6048-4631-A25C-8CFD40587C0A'
+		if @isdebug=1 select * from @colinfo where infovalue='DocumentFlag'
+		if @isdebug=1 select * from @primaryinfo where infokey='coltype'
+
+		update @colinfo 
+		set InfoValue = 
+			case 
+				when InfoValue ='40' and InfoKey = 'coltype' then '41'	--date
+				when InfoValue ='6' and InfoKey = 'coltype' then '12'	--password
+				when InfoValue ='12' and InfoKey = 'coltype' then '32'	--autosuggest
+				when InfoValue ='13' and InfoKey = 'coltype' then '33'	--token
+				when InfoValue ='5' and InfoKey = 'coltype' then '51'	--mediabox
+				when typeguid in (select typeguid from @colinfo where InfoValue ='104' and InfoKey = 'xtype' ) and infokey='coltype' then '31'	--checkbox
+				when typeguid in (select typeguid from @colinfo where InfoValue !='' and InfoKey = 'viewrowtype') and infokey='coltype' then '34'	--radio head
+				--when typeguid in (select typeguid from @colinfo where InfoValue !='' and InfoKey = 'viewrowtype') and infokey='coltype' and infovalue='31' then '34'	--radio button
+				--when typeguid in (select typeguid from @colinfo where InfoValue !='' and InfoKey = 'viewrowtype') and infokey='coltype' and infovalue='31' then '34'	--radio controls
+				when infoValue ='' and InfoKey = 'coltype' then '11'	--textbox
+				else infovalue
+			end
+			
+		exec api.theme_form_child_v3 @accountid, @code, @db, @typecode, @child output
+
+		exec api.theme_form_query @accountid, @dbcore, @code, @GUID, @xmlQuery OUTPUT
+	end
+	else begin
+		insert into @colinfo
+		exec api.theme_form_v4 @accountid, @moduleguid, @guid, @db, 0, @isdebug
+
+		insert into @primaryinfo
+		exec api.theme_form_v4 @accountid, @moduleguid, @guid, @db, 0, @isdebug
+
+		exec api.theme_form_child_v4 @accountid, @code, @db, @typecode, @child output
+
+	end
+
+	if @isdebug=1 select * from @colinfo where InfoKey='colkey'
+	if @isdebug=1 select * from @primaryinfo where InfoKey='colkey'
+
+	declare @fields nvarchar(max)
+	
+	--select @fields = convert(nvarchar(max),(
+	--select '['+infokey+'],'  from (select distinct infokey from @colinfo) as a
+	--for xml path('') ))
+	--set @fields = left(@fields,len(@fields)-1)
+
+	set @fields='[ActivateField],[colkey],[colNo],[ColOrder],[cols],[coltype],[colvalue],[ComboFieldId],[ComboFieldIdColWidth],[ComboFieldKey],[ComboFieldName],[ComboFieldNameColWidth],[ComboFieldNameEx1],[ComboFieldNameEx2],[ComboTable],[ComboWhereField1],[ComboWhereField2],[ComboWhereRequired1],[ComboWhereRequired2],[CreatedDate],[CreatedUser],[DefaultValue],[DeletedDate],[DeletedUser],[fieldno],[groupCheckBox],[HiddenZone],[id],[isApproval],[isBrowsable],[isEditable],[isNullable],[isSumable],[isViewable],[length],[pageNo],[PrefixCaption],[preview],[PrimaryCol],[rowNo],[rowTitle],[ROZone],[sectionNo],[SuffixCaption],[SumField],[titlecaption],[TitleShort],[TriggerDate],[TriggerDate2],[UniqueKeys],[UpdatedDate],[UpdatedUser],[UpdateScript],[ViewColAlign],[ViewColDigit],[ViewColWidth],[ViewRowType],[ViewRowTypeOrder],[xType]'
+
+	declare @primary nvarchar(max), @parentKey nvarchar(max)
+
+	declare @sqlstr nvarchar(max), @sqlstr2 nvarchar(max)
+
+	if @ver = '3.0'
+	begin
+		if @isdebug=1 print 'part 1A'
+
+		set @sqlstr = '
+			use '+@db+' 
+			
+			select @prim = colname 
+			from gen.cotablfiel a 
+				join gen.cotabl b 
+					on a.tableguid = b.tableguid 
+			where primarycol= 1 and tablename = ''' + @code+''''
+
+		EXECUTE sp_executesql @sqlstr, N'@prim nvarchar(max) output', @prim = @primary output
+
+		if @isdebug=1 print 'part 1B'
+
+		set @sqlstr = '
+			use '+@db+' 
+			
+			select @prntkey = colname 
+			from gen.cotablfiel a 
+				join gen.cotabl b 
+					on a.tableguid = b.tableguid 
+			where iseditable= 3 and tablename = ''' + @code+''''
+
+		EXECUTE sp_executesql @sqlstr, N'@prntkey nvarchar(max) output', @prntkey = @parentKey output
+	end
+
+	declare @form xml
+
+	if @isdebug=1 print 'part 2'
+
+	set @sqlstr = '
+		select *'--+case when @guid = '00000000-0000-0000-0000-000000000000' then ','''' as colvalue' else ','''' as colvalue' end 
+	set @sqlstr = @sqlstr + N'	 
+		into #mi 
+		from @moduleinfo
+		pivot (max(infovalue) 
+		for infokey in('+@fields+')) as pvt
+
+		--SELECT * FROM #mi 
+
+		select @formxml = (
+			select pageNo as ''@pageNo'',
+				(
+				select sectionno ''@sectionNo'',rowtitle ''@rowTitle'',
+					(
+					select colno ''@colNo'',
+						(
+						select rowno ''@rowNo'',
+							(
+							select colkey ''@fieldName'', isEditable ''@isEditable'',isNullable ''@isNullable'', fieldNo ''@fieldNo'',
+				
+								case 
+								when coltype =11 --textbox
+								then
+									(
+									select colvalue value, titlecaption, preview, defaultvalue, viewColDigit digit, viewColAlign align,
+										(
+										select cols,0 ''rows'',[length] from #mi t6
+										where t6.typeguid = t5.typeguid
+										for xml path(''width''),type
+										) 
+									from #mi as t5
+									where
+										t5.typeguid = t4.typeguid
+									for xml path(''textBox''),type
+									)
+								when coltype =12 --password
+								then
+									(
+									select colvalue value,titlecaption,preview,
+									(
+										select cols,0''rows'',[length] from #mi t6
+										where t6.typeguid = t5.typeguid
+										for xml path(''width''),type
+									) 
+									from #mi t5
+									where 
+										t5.typeguid = t4.typeguid
+									for xml path(''password''),type
+									)
+						
+								when coltype =31 --checkbox
+								then
+									(
+									select colvalue value,titlecaption,viewrowtype,rowtitle,preview,
+										(
+										select cols,0''rows'',[length] from #mi t6
+										where t6.typeguid = t5.typeguid
+										for xml path(''width''),type
+										)
+									from #mi t5
+									where
+										t5.typeguid = t4.typeguid
+									for xml path(''checkBox''),type
+									)
+								when coltype =32 --autosuggestbox
+								then
+									(
+									select colvalue value,titlecaption,combofieldkey [key],combofieldid id,combofieldname name,combotable code,preview,
+										(
+											select cols,0''rows'',[length] from #mi t6
+											where t6.typeguid = t5.typeguid
+											for xml path(''width''),type
+										),
+										(
+											select combowhereField1 wf1,combowhereField2 wf2 from #mi t6
+											where t6.typeguid = t5.typeguid
+											for xml path(''whereFields''), type
+										)
+									from #mi t5
+									where t5.typeguid = t4.typeguid
+									for xml path(''autoSuggestBox''), type)
+								when coltype =33 --token
+								then
+									(
+									select colvalue value,titlecaption,combofieldkey [key],combofieldid id,combofieldname name,combotable code,preview,
+										(
+											select cols,0''rows'',[length] from #mi t6
+											where t6.typeguid = t5.typeguid
+											for xml path(''width''),type
+										),
+										(
+											select combowhereField1 wf1,combowhereField2 wf2 from #mi t6
+											where t6.typeguid = t5.typeguid
+											for xml path(''whereFields''), type
+										)
+									from #mi t5
+									where t5.typeguid = t4.typeguid
+									for xml path(''tokenBox''), type)
+									'		
+															
+	set @sqlstr = @sqlstr + N'	 
+
+								when coltype =34 --radio
+								then
+									(
+									select colvalue value, titlecaption, preview,
+										(
+											select ViewRowTypeOrder ''@radioNo'', rowTitle ''@radioRowTitle'', (
+												select rowNo ''@rowNo'', (
+													select colkey ''@fieldName'', isEditable ''@isEditable'',isNullable ''@isNullable'', fieldNo ''@fieldNo'', 
+													(
+														case 
+														when coltype =11 --textbox
+														then
+															(
+															select colvalue value, titlecaption, preview, defaultvalue, viewColDigit digit, viewColAlign align,
+																(
+																select cols,0 ''rows'',[length] from #mi r6
+																where r6.typeguid = r5.typeguid
+																for xml path(''width''),type
+																) 
+															from #mi as r5
+															where
+																r5.typeguid = t8.typeguid
+															for xml path(''textBox''),type
+															)
+														when coltype =12 --password
+														then
+															(
+															select colvalue value,titlecaption,preview,
+															(
+																select cols,0''rows'',[length] from #mi r6
+																where r6.typeguid = r5.typeguid
+																for xml path(''width''),type
+															) 
+															from #mi r5
+															where 
+																r5.typeguid = t8.typeguid
+															for xml path(''password''),type
+															)
+'		
+															
+	set @sqlstr = @sqlstr + N'	 						
+														when coltype =31 --checkbox
+														then
+															(
+															select colvalue value,titlecaption,viewrowtype,rowtitle,preview,
+																(
+																select cols,0''rows'',[length] from #mi r6
+																where r6.typeguid = r5.typeguid
+																for xml path(''width''),type
+																)
+															from #mi r5
+															where
+																r5.typeguid = t8.typeguid
+															for xml path(''checkBox''),type
+															)
+														when coltype =32 --autosuggestbox
+														then
+															(
+															select colvalue value,titlecaption,combofieldkey [key],combofieldid id,combofieldname name,combotable code,preview,
+																(
+																	select cols,0''rows'',[length] from #mi r6
+																	where r6.typeguid = r5.typeguid
+																	for xml path(''width''),type
+																),
+																(
+																	select combowhereField1 wf1,combowhereField2 wf2 from #mi r6
+																	where r6.typeguid = r5.typeguid
+																	for xml path(''whereFields''), type
+																)
+															from #mi r5
+															where r5.typeguid = t8.typeguid
+															for xml path(''autoSuggestBox''), type)
+														end														
+													)
+													from #mi t8
+													where t8.viewRowType=x7.viewRowType and isnull(t8.rowTitle,'''')='''' and t8.viewRowTypeOrder=x7.viewRowTypeOrder
+														and t8.rowNo=x7.rowNo
+													--order by fieldNo
+													for xml path(''field''), root(''fields''), type) 
+												from (
+													select rowNo, viewRowType, viewRowTypeOrder
+													from #mi t7
+													where t7.viewRowType=t6.viewRowType and isnull(t7.rowTitle,'''')='''' and t7.viewRowTypeOrder=t6.viewRowTypeOrder) x7
+												order by rowNo
+												for xml path(''radioRow''), root(''radioRows''), type
+											) 
+											from #mi t6
+											where t6.viewRowType=t5.viewRowType and isnull(t6.rowTitle,'''')<>'''' and isnull(t6.viewRowTypeOrder,0)>0
+											order by ViewRowTypeOrder
+											for xml path(''radioSection''), root(''radioSections''), type
+										)
+									from #mi t5
+									where t5.typeguid = t4.typeguid
+									for xml path(''radio''), type)
+																		
+									'		
+															
+	set @sqlstr = @sqlstr + N'	 
+								when coltype =41 --datebox
+								then
+									(
+										select colvalue value,titlecaption,preview,
+										(
+											select cols,0''rows'',[length] from #mi t6
+											where t6.typeguid = t5.typeguid
+											for xml path(''width''),type
+										) 
+										from #mi t5
+										where t5.typeguid = t4.typeguid
+										for xml path(''dateBox''),type
+									)		
+								when coltype = 51 --attach
+								then
+									(
+										select colvalue value, titlecaption, preview
+										--,(
+										--	select cols, 0''rows'', [length] from #mi t6
+										--	where t6.typeguid = t5.typeguid
+										--	for xml path(''width''),type
+										--) 
+										from #mi t5
+										where t5.typeguid = t4.typeguid
+										for xml path(''mediaBox''), type
+									)
+								end
+							from #mi t4
+							where t4.rowno = t3.rowno and t4.colno = dua.colno and t4.sectionno = satu.sectionno and t4.pageNo=pg.pageNo
+								and isnull(t4.ViewRowTypeOrder,0)=0
+							order by convert(int, fieldno)
+							for xml path(''field''),root(''fields''),type
+							) 
+						from (
+							select distinct rowno, colno, sectionno, pageNo 
+							from #mi where colno = dua.colno and sectionno=satu.sectionno and pageNo=pg.pageNo and isnull(ViewRowTypeOrder,0)=0) t3
+						--#mi t3
+						--where t3.colno = dua.colno and t3.sectionno = satu.sectionno and t3.pageNo=pg.pageNo
+					
+						order by convert(int,rowno)
+						for xml path(''formRow''),root(''formRows''),type
+						)
+
+					From (select distinct colno, sectionno, pageNo from #mi where satu.sectionno = sectionno and pageNo=pg.pageNo) dua
+					order by convert(int,colno)
+					for xml path(''formCol''),root(''formCols''),type
+					) 
+				from (
+					select distinct pageNo, sectionno, 
+						(
+						select DISTINCT top 1 rowtitle 
+						from #mi 
+						where s1.sectionno = sectionno and s1.pageno = pageno and rowtitle !='''' 
+							AND ROWTITLE IS NOT NULL) rowtitle 
+					from #mi s1
+				) satu
+				where satu.pageno=pg.pageno 
+				order by convert(int,sectionno)
+				for xml path(''formSection''), root(''formSections''),type
+			)
+		from (select distinct pageno from #mi) pg
+		for xml path(''formPage''),type, root(''formPages''))
+
+		--select distinct pageno from #mi
+			'
+
+	print 'ttt'
+	if @isdebug = 1 select @SQLstr as [processing-instruction(x)] FOR XML PATH 
+	if @isdebug = 1 print len(@sqlstr)
+	--if @isdebug = 1 
+	if @isdebug = 1 select * from @colinfo --where InfoValue='code'
+
+	EXECUTE sp_executesql @sqlstr, N'@moduleinfo api.[type] readonly, @formxml xml output', @moduleinfo = @colinfo, @formxml = @form output
+
+	if @isdebug = 1 select @form
+
+	if @isdebug=1 print 'part 3'
+
+	set @sqlstr = '
+		declare @docDate varchar(50), @docNo varchar(50), @refNo varchar(50), @id varchar(50)
+
+		declare @xmlheader xml
+		exec [api].[theme_header] '''+@accountid+''', '''+@dbcore+''', '''+cast(@hostguid as varchar(50))+''', '''+@code+''', null, @modguid, 0, @xmlheader output
+
+		select (@xmlheader) header, (
+			select (
+				select 
+				(
+					select 
+					'''+lower(@code)+''' ''code'',
+					moduledescription ''Description'',
+					'''+isnull(@parentkey,'')+''' ''parentKey'',
+
+					'''+convert(nvarchar(max),@guid)+''' ''GUID'',
+					'+isnull(''''+(	
+						select b.infovalue 
+						from @primaryinfo a inner join @primaryinfo b on a.typeguid=b.typeguid
+						where a.infokey='colkey' and a.infovalue=@docdate and b.infokey='colvalue'
+						)+'''', 'null')+' ''docDate'',
+					'+isnull(''''+(	
+						select b.infovalue 
+						from @primaryinfo a inner join @primaryinfo b on a.typeguid=b.typeguid
+						where a.infokey='colkey' and a.infovalue=@docno and b.infokey='colvalue'
+						)+'''', 'null')+' ''docNo'',
+					'+isnull(''''+(	
+						select b.infovalue 
+						from @primaryinfo a inner join @primaryinfo b on a.typeguid=b.typeguid
+						where a.infokey='colkey' and a.infovalue=@refno and b.infokey='colvalue'
+						)+'''', 'null')+' ''refNo'',
+					'+isnull(''''+(	
+						select b.infovalue 
+						from @primaryinfo a inner join @primaryinfo b on a.typeguid=b.typeguid
+						where a.infokey='colkey' and a.infovalue=@id and b.infokey='colvalue'
+						)+'''', 'null')+' ''id'',
+					'''+@typecode+''' settingMode,
+					(
+						select '''+lower(@code)+''' code'+
+						case when @typecode = 'T' and exists(select * from modl where moduleid=@code and ParentModuleGUID is null)
+						then
+						case 
+							when @ver = '4.0' then ',b.Status,b.StatusComment'
+							--when @ver = '3.0' then ',status,statuscomment from '+@db+'.dbo.'+@settingmode+'o'+@code+' where '+@Primary+'='''+convert(nvarchar(max),@guid)+''''
+							when @ver = '3.0' then ',status,statuscomment from '+@db+'.dbo.'+STUFF(@code, 2, 1, 'o')+' where '+@Primary+'='''+convert(nvarchar(max),@guid)+''''
+							end
+						else ''
+						end	
+						+				'
+						for xml path(''state''),type
+					) ,
+					''1'' isRequester,
+					(
+						select 
+							(select infovalue  from modlinfo where infokey = ''AllowAdd'' and moduleguid = a.moduleguid) ''AllowAdd'',
+							(select infovalue  from modlinfo where infokey = ''AllowBatch'' and moduleguid = a.moduleguid) ''AllowBatch'',
+							(select infovalue  from modlinfo where infokey = ''AllowBrowse'' and moduleguid = a.moduleguid) ''AllowBrowse'',
+							(select infovalue  from modlinfo where infokey = ''AllowDelete'' and moduleguid = a.moduleguid) ''AllowDelete'', 
+							(select infovalue  from modlinfo where infokey = ''AllowEdit'' and moduleguid = a.moduleguid) ''AllowEdit'', 
+							(select infovalue  from modlinfo where infokey = ''AllowHold'' and moduleguid = a.moduleguid) ''AllowHold'', 
+							(select infovalue  from modlinfo where infokey = ''AllowWipe'' and moduleguid = a.moduleguid) ''AllowWipe''
+						for xml path(''permission''),type
+					)
+					from 
+						'+ case 
+							when @ver = '4.0' and @typecode='C'  then 'modl a where moduleid='''+@code+''''
+							when @ver = '4.0' and @typecode<>'C' then 'modl a inner join '+@db+'.dbo.docm b on a.ModuleGUID = b.ModuleGUID where docguid ='''+convert(nvarchar(max),@guid)+''''
+							when @ver = '3.0' then @db+'.dbo.comodl a where moduleid= ''' + @code+''''
+							end 
+						 +'
+					for xml path(''info''),type
+				) ,
+				@formxml, 
+				@childxml, 
+				@queryxml
+			for xml path(''form''),root(''bodyContent''),type
+			)
+			for xml path (''body''),type
+			) for xml path(''sqroot'')'
+
+	if @isdebug = 1 select @sqlstr, 'declare @moduleinfo api.[type], @modguid uniqueidentifier'
+
+	EXECUTE sp_executesql @sqlstr, 
+		N'@moduleinfo api.[type] readonly, @modguid uniqueidentifier, @childxml xml, @formxml xml, @queryxml xml', 
+		@moduleinfo = @colinfo,@modguid = @moduleguid, @childxml = @child, @formxml=@form, @queryxml=@xmlQuery
+
+
+--select @xmlheader,(
+--select (
+--	select 
+--	(
+--		select 
+--		@code as 'code',
+--		moduledescription as 'Description',
+--		'' as 'parentKey',
+--		@guid as 'GUID',
+--		(
+--			select b.Status as '@code',b.StatusComment+''
+--			for xml path('state'),type
+--		) ,
+--		'1' isRequester,
+--		(
+--			select 
+--				(select infovalue  from modlinfo where infokey = 'AllowAdd' and moduleguid = a.moduleguid) as 'AllowAdd',
+--				(select infovalue  from modlinfo where infokey = 'AllowBatch' and moduleguid = a.moduleguid) as 'AllowBatch',
+--				(select infovalue  from modlinfo where infokey = 'AllowBrowse' and moduleguid = a.moduleguid) as 'AllowBrowse',
+--				(select infovalue  from modlinfo where infokey = 'AllowDelete' and moduleguid = a.moduleguid) as 'AllowDelete', 
+--				(select infovalue  from modlinfo where infokey = 'AllowEdit' and moduleguid = a.moduleguid) as 'AllowEdit', 
+--				(select infovalue  from modlinfo where infokey = 'AllowHold' and moduleguid = a.moduleguid) as 'AllowHold', 
+--				(select infovalue  from modlinfo where infokey = 'AllowWipe' and moduleguid = a.moduleguid) as 'AllowWipe'
+--			for xml path('permission'),type
+--		)
+--		from modl a join docm b on a.ModuleGUID = b.ModuleGUID where docguid =@guid
+--		for xml path('info'),type
+--	) ,
+--	(
+--		select '1' as '@pageNo',
+--		(
+--		select sectionno '@sectionNo',rowtitle '@rowTitle',
+--			(
+--				select colno '@colNo',
+--				(
+--					select rowno '@rowNo',
+--					(
+--						select colkey '@fieldName',isEditable '@isEditable',isNullable '@isNullable', fieldNo '@fieldNo',
+				
+--							case when coltype =11
+--							then
+--								(
+--									select colvalue,titlecaption,
+--									(
+--										select cols,width 'rows',[length] from @moduleinfo as t6
+--										where t6.columnguid = t5.columnguid
+--										for xml path('width'),type
+--									) from @moduleinfo as t5
+--									where --t5.fieldno = t4.fieldno and t5.rowno = t3.rowno and t5.colno = dua.colno and t5.sectionno = satu.sectionno
+--									t5.columnguid = t4.columnguid
+--									for xml path('textBox'),type
+--								)
+--							end
+--						from @moduleinfo as t4
+--						where t4.rowno = t3.rowno and t4.colno = dua.colno and t4.sectionno = satu.sectionno
+--						for xml path('fields'),root('fields'),type
+--					) from @moduleinfo as t3
+--					where t3.colno = dua.colno and t3.sectionno = satu.sectionno
+--					for xml path('formRow'),root('formRows'),type
+--				)
+
+--				From (select distinct colno,sectionno from @moduleinfo where  satu.sectionno = sectionno) as dua
+		
+--				for xml path('formCol'),root('formCols'),type
+	
+--			) 
+--		from (select distinct sectionno,rowtitle from @Moduleinfo) as satu
+--		for xml path('formSection'), root('formSections'),type
+--		)
+--		for xml path('formPage'),type, root('formPages')
+--	)
+--for xml path('form'),root('bodyContent'),type
+--)
+--for xml path ('body'),type
+--) for xml path('sqlroot')
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,31 @@
+
+
+
+CREATE procedure [gen].[clearsyscolumns_ex] AS
+	delete gen.cotablfiel 
+	from gen.cotablfiel a
+		inner join gen.cotabl b1
+			on a.tableguid=b1.tableguid
+	left join 
+		(	select a.name tablename,b.name colname 
+			from sysobjects a
+				inner join syscolumns b
+					on a.id=b.id
+		  ) b
+		on b.tablename=left(b1.tablename,1)+'o'+substring(b1.tablename,3,len(b1.tablename)-2) and a.colname=b.colname
+	where b.colname is  null
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

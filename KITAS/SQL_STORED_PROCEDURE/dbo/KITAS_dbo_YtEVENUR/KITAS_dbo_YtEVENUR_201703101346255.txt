@@ -1,0 +1,9 @@
+CREATE PROCEDURE [dbo].[YtEVENUR] @HostGUID uniqueidentifier, @UploadGUID uniqueidentifier
+as	--CreatedBy eLs ON Feb, 2017
+
+	select 
+		no_urut, event_name, product, price, qty, [status]
+	from MoEVENUPLD 
+	where UploadGUID = @UploadGUID
+	order by no_urut
+

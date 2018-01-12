@@ -1,0 +1,44 @@
+
+
+
+
+
+
+
+
+
+
+
+
+
+CREATE procedure [gen].[dropview] @viewName nvarchar(50)
+as
+	declare @sqlstr varchar(8000)
+	if exists (
+		select * 
+		from sysObjects
+		where name = @viewName) 
+	begin
+		if exists (
+			select text from syscomments 
+			inner join sysObjects on sysComments.id = sysObjects.id
+			where sysObjects.name = @viewName and text like '%as --automatic creation by system, you have to remove this comment to customize this view%')
+		begin
+			set @sqlstr = 'drop view ' + @viewName 
+			print @sqlstr
+			exec (@sqlstr)
+		end
+	end
+
+
+
+
+
+
+
+
+
+
+
+
+

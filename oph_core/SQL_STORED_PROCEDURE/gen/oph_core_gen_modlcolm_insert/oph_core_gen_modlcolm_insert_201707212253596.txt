@@ -1,0 +1,18 @@
+create procedure gen.modlcolm_insert @code nvarchar(50), @colkey nvarchar(50), @coltype int, @collength int
+as
+	declare @sqlstr nvarchar(max)
+	set @sqlstr='
+		alter table doc.[''+@code+''] 
+			add [''+@colkey+''] ''+
+				case 
+					when @coltype in (59,60,62,122,106) then ''money'' 
+					when @coltype in (40,41,42,43,58,61,189) then ''datetime'' 
+					when @coltype in (48,52,56,108,127,104) then ''bigint'' 
+					when @coltype in (36) then ''uniqueidentifier'' 
+					when @coltype in (167,173,175,231,239) then ''nvarchar(max)'' 
+					else ''nvarchar(max)''
+				end+'' null'
+	print @sqlstr
+	exec sp_executesql @sqlstr
+
+

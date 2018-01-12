@@ -1,0 +1,14 @@
+
+
+
+CREATE VIEW [dbo].[MoBRAN_1]
+as	--CreatedBy eLs ON Jan, 2017
+
+	select 
+		BRANGUID, ID, Name, PARNBRANGUID, isParent, CreatedDate, CreatedUser, UpdatedDate, UpdatedUser
+	from MoBRAN
+	where isDeleted = 0 AND PARNBRANGUID IS NULL
+
+
+
+

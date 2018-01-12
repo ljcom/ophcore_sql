@@ -1,0 +1,207 @@
+
+
+
+
+CREATE procedure [core].[addModule_v4] @accountid nvarchar(50), @dataDB nvarchar(50), @isdebug bit=0
+--WITH ENCRYPTION
+as
+	--declare @account varchar(50)='KITASHOP', @dataDB varchar(50)='oph_core'
+	declare @accountguid uniqueidentifier, @accountdbGUID uniqueidentifier, @coreDB nvarchar(50), @masterDB nvarchar(50)=db_name(), @curMaster bit 
+
+	select @accountguid=a.AccountGUID, @accountdbGUID=AccountDBGUID, 
+		@coreDB=b.DatabaseName, @curMaster=isMaster
+	from acct a
+		inner join acctdbse b
+			on a.AccountGUID=b.AccountGUID
+	where accountid=@accountid and b.DatabaseName=@dataDB
+	
+	declare @sqlstr nvarchar(max), @sqlpar nvarchar(max)
+
+	--for ismaster=1
+	-- ismaster=1: semua modl yang digunakan adalah dari database tersebut
+	set @sqlstr=N'
+		declare @accountGUID uniqueidentifier
+		select @accountGUID=accountGUID from acct where accountid='''+@accountid+'''
+
+		--frontpage
+		insert into '+@dataDB+'.dbo.modginfo (EnvInfoGUID, moduleGroupGUID, InfoKey, InfoValue)
+		select newid(), a.ModuleGroupGUID, ''frontPage'', moduleid
+		--select * 
+		from '+@dataDB+'.dbo.modl a
+			--inner join acctdbse b on a.accountdbGUID=b.accountdbGUID
+			inner join '+@dataDB+'.dbo.modg c on a.modulegroupguid=c.modulegroupguid
+			left join '+@dataDB+'.dbo.modginfo d on d.moduleGroupGUID=a.moduleGroupGUID and d.infoKey=''frontPage'' 
+		where a.moduleid=''modl'' and d.envInfoGUID is null
+
+		--update themes
+		insert into '+@dataDB+'.dbo.thme (ThemeGUID, AccountGUID, ThemeCode, ThemeName, ThemeFolder)
+		select a.ThemeGUID, @AccountGUID, a.ThemeCode, a.ThemeName, a.ThemeFolder 
+		from thme a 
+			left join '+@dataDB+'.dbo.thme b on a.ThemeCode=b.ThemeCode where b.themeGUID is null
+		
+		insert into '+@dataDB+'.dbo.thmepage (ThemePageGUID, ThemeGUID, pageURL, isDefault)
+		select a.ThemePageGUID, a.ThemeGUID, a.pageURL, a.isDefault 
+		from thmepage a 
+			inner join thme d on a.ThemeGUID=d.ThemeGUID
+			inner join '+@dataDB+'.dbo.thme c on c.ThemeCode=d.ThemeCode
+			left join '+@dataDB+'.dbo.thmepage b on c.ThemeGUID=b.ThemeGUID and a.pageURL=b.pageURL
+		where b.ThemeGUID is null
+
+		--msta
+		insert into '+@dataDB+'.dbo.[msta] (ModuleStatusGUID, AccountGUID, ModuleStatusName, ModuleStatusDescription, isDefault)
+		select a.ModuleStatusGUID, @AccountGUID, a.ModuleStatusName, a.ModuleStatusDescription, a.isDefault
+		from [msta] a 
+			left join '+@dataDB+'.dbo.[msta] b on a.ModuleStatusName=b.ModuleStatusName 
+		where b.moduleStatusGUID is null
+
+		--mstastat
+		insert into '+@dataDB+'.dbo.[mstastat] (ModuleStatusDetailGUID, ModuleStatusGUID, StateID, StateCode, StateDesc, StateName, isDefault)
+		select a.ModuleStatusDetailGUID, a2.ModuleStatusGUID, a.StateID, a.StateCode, a.StateDesc, a.StateName, a.isDefault
+		from [mstastat] a
+			inner join msta a1 on a.moduleStatusGUID=a1.moduleStatusGUID
+			inner join '+@dataDB+'.dbo.msta a2 on a2.moduleStatusName=a1.moduleStatusName
+			left join '+@dataDB+'.dbo.[mstastat] b
+				on a.StateID=b.StateID and b.modulestatusGUID=a2.modulestatusGUID
+		where b.moduleStatusGUID is null
+
+		insert into '+@dataDB+'.dbo.modl (ModuleGUID, AccountGUID, ModuleID, ModuleDescription, settingMode, AccountDBGUID, ParentModuleGUID, OrderNo, needLogin, ThemePageGUID)
+		select x.ModuleGUID, '''+cast(@accountguid as nvarchar(50))+''', a.name, x.moduleDescription, 0, '''+cast(@accountdbGUID as nvarchar(50))+''', null, null, 1, null
+		from '+@dataDB+'.sys.objects a
+			inner join '+@masterDB+'.dbo.modl x on a.name=x.ModuleID
+			left join '+@dataDB+'.dbo.modl m on a.name=m.ModuleID
+		where a.type=''U'' and m.ModuleGUID is null
+
+		insert into '+@dataDB+'.dbo.modl (ModuleGUID, AccountGUID, ModuleID, ModuleDescription, settingMode, AccountDBGUID, ParentModuleGUID, OrderNo, needLogin, ThemePageGUID)
+		select x.ModuleGUID, '''+cast(@accountguid as nvarchar(50))+''', x.moduleid, x.moduleDescription, x.settingmode, '''+cast(@accountdbGUID as nvarchar(50))+''', null, null, x.needLogin, null
+		from '+@masterDB+'.dbo.modl x
+			left join '+@dataDB+'.dbo.modl m on x.moduleid=m.ModuleID
+		where x.settingmode=6 and m.ModuleGUID is null
+
+		'
+
+	set @sqlstr=@sqlstr+N'
+
+		--add modules groups
+		insert into '+@dataDB+'.dbo.modg (ModuleGroupGUID, AccountGUID, ModuleGroupID, ModuleGroupName, ModuleGroupDescription, AccountDBGUID, ImagePath, SortOrder, isDefault)
+		select newid(), '''+cast(@accountguid as varchar(50))+''', a.DatabaseName, a.DatabaseName, a.DatabaseName, a.AccountDBGUID, null, null, case when isMaster=1 and version=''4.0'' then 1 else 0 end
+		from acctdbse a 
+			left join '+@dataDB+'.dbo.modg b on a.accountDBGUID=b.accountDBGUID
+		where a.AccountGUID='''+cast(@accountguid as varchar(50))+''' and b.moduleGroupGUID is null
+
+		update a
+		set modulegroupguid=b.modulegroupguid
+		from '+@dataDB+'.dbo.modl a
+			inner join '+@dataDB+'.dbo.modg b on a.accountdbGUID=b.accountdbGUID 
+		where a.modulegroupguid is null
+		
+		'
+
+	set @sqlstr=@sqlstr+N'
+		
+		update a
+		set parentModuleGUID=x3.moduleGUID
+		from '+@dataDB+'.dbo.modl a
+			inner join '+@masterDB+'.dbo.modl x on a.moduleid=x.ModuleID
+			inner join '+@masterDB+'.dbo.modl x2 on x2.moduleguid=x.parentModuleGUID
+			inner join '+@dataDB+'.dbo.modl x3 on x2.moduleid=x3.ModuleID
+		where a.ParentModuleGUID is null and x3.ModuleGUID is not null
+
+		update a
+		set moduleDescription=x.moduleDescription
+		from '+@dataDB+'.dbo.modl a
+			inner join '+@masterDB+'.dbo.modl x on a.moduleid=x.ModuleID
+		where a.moduleDescription is null and x.moduleDescription is not null 
+
+		update a
+		set themepageguid=f.themepageguid
+		from '+@dataDB+'.dbo.modl a
+			inner join modl b on a.moduleid=b.moduleid
+			inner join thmepage c on b.themepageguid=c.themepageguid
+			inner join thme d on c.themeguid=d.themeguid
+			inner join '+@dataDB+'.dbo.thme e on e.themecode=d.themecode
+			inner join '+@dataDB+'.dbo.thmepage f on f.pageurl=c.pageurl
+
+		insert into '+@dataDB+'.dbo.modlinfo (ModuleInfoGUID, ModuleGUID, InfoKey, InfoValue)
+		select y.ModuleInfoGUID, a.ModuleGUID, y.InfoKey, y.InfoValue
+		from '+@dataDB+'.dbo.modl a
+			inner join '+@masterDB+'.dbo.modl x on a.ModuleID=x.ModuleID
+			inner join '+@masterDB+'.dbo.modlinfo y on y.ModuleGUID=x.ModuleGUID
+			left join '+@dataDB+'.dbo.modlinfo b on a.moduleGUID=b.moduleGUID and b.infoKey=y.infoKey
+		where b.ModuleGUID is null
+
+		declare @moduleStatusGUID uniqueidentifier
+		select @moduleStatusGUID=moduleStatusGUID 
+		from '+@dataDB+'.dbo.[msta] 
+		where isdefault=1
+
+		update '+@dataDB+'.dbo.modl
+		set moduleStatusGUID=@moduleStatusGUID
+		where moduleStatusGUID is null
+
+		declare @themePageGUID uniqueidentifier
+		select @themePageGUID=themePageGUID from '+@dataDB+'.dbo.thmepage where isdefault=1
+		
+		update '+@dataDB+'.dbo.modl set themePageGUID=@themePageGUID where themepageGUID is null
+
+		'
+
+	if @isdebug=1 print @sqlstr
+	exec sp_executesql @sqlstr
+	 
+	set @sqlstr=N'
+		insert into '+@dataDB+'.dbo.modlcolm (ColumnGUID, ModuleGUID, colKey, colType, colOrder, collength, titlecaption)
+		select a.columnguid, a.moduleguid, a.colname, a.system_type_id, a.column_id, a.max_length, a.titleCaption
+		from (
+			select x2.columnguid, m.moduleguid, m.ModuleID, b.name colname, b.column_id, iif(b.max_length>600 or b.max_length=-1, 99, b.user_type_id) system_type_id, b.max_length, y.titleCaption
+			from '+@dataDB+'.dbo.modl m
+				inner join '+@masterDB+'.sys.objects a on m.moduleid=a.name
+				inner join '+@masterDB+'.sys.columns b on a.object_id=b.object_id
+				inner join '+@masterDB+'.dbo.modl x on a.name=x.moduleid
+				inner join '+@masterDB+'.dbo.modlcolm x2 on x.moduleguid=x2.moduleguid and x2.colkey=b.name
+				left join '+@masterDB+'.dbo.modlcolm y on b.name=y.colKey and x.moduleGUID=y.moduleGUID
+			--where ThemePageGUID is null
+			) a 
+		
+			left join (
+				select c.ModuleID, d.colKey 
+				from '+@dataDB+'.dbo.modl c 
+					inner join '+@dataDB+'.dbo.modlcolm d on c.ModuleGUID=d.moduleguid
+				) e
+				on e.colkey=a.colname and e.moduleid=a.ModuleID
+		where e.moduleid is null'
+	
+	if @isdebug=1 print @sqlstr
+	exec sp_executesql @sqlstr
+
+	set @sqlstr=N'
+		insert into '+@dataDB+'.dbo.modlcolminfo (ColumnInfoGUID, ColumnGUID, InfoKey, InfoValue)
+		select a.ColumnInfoGUID, a.ColumnGUID, a.InfoKey, a.InfoValue
+		from (	
+			select z.ColumnInfoGUID, n.columnGUID, n.colKey colname, m.moduleID, z.infokey, z.infoValue
+			from '+@dataDB+'.dbo.modl m
+				inner join '+@dataDB+'.dbo.modlcolm n on m.moduleGUID=n.moduleGUID
+				inner join '+@masterDB+'.dbo.modl x on m.moduleid=x.moduleid
+				inner join '+@masterDB+'.dbo.modlcolm y on x.moduleGUID=y.moduleGUID and n.colKey=y.colKey
+				inner join '+@masterDB+'.dbo.modlcolminfo z on y.columnGUID=z.columnGUID
+			--where ThemePageGUID is null
+			) a 
+		
+			left join (
+				select c.ModuleID, d.colKey, f.infoKey 
+				from '+@dataDB+'.dbo.modl c 
+					inner join '+@dataDB+'.dbo.modlcolm d on c.ModuleGUID=d.moduleguid
+					inner join '+@dataDB+'.dbo.modlcolminfo f on d.columnGUID=f.columnGUID
+				) e
+				on e.colkey=a.colname and e.moduleid=a.ModuleID and e.infoKey=a.infoKey
+		where e.moduleid is null'
+	
+	if @isdebug=1 print @sqlstr
+	exec sp_executesql @sqlstr
+--select * from oph_core.sys.columns
+
+
+
+
+
+
+

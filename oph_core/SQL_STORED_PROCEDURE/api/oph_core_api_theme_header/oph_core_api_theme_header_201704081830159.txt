@@ -1,0 +1,79 @@
+
+
+
+
+
+
+CREATE procedure [api].[theme_header] @code varchar(50),
+	@UserGUID uniqueidentifier, @ModuleGUID uniqueidentifier, @MenuID int = 0, @xmlHeader xml OUTPUT, @debug int=0
+as	--CreatedBy eLs ON Dec, 2016
+
+	--declare 
+	--	@UserGUID uniqueidentifier = gen.getUserHost(gen.gethost('ap\restu.widiati', null)), 
+	--	@ModuleGUID uniqueidentifier = '6EE876EE-38F1-44E7-8378-B770533E224E', 
+	--	@MenuID int = 0,
+	--	@xmlHeader xml, @debug int=1
+	declare @typecode varchar(1)
+	select @typecode = api.settingmode(settingmode)
+	from modl where ModuleID=@code
+	
+	declare @info nvarchar(MAX) = (
+		select top 1
+			(
+	--account
+		--     &lt;account&gt;L'ORêAL&lt;/account&gt;
+				select accountid account from acct a
+					inner join modl b
+						on a.AccountGUID=b.AccountGUID
+				where moduleid=@code
+				) account, 
+			--isNULL(e.ThemeFolder, '') [themeFolder],
+			isNULL(g.infovalue, '') [themeFolder],
+			isNULL(f.ModuleDescription, f.ModuleID) [title], 
+			(
+				select moduleid id, ModuleDescription name, @typecode as settingMode 
+				from modl 
+				where moduleid=@code for xml path(''), elements, type) code, 
+			isNULL(HostGUID, dbo.ZeroGUID()) [hostGUID],
+			isNULL(a.UserID, '') [userid], isNULL(a.UserName, '') [username], 
+			isNULL(d.UserID, '') [oriUserid], isNULL(d.UserName, '') [oriUsername]
+			--isNULL(@UserGUID, null) [userGUID]
+		from [user] a
+			inner join [userinfo] b ON a.UserGUID = b.UserGUID AND b.InfoKey in ('SkinGUID') AND dbo.isGUID(b.InfoValue) = 1
+			inner join [userhost] c ON a.UserGUID = c.UserGUID
+			left join [user] d ON c.DelegateUserGUID = d.UserGUID
+			left join [thme] e ON cast(b.InfoValue as uniqueidentifier) = e.ThemeGUID
+			left join [modl] f ON ModuleGUID = @ModuleGUID
+			left join [acctinfo] g on f.AccountGUID = g.AccountGUID and g.infokey ='themeName'
+		--where a.UserGUID = @UserGUID
+		for xml path('info')
+	) 
+
+	declare @menu nvarchar(MAX) = (
+		select convert(xml, (
+			select 
+				OrderNo [@rowNo], a.MenuCode + '_' + LOWER(left(MenuDetailGUID, 6)) [@code], 
+				isNULL(b.SubMenuDescription, '') [name], isNULL(Tag, '') [tag], isNULL(URL, '') [url]
+			from menu a
+				inner join menusmnu b ON a.MenuGUID = b.MenuGUID
+			where a.MenuID = @MenuID
+			order by OrderNo ASC
+			for xml path('menu')
+		))
+		for xml path('menus')
+	) 
+	
+	if @debug = 1 
+		select 'header' [xml], @UserGUID [UserGUID], @ModuleGUID [ModuleGUID], 
+			convert(xml, @info) [header_info], convert(xml, @menu) [header_menu]
+	else
+		set @xmlHeader = convert(xml, (isNULL(@info, '&lt;info/&gt;') + isNULL(@menu, '&lt;menus/&gt;')))
+	
+
+
+
+
+
+
+
+

@@ -1,0 +1,11 @@
+
+CREATE VIEW [dbo].[MoBRAN_3]
+as	--CreatedBy eLs ON Jan, 2017
+
+	select 
+		a.BRANGUID, a.ID, a.Name, a.PARNBRANGUID, a.CreatedDate, a.CreatedUser, a.UpdatedDate, a.UpdatedUser
+	from MoBRAN a
+		inner join MoBRAN_2 b ON a.PARNBRANGUID = b.BRANGUID
+
+
+

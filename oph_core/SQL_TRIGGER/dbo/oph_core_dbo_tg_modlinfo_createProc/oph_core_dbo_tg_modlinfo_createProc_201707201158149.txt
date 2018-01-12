@@ -1,0 +1,29 @@
+
+create TRIGGER [dbo].[tg_modlinfo_createProc]
+   ON  [dbo].[modlinfo]
+   AFTER INSERT,UPDATE
+AS 
+BEGIN
+	SET NOCOUNT ON;
+
+	declare @code nvarchar(50), @ext nvarchar(50), @Procname nvarchar(200), @content nvarchar(max), @resultText nvarchar(max)
+
+	if update(infovalue) and exists(select * from inserted where infokey like 'script_%') begin
+	--if update(infovalue) begin
+		select @code=m.moduleid, @ext=i.InfoKey, @content=i.InfoValue
+		from inserted i 
+			inner join modl m on i.moduleguid=m.moduleguid
+
+		set @ext=replace(@ext, 'script_', '')
+		set @Procname=@code+'_'+@ext
+
+		exec [gen].[createProc]	@ProcName, @content, 'doc', 0, @resultText output
+
+		if isnull(@resultText,'')<>'' begin
+			RAISERROR (@resultText, 16, 1)
+			--ROLLBACK TRANSACTION
+		end
+	end
+END
+
+

@@ -1,0 +1,71 @@
+CREATE PROCEDURE [api].[getNumber] 
+	@code nvarchar(14), @trxDate date, @mode bit = 0, @autonumber nvarchar(40) OUTPUT
+as
+--declare @code nvarchar(14) = 'TaDEDU', @trxDate date = getdate(), @mode bit = 0, @autonumber nvarchar(40)
+
+	declare @ref uniqueidentifier, @keepLoop int, @curDocNo nvarchar(40)
+	declare @docSource nvarchar(40), @docModule uniqueidentifier, @trxNo int
+
+	set @ref = newid()
+	set @keeploop = 10
+
+	if @mode=0
+		select 
+			@docModule = b.ModuleGUID, @docSource = InfoValue
+		from modl a
+			inner join modlinfo b ON a.ModuleGUID = b.ModuleGUID
+		where ModuleID = @code AND b.InfoKey = 'DocNo'
+	else
+		select 
+			@docModule = b.ModuleGUID, @docSource = InfoValue
+		from modl a
+			inner join modlinfo b ON a.ModuleGUID = b.ModuleGUID
+		where ModuleID = @code AND b.InfoKey = 'DocRefNo'
+
+	if charindex('{dd}',@docSource)=0 set @trxDate=dateadd(dd, 1-day(@trxDate), @trxDate)
+	if charindex('{m}',@docSource)=0 and charindex('{mm}',@docSource)=0 set @trxDate=dateadd(mm, 1-month(@trxDate), @trxDate)
+
+	if not exists(
+		select * from modldocn
+		where [Format] = @docSource and ModuleGUID = @docModule
+			and year([Month]) = year(@trxDate) and month([Month]) = month(@trxDate) and day([Month]) = day(@trxDate))
+		begin
+			insert into modldocn (ModuleGUID, [Format], [Month], [No])
+			values (@docModule, @docSource, @trxDate, 0)
+		end
+
+	while @keeploop >= 1
+	begin
+		select @trxNo=[No] from modldocn
+		where [Format] = @docSource and ModuleGUID = @docModule
+			and year([Month]) = year(@trxDate) and month([Month]) = month(@trxDate) and day([Month]) = day(@trxDate)
+
+		update modldocn set 
+			[No] = [No] + 1
+		where [Format] = @docSource and ModuleGUID = @docModule
+			and year([Month]) = year(@trxDate) and month([Month]) = month(@trxDate)
+			and day([Month]) = day(@trxDate) and @trxno = [No]
+
+		select @curDocNo=[No] from modldocn
+		where [Format] = @docSource and ModuleGUID = @docModule
+			and year([Month]) = year(@trxDate) and month([Month]) = month(@trxDate)
+			and day([Month]) = day(@trxDate) and [No]=@trxno+1
+
+		set @keeploop = @keeploop - 1		
+		if @curDocNo is not null begin
+			set @keeploop = 0
+			set @docSource=replace(@docSource, '{nnnnn}', right('00000'+convert(nvarchar(5), @curdocno),5))
+			set @docSource=replace(@docSource, '{nnnn}', right('0000'+convert(nvarchar(4), @curdocno),4))
+			set @docSource=replace(@docSource, '{nnn}', right('000'+convert(nvarchar(3), @curdocno),3))
+			set @docSource=replace(@docSource, '{mm}', right('00'+convert(nvarchar(2), month(@trxDate)),2))
+			set @docSource=replace(@docSource, '{m}', char(64+month(@trxDate)))
+			set @docSource=replace(@docSource, '{yyyy}', right('0000'+convert(nvarchar(4), year(@trxDate)),4))
+			set @docSource=replace(@docSource, '{yy}', right('00'+convert(nvarchar(4), year(@trxDate)),2))
+			set @docSource=replace(@docSource, '{dd}', right('00'+convert(nvarchar(2), day(@trxDate)),2))
+			set @docSource=replace(@docSource, '{d}', char(64+day(@trxDate)))
+
+		end
+	end
+	select @autonumber = @docSource
+
+

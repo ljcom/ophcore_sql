@@ -1,0 +1,55 @@
+
+
+CREATE procedure [gen].[coTBLE_update] @debug bit=0
+as
+	if exists(select * from CoACCTDBSE where ismaster=1 and DatabaseName=db_name())
+	begin
+
+		--child database
+		DECLARE #cur008 CURSOR
+		READ_ONLY
+		FOR select tablename, colname 
+			from coTBLE a
+				inner join coTBLEFIEl b
+					on a.tableGUID=b.tableGUID
+			where colOrder=1 and len(a.tablename)=6 and left(tablename,2)='ta'
+
+		DECLARE @tablename varchar(40), @ColKey varchar(40),
+			@sqlstr varchar(max)
+		declare @script varchar(4000), @ismaster int
+		declare @tbl table (t bit)
+	
+		OPEN #cur008
+
+		FETCH NEXT FROM #cur008 INTO @tablename, @ColKey
+		WHILE (@@fetch_status &lt;&gt; -1)
+		BEGIN
+			IF (@@fetch_status &lt;&gt; -2)
+			BEGIN
+				set @sqlstr=char(13)+char(10)+
+					'	UNION ALL
+						select '+@ColKey+' docGUID, Status, StatusComment from '+@tablename+' a'
+
+
+			END
+			FETCH NEXT FROM #cur008 INTO @tablename, @ColKey
+		END
+
+		CLOSE #cur008
+		DEALLOCATE #cur008
+
+		--exec (@sqlstr)
+
+		set @sqlstr='CREATE view toALLT as '+char(13)+char(10)+@sqlstr
+
+		if @debug=1 print @sqlstr
+
+		set @script='sqlcmd -E -d '+@tablename+' /Q "'+@sqlstr+'"'
+		--if @debug=1 print @script
+		EXEC master.dbo.xp_cmdshell @script
+
+
+	end
+
+
+

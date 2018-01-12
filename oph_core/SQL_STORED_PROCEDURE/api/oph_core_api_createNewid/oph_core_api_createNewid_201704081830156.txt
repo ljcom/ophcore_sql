@@ -1,0 +1,16 @@
+
+
+
+
+
+
+CREATE procedure [api].[createNewid] 
+as
+
+select newid()
+
+
+
+
+
+

@@ -1,0 +1,17 @@
+CREATE function gen.codex(@hostGUID uniqueidentifier, @code nvarchar(50))
+RETURNS nvarchar(100)
+--WITH ENCRYPTION
+as
+begin
+	declare @codestr nvarchar(100)
+	declare @ver nvarchar(10), @db nvarchar(50), @setmode nvarchar(1)
+	--exec gen.getDBInfo @hostguid, @code, @ver output, @db output, @typecode output
+
+	select @setmode=settingMode from modl where moduleid=@code
+	set @codestr=iif(@setmode='0', '['+@code+']', 'doc.['+@code+']('''+cast(@hostguid as nvarchar(50))+''')')
+
+	return @codestr
+
+end
+
+

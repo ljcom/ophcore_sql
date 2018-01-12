@@ -1,0 +1,50 @@
+CREATE function gen.getColumnInfo(@columnGUID uniqueidentifier, @infoKey nvarchar(max))
+returns @ret table (columnGUID uniqueidentifier, infoKey nvarchar(50), infoValue nvarchar(max))
+as begin
+	if not exists (select * from cache.[_modlcolminfo]) 
+	begin
+		declare @cols nvarchar(max)=stuff(
+			(select ', '+infokey
+			from modlcolminfo
+			group by infokey
+			order by infokey
+			for xml path('')),1,2,'')
+
+		--print @cols
+
+		declare @sqlstr nvarchar(max)='
+			select *
+			into cache._modlcolminfo
+			from 
+			(
+			  select columnguid, infokey, infovalue from modlcolminfo
+			) src
+
+			pivot
+			(
+			  max(infovalue)
+			  for infokey in ('+@cols+')
+			) piv'
+	
+		exec sp_executesql @sqlstr
+	end
+	
+	set @sqlstr='
+		select @infovalue='+@infokey+'
+		from cache._modlcolminfo where columnGUID=@columnGUID'
+
+	declare @infovalue nvarchar(max)
+	exec sp_executesql @sqlstr, N'@columnGUID uniqueidentifier, @infovalue nvarchar(max) output', @columnGUID, @infovalue output
+
+	insert into @ret (columnGUID, infokey, infovalue)
+	values (@columnGUID, @infokey, null)
+	
+
+	return 
+end
+
+--select * from gen.getColumnInfo('E96DA98D-7F42-4390-9D43-CE7029FF021B', 'isviewable')
+
+--select * from modlcolminfo
+--select * from cache.[_modlcolminfo]
+

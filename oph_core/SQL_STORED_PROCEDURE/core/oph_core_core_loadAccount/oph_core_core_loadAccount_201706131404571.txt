@@ -1,0 +1,75 @@
+CREATE procedure [core].[loadAccount] @hostGUID uniqueidentifier, 
+	@address nvarchar(100), @env nvarchar(50)=null, @code nvarchar(50)=null
+as
+	declare @accountid nvarchar(50), @coreDB nvarchar(50)=db_name(), @ODBC nvarchar(max), @db nvarchar(50), 
+		@themeCode nvarchar(50), @themePage nvarchar(50), 
+		@fp nvarchar(50), @sip nvarchar(50)
+
+
+	select @accountid=a.accountid, @ODBC=b2.InfoValue, @db=d.DatabaseName, @themeCode=b2.InfoValue, 
+		@fp=b4.InfoValue, @sip=b5.InfoValue
+	from acct a
+		inner join acctinfo b1 on a.accountguid=b1.accountguid and b1.infokey='address' 
+			and lower(b1.infovalue) like '%' + lower(@address) + '%'
+		inner join acctinfo b2 on a.accountguid=b2.accountguid and b2.infokey='ODBC'
+		inner join acctdbse d on a.AccountGUID=d.AccountGUID and d.isMaster=1 and d.[version]='4.0'
+		left join acctinfo b3 on a.accountguid=b3.accountguid and b3.infokey='themeCode'
+		left join acctinfo b4 on a.accountguid=b4.accountguid and b4.infokey='frontPage'
+		left join acctinfo b5 on a.accountguid=b5.accountguid and b5.infokey='signinPage'
+
+	print @accountid
+	print @address
+	print @ODBC
+	print @coreDB
+	print @db
+	print @themecode
+	print @fp
+	print @sip
+	declare @sqlstr nvarchar(max)
+	set @sqlstr='
+		use '+@db+'
+		if not exists(select * from userhost where hostguid=@hostguid) 
+			exec gen.createGuestID @accountid, @coreDB, @hostGUID output
+		
+		declare @userGUID uniqueidentifier
+		select @userguid=userguid from userhost where hostguid=@hostguid
+		
+		if @code is null or not exists(select * from modl where moduleid=@code) 
+			select @code=g1.infovalue 
+			from modg g
+				inner join modginfo g1 on g.modulegroupguid=g1.modulegroupguid and g1.infokey=''frontpage''
+			where modulegroupid=@env
+
+		if @code is null set @code=@fp
+
+		declare @needLogin bit=0, @lastPar nvarchar(max)=null, @signInPage nvarchar(50),
+			@themeFolder nvarchar(50), @themePage nvarchar(50)
+		
+		if exists(select * from modl where moduleid=@code)
+			select 
+				@themeFolder=t.themeFolder,
+				@themePage=tp.pageurl, 
+				@env=g.ModuleGroupID,
+				@code=iif(isnull(m.moduleid,'''')<>'''', m.moduleid, isnull(g4.infovalue, @fp)),
+				@signInPage=isnull(g5.infovalue, @sip),
+				@needLogin=iif(m.needLogin=1 and @userGUID is null, 1, 0) 
+				--@lastPar=''env=''+isnull(g.ModuleGroupID,'''')+''&code=''+@code
+			from modl m
+				left join thmepage tp on m.themepageguid=tp.themepageguid 
+				left join thme t on tp.themeGUID=t.themeGUID
+				left join modg g on m.ModuleGroupGUID=g.ModuleGroupGUID
+				left join modginfo g3 on g.ModuleGroupGUID=g3.modulegroupguid and g3.InfoKey=''themeCode''
+				left join modginfo g4 on g.ModuleGroupGUID=g4.modulegroupguid and g4.InfoKey=''frontPage''
+				left join modginfo g5 on g.ModuleGroupGUID=g5.modulegroupguid and g4.InfoKey=''signinPage''
+			where m.ModuleID=isnull(@code, @fp)
+			
+		select @accountid, @coreDB, @ODBC, @themeFolder, @themePage, @env, @code, @hostGUID, @userGUID, @needLogin, @signInPage--, @lastPar
+	'
+	print @sqlstr
+	exec sp_executesql @sqlstr, 
+		N'@accountid nvarchar(50), @hostguid uniqueidentifier, @coreDB nvarchar(50), 
+			@ODBC nvarchar(max), @themeCode nvarchar(50), 
+			@env nvarchar(50), @code nvarchar(50), @sip nvarchar(50), @fp nvarchar(50)',
+		@accountid, @hostguid, @coreDB, @ODBC, @themeCode, @env, @code, @sip, @fp
+
+

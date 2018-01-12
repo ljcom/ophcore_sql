@@ -1,0 +1,195 @@
+
+CREATE PROCEDURE [gen].[addprocs_save] @tablename varchar(50), @otablename varchar(50), @colname varchar(50), 
+	@status varchar(50), @updatestr varchar(max), @valuestr varchar(max),
+	@insertstr varchar(max), @par varchar(max), @tableApproveName varchar(50), @debug int=0, @isEnc bit=1, @isdebug bit=0
+AS
+	declare @primaryDate nvarchar(50), @autonumbercol nvarchar(50), @refno nvarchar(50)
+	declare @primaryDateEdit int
+	
+	declare @attachmentField nvarchar(50), @fieldkey nvarchar(50)
+
+	declare @content varchar(max)
+	declare @content1 varchar(max)
+	declare @content2 varchar(max)
+	
+	declare @sp varchar(max)
+	declare @parameter varchar(max)
+
+	--only enable to save or insert
+	if @updatestr &lt;&gt; '' and @insertstr &lt;&gt; '' and @par &lt;&gt; '' 
+	begin
+		select @primarydate = colname 
+		from gen.cotablfiel a
+			inner join gen.cotabl b
+				on a.tableguid=b.tableguid	
+		where tablename = @tablename and primarycol=2
+
+		select @PrimaryDateEdit=isnull(iseditable,0) 
+		from gen.cotablfiel a
+			inner join gen.cotabl b
+				on a.tableguid=b.tableguid	
+		where tablename = @tablename and primarycol=2			
+
+		select @autonumbercol = colname 
+		from gen.cotablfiel a
+			inner join gen.cotabl b
+				on a.tableguid=b.tableguid	
+		where tablename = @tablename and primarycol=3
+
+		select @attachmentField = colname 
+		from gen.cotablfiel a
+			inner join gen.cotabl b
+				on a.tableguid=b.tableguid	
+		where tablename = @tablename and (ComboType=5 or combotype=50) and isEditable&gt;0
+
+		select @fieldkey = colname 
+		from gen.cotablfiel a
+			inner join gen.cotabl b
+				on a.tableguid=b.tableguid	
+		where tablename = @tablename and a.colorder=10
+
+		set @content = ''
+		set @sp = ''+@tableName+'_save'
+		set @parameter = char(9)+'@GUID uniqueidentifier, @hostGUID uniqueidentifier, '+@par +', @preview int = 0'
+		set @content = 	
+				char(13)+char(10)+
+				char(9)+'if @preview &gt; 0 begin'+char(13)+char(10) +
+				char(9)+char(9)+'if dbo.fn_checkObject(''dbo'','''+@tablename+'_save_preview'')=1 exec dbo.'+@tablename+'_save_preview @GUID, @hostGUID,'+replace(replace(@valuestr, ')', ''), 'dbo.fn_round(', '')+', @preview'+char(13)+char(10)+
+				char(9)+'end'+char(13)+char(10)+
+				char(13)+char(10)+
+				char(9)+'else if dbo.fn_checkObject(''dbo'','''+@tablename+'_save_custom'')=1 exec dbo.'+@tablename+'_save_custom @GUID, @hostGUID, '+replace(replace(@valuestr, ')', ''), 'dbo.fn_round(', '')+char(13)+char(10)+
+				char(13)+char(10)
+
+		if dbo.fn_checkObject('dbo',@tablename+'_save_custom')=0 begin
+			set @content = @content +
+				char(9)+'else begin'+char(13)+char(10)+
+				char(9)+char(9)+'declare @userGUID1 uniqueidentifier, @site uniqueidentifier, @msg nvarchar(max), @iscancel bit=0'+char(13)+char(10)+
+				char(9)+char(9)+char(13)+char(10)+
+				char(9)+char(9)+'select @userGUID1=userguid, @site=siteguid'+char(13)+char(10)+
+				char(9)+char(9)+'from coUSERHOST'+char(13)+char(10)+
+				char(9)+char(9)+'where hostGUID=@hostGUID'+char(13)+char(10)+
+				char(9)+char(9)+char(13)+char(10)+
+				CHAR(9)+char(9)+'set @msg='''''+char(13)+char(10)+
+				char(9)+char(9)+char(13)+char(10)+
+
+				case when isnull(@attachmentField,'')&lt;&gt;'' then
+					char(9)+char(9)+CHAR(9)+'if @'+@attachmentField+'='''' or dbo.fn_checkFile(@'+@attachmentField+')=0 begin'+ CHAR(13)+CHAR(10)+
+					char(9)+char(9)+CHAR(9)+CHAR(9)+'select @'+@attachmentField+'='+@attachmentField+' from '+@otableName+' where '+@colname+'=@GUID'+ CHAR(13)+CHAR(10)+
+					char(9)+char(9)+CHAR(9)+'end'+ CHAR(13)+CHAR(10)+ CHAR(13)+CHAR(10)
+				else '' end+
+
+				char(9)+char(9)+char(13)+char(10)+
+				char(9)+char(9)+case when @status&lt;&gt;'' then 'if not exists(select * from '+@otableName+' where 1=1 '+case when @status&lt;&gt;'' then 'and status &gt;= 500 ' else '' end+'and '+@colname+'= @GUID) begin' else 'if 1=1 begin' end+char(13)+char(10)+
+				char(9)+char(9)+char(13)+char(10)+
+				case when @primaryDateEdit=0 or @primaryDateEdit=99 then
+					char(9)+char(9)+char(9)+'declare @'+@primaryDate+' smalldatetime'+char(13)+char(10)+
+					char(9)+char(9)+char(9)+'set @'+@primaryDate +'=getdate()'+char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(13)+char(10) 
+				else '' end +
+				case when @tableApproveName&lt;&gt;'' then
+					char(9)+char(9)+char(9)+'if exists( select * from '+@tableApproveName+' where '+@colname+'=@GUID and approvaluserguid=@userguid1)		-- hanya orang yang berkepentingan yang bisa '+char(13)+char(10)+
+					char(9)+char(9)+char(9)+'	or not exists( select * from '+@otableName+' where '+@colname+'=@GUID)				-- atau buat baru'+char(13)+char(10)+
+					char(9)+char(9)+char(9)+'	or exists( select * from '+@otableName+' where '+@colname+'=@GUID and createduser=@userguid1)		-- hanya orang yang berkepentingan yang bisa '+char(13)+char(10) 
+				else 
+					char(9)+char(9)+char(9)+'if 1=1' end+
+				char(9)+char(9)+char(9)+'begin'+char(13)+char(10)
+
+			set @content = @content +
+				char(9)+char(9)+char(9)+char(9)+'if exists(select * from '+@otableName+''+char(13)+char(10)+
+				char(9)+char(9)+char(9)+char(9)+char(9)+'where '+@colname+' = @GUID) begin'+char(13)+char(10)+char(13)+char(10) +
+				char(9)+char(9)+char(9)+char(9)+char(9)+'if dbo.fn_checkObject(''dbo'','''+@tablename+'_save_update_before'')=1 exec dbo.'+@tablename+'_save_update_before @GUID, @hostGUID, '+replace(replace(replace(@valuestr, ')', ''), 'dbo.fn_round(', ''),', ',' OUTPUT, ')+' OUTPUT, @isCancel OUTPUT, @msg OUTPUT' +char(13)+char(10)+
+				char(9)+char(9)+char(9)+char(9)+char(9)+'if @iscancel=0 begin' +char(13)+char(10) +
+				char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+'begin try'	+ CHAR(13)+CHAR(10) +
+				char(13)+char(10)+
+				char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+'update '+@oTableName+char(13)+char(10)+
+				char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+'set '+@updatestr+', '+char(13)+char(10)+
+				char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+'UpdatedDate = getdate(), UpdatedUser = @userGUID1 '+char(13)+char(10)+
+				char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+'where '+@colname+' = @GUID'+char(13)+char(10)+char(13)+char(10) +
+				char(13)+char(10)+
+				char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+'if dbo.fn_checkObject(''dbo'','''+@tablename+'_save_update_after'')=1 exec dbo.'+@tablename+'_save_update_after @GUID, @hostGUID, 1'+char(13)+char(10)+
+				char(13)+char(10)+
+				char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+'end try' +CHAR(13) +CHAR(10) +
+				char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+'begin catch' +CHAR(13) +CHAR(10) +
+				char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+'set @msg=error_message()'+char(13)+char(10)+
+				char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+'end catch'+char(13)+char(10)+char(13)+char(10)+
+				char(9)+char(9)+char(9)+char(9)+char(9)+'end'+char(13)+char(10)+
+				char(9)+char(9)+char(9)+char(9)+'end'+char(13)+char(10)+
+				char(9)+char(9)+char(9)+char(9)+'else begin'+char(13)+char(10)
+
+			set @content = @content +
+				char(9)+char(9)+char(9)+char(9)+char(9)+'if dbo.fn_checkObject(''dbo'','''+@tablename+'_save_update_before'')=1 exec dbo.'+@tablename+'_save_update_before @GUID, @hostGUID, '+replace(replace(replace(@valuestr, ')', ''), 'dbo.fn_round(', ''),', ',' OUTPUT, ')+' OUTPUT, @isCancel OUTPUT, @msg OUTPUT' +char(13)+char(10)+
+				char(9)+char(9)+char(9)+char(9)+char(9)+'if @iscancel=0 begin' +char(13)+char(10) +
+				char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+'if @GUID is null set @GUID = newid()'+char(13)+char(10)+char(13)+char(10) +
+				case when isnull(@autonumbercol,'')&lt;&gt;'' and isnull(@primarydate,'')&lt;&gt;'' then 
+					char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+'declare @autonumber nvarchar(10)'+char(13)+char(10)+char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+'exec gen.getNumber '''+ @tablename +''', @'+@primarydate+', 0, @autonumber OUTPUT'+char(13)+char(10)
+				else '' end +
+				char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+'begin try'	+ CHAR(13)+CHAR(10) +
+				char(9)+char(9)+char(9)+char(13)+char(10) +
+				char(9)+char(9)+char(9)+char(13)+char(10) +
+				char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+'insert into '+@oTableName+char(13)+char(10)  +
+				char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+'('+@colName+', '+
+					case when isnull(@autonumbercol,'')&lt;&gt;'' 
+						then @autonumbercol+', ' 
+						else '' end+
+					case when @primaryDateEdit=0 or @primaryDateEdit=99 
+						then isnull(@primaryDate,'')+', ' 
+						else '' end+
+					case when substring(@TableName,1,1)='t' and len(@TableName)=6
+						then 'StatusComment, ' 
+						else '' end +
+					@insertstr+', createdUser)'+char(13)+char(10) +
+				char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+'values'+char(13)+char(10)+
+				char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+'(@GUID, '+
+					case when isnull(@autonumbercol,'')&lt;&gt;'' then '@autonumber, ' else '' end +
+					case when @primaryDateEdit=0 or @primaryDateEdit=99 
+						then 'getdate(), ' 
+						else '' end +
+					case when substring(@TableName,1,1)='t' and len(@TableName)=6
+						then '''Recently Created'', ' 
+						else '' end +
+					@valuestr+', @userGUID1)'+char(13)+char(10)+char(13)+char(10)
+
+		--** ModifiedBy eLs ON Sept, 2015
+			set @content = @content +
+				case when isnull(@attachmentField,'')&lt;&gt;'' then
+					char(9)+char(9)+CHAR(9)+'if @'+@attachmentField+'&lt;&gt;''''  and dbo.fn_checkFile(@'+@attachmentField+')=1 begin'+ CHAR(13)+CHAR(10)+
+					char(9)+char(9)+CHAR(9)+CHAR(9)+'declare @sqlstr varchar(1000)'+ CHAR(13)+CHAR(10)+
+					char(9)+char(9)+CHAR(9)+CHAR(9)+'set @sqlstr='''+ CHAR(13)+CHAR(10)+
+					char(9)+char(9)+CHAR(9)+CHAR(9)+CHAR(9)+'update '+@oTableName+''+ CHAR(13)+CHAR(10)+
+					char(9)+char(9)+CHAR(9)+CHAR(9)+CHAR(9)+'set '+@attachmentField+'BLOB=('+ CHAR(13)+CHAR(10)+
+					char(9)+char(9)+CHAR(9)+CHAR(9)+CHAR(9)+CHAR(9)+'select Convert(varbinary(max), BulkColumn)'+ CHAR(13)+CHAR(10)+
+					char(9)+char(9)+CHAR(9)+CHAR(9)+CHAR(9)+CHAR(9)+'from Openrowset(Bulk ''''''+@'+@attachmentField+'+'''''', SINGLE_CLOB) as f)'+ CHAR(13)+CHAR(10)+
+					char(9)+char(9)+CHAR(9)+CHAR(9)+CHAR(9)+'where '+@fieldkey+'=''''''+cast(@GUID as varchar(100))+'''''''''+ CHAR(13)+CHAR(10)+
+
+					char(9)+char(9)+CHAR(9)+CHAR(9)+'exec (@sqlstr)'+ CHAR(13)+CHAR(10)+
+					char(9)+char(9)+CHAR(9)+'end'+ CHAR(13)+CHAR(10)+ CHAR(13)+CHAR(10)
+				else '' end+
+		--** EndBy eLs
+
+				char(9)+char(9)+char(9)+char(13)+char(10) +
+				char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+'if dbo.fn_checkObject(''dbo'','''+@tablename+'_save_update_after'')=1 exec dbo.'+@tablename+'_save_update_after @GUID, @hostGUID, 0'+char(13)+char(10)+
+				char(9)+char(9)+char(9)+char(13)+char(10) +
+				char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+'end try' +CHAR(13) +CHAR(10) +
+				char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+'begin catch' +CHAR(13) +CHAR(10) +
+				char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+'set @msg=error_message()'+char(13)+char(10)+
+				char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+'end catch'+char(13)+char(10)+
+				char(9)+char(9)+char(9)+char(9)+char(9)+'end'+char(13)+char(10)+
+				char(9)+char(9)+char(9)+char(9)+'end'+char(13)+char(10)+
+				char(9)+char(9)+char(9)+'end'+char(13)+char(10)+
+
+				char(9)+char(9)+'end'+char(13)+char(10) +
+				
+				char(9)+char(9)+'select @msg saved'+char(13)+char(10)+
+				char(9)+'end'
+			end
+	set @content2=''
+
+		exec gen.addproc @sp, @parameter, @content, @content1, @content2, @isEnc=@isenc
+
+		print 'Start ManualSave '
+		exec gen.addprocs_save_manual @tablename, @par
+		print 'End ManualSave'
+	end
+
+

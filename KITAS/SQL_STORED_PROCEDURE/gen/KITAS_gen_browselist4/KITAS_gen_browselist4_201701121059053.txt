@@ -1,0 +1,203 @@
+
+
+
+
+
+CREATE procedure [gen].[browselist4] 
+	@nbRec int, @pageNo int, 
+	@tableName varchar(100), 
+	@keyField varchar(100), @selectFields varchar(8000),
+	@searchText varchar(100), 
+	@whereFields varchar(8000),
+	@orderType int, @orderField nvarchar(100),
+	@userGUID varchar(100), @options int=0	--1=only show the job list only, 3=not yet received yet
+as
+	--only for my pending list
+	
+	declare @sqlstr varchar(4000), @sqlstr1 varchar(4000), @sqlstr2 varchar(4000), @r int, @p int, @nullamount int, @i int,@nullText varchar(1000), @approvalProtected varchar(1000), @userApproval varchar(4000), @userStatusField varchar(200)
+	declare @tablename1 nvarchar(100)
+	
+	declare @apprx nvarchar(400)
+	set @apprx=''
+
+	set @tablename1=left(@tablename,1) + 'a' + substring(@tablename,3, len(@tablename)-2)
+	
+
+	set @i=0
+	set @nullamount=0
+	
+	while @i&lt;&gt;len(@selectFields)
+	begin
+		if substring(@selectFields,@i,1)= ','
+			set @nullamount=@nullamount+1
+
+		set @i=@i+1
+	end
+	
+	set @nullText='null'
+	set @i=0
+
+	while @i&lt;&gt;@nullamount+1
+	begin
+		set @nullText=@nullText+',null'
+		set @i=@i+1
+	end
+
+	if exists(	select * 
+				from gen.cotablfiel a
+					inner join gen.cotabl b
+						on a.tableguid=b.tableguid
+				where tablename=@tableName and colName='CreatedUser')
+	begin
+
+		select @approvalProtected = 'left join ' + @tablename1 + 'APRV 
+							on ' + @tablename1 + 'APRV.'+@keyField+' = ' + @tablename + '.'+@keyField+'
+							and ' + @tablename1 + 'APRV.approvalUserGUID = ''' + @userGUID + '''
+					where ' + @tablename1 + 'APRV.'+@keyField+' is not null '+case when @options&lt;&gt;4 then '' else 'and '+@tablename1 + 'APRV.status&lt;3' end
+							--or ' + @tablename + '.createdUser = ''' + @userGUID + '''' 
+
+
+
+	end
+	else
+	begin
+		set @approvalProtected=''	--, null, null'
+	end
+	
+	if exists( select * from sysobjects where Name= @tablename1+'APRV') and substring(@tablename1, 2, 1) = 'a'
+	begin
+		set @userApproval = '
+				left join (
+						select ' + @tablename1 + 'APRV.* 
+						from ' + @tablename1 + 'APRV
+							inner join (select ' + @tablename1 + 'APRV.' + @keyField + ', min(lvl) minlvl
+								from ' + @tablename1 + 'APRV where isnull(status,0)&lt;3 
+								group by ' + @keyField + ') a
+								on a.' + @keyField + '=' + @tablename1 + 'APRV.' + @keyField + ' and a.minlvl=' + @tablename1 + 'APRV.lvl) ' + @tablename1 + 'APRV
+						on ' + @tablename1 + 'APRV.' + @keyField + ' = y.' + @keyField  
+						 
+		set @userStatusField = ', ' + @tablename1 + 'APRV.status userStatus1, ' + @tablename1 + 'APRV.userStatusDescription userStatusDescription1 '
+		set @apprx='and (y.CreatedUser=''' + @userGUID + ''' or ' + @tablename1 + 'APRV.ApprovalUserGUID=''' + @userGUID + ''')' 
+
+	end
+	else
+	begin
+		set @userApproval = ''
+		set @userStatusField = ', null userStatus1, null userStatusDescription1 '
+	end
+
+	-- start to find nb of pages
+	declare @n uniqueidentifier
+	set @n=newid()
+
+	select @sqlstr = 	
+		'create'+' '+'procedure #nbRows1'+replace(convert(nvarchar(100), @n),'-','')+' @searchText nvarchar(100), @row int output as
+
+		declare @x int
+		declare @newGUID uniqueidentifier
+		set  @newGUID = newid()
+
+		
+	
+		select y.* ' + @userStatusField + ' into #table1
+		from ' + @tablename + '	y ' + @userapproval + '
+		where 1=1 ' + @apprx + CHAR(13)+CHAR(10)
+		
+	select @sqlstr1 = 	
+		'select @x = count(*)  
+		 from #table1 '+CHAR(13)+CHAR(10)
+
+	select @sqlstr2 = 	
+		'set @row=@x'
+--	PRINT len(@sqlstr+isnull(@sqlstr1,'')+isnull(@sqlstr2,''))
+--	print @sqlstr
+--	print isnull(@sqlstr1,'')
+--	print isnull(@sqlstr2,'')
+	
+	exec (@sqlstr + @sqlstr1 + @sqlstr2)
+
+	declare @sqlstrx nvarchar(1000), @par nvarchar(1000)
+	
+	set @sqlstrx=N'exec #nbRows1'+replace(convert(nvarchar(100), @n),'-','')+' @s, @rr output'
+	
+	set @par=N'@s nvarchar(100), @rr int output'
+	
+--print @sqlstrx 
+--print @par
+	
+	exec sp_executesql @sqlstrx, @par, @s=@searchText, @rr=@r output
+
+--print @r
+
+	if @nbRec&gt;0	
+		set @p = (@r+@nbRec-1)/@nbRec
+	else
+		set @p=0
+	-- end of find nb of pages
+	if @options=9 begin
+		select @r nbRecords
+	end
+	if @options&lt;&gt;9 begin
+		set @nullText=@nullText+', '+convert(nvarchar(10), @p)
+		
+
+		select @sqlstr = 	
+			'declare @searchText nvarchar(100), @newGUID uniqueidentifier
+			set @searchText = ''' + @searchText + ''' 
+			set  @newGUID = newid()
+
+			
+		
+			select y.* ' + @userStatusField + ' into #table1
+			from ' + @tablename + '	y ' + @userapproval + '
+			where 1=1 ' + @apprx
+			
+		select @sqlstr1 = 	
+			'select * from (
+				select y.' + @keyField + ' '+ @keyField + ', ' + @selectFields + ', ' + convert(nvarchar(10), @p) + ' nbPage
+				from (	
+					select top ' + convert(nvarchar(10), @pageNo * @nbRec) +'  '+@tableName+ '.* ' + ' 
+					from #table1
+						 ' + @tableName +
+					case when len(isnull(@whereFields, ''))=0 then '' else ' where ' + @whereFields + ' ' end +
+					case when @orderField &lt;&gt; '' then ' order by ' + @orderField else '' end +
+					') y'
+
+		select @sqlstr2 = 	
+			'		left join (	
+						select top ' + convert(nvarchar(10), (@pageNo-1) * @nbRec) +'  '+@tableName+ '.' + @keyField + ' 
+						from #table1 ' + @tableName +
+						case when len(isnull(@whereFields, ''))=0 then '' else ' where ' + @whereFields + ' ' end + 
+					case when @orderField &lt;&gt; '' then ' order by ' + @orderField else '' end +
+						 ') x
+						on x.' + @keyField + ' = y.' + @keyField + ' ' +
+					+ '
+				where x.' + @keyField + ' is null ' + '
+				union
+				select '+ @nullText + ') z ' +
+			case when @orderField &lt;&gt; '' then ' order by ' + @orderField else '' end
+		
+		print @sqlstr
+		print @sqlstr1
+		print @sqlstr2
+
+	--	print len(@sqlstr)
+	--	print len(@sqlstr1)
+		exec (@sqlstr + @sqlstr1 + @sqlstr2)
+
+	end
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

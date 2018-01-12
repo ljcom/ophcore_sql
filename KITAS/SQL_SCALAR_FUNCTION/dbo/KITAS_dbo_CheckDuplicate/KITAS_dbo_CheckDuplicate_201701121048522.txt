@@ -1,0 +1,12 @@
+
+CREATE FUNCTION [dbo].[CheckDuplicate] (@newStr nvarchar(4000), @existStr nvarchar(100)) 
+RETURNS int
+AS
+begin
+	declare @x int
+	set @x = case when (charindex(@newStr, @existStr)=1) and (len(@newStr)=len(@existStr)) then 1 else 0 end
+	RETURN @x
+end
+
+
+

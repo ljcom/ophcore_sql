@@ -1,0 +1,58 @@
+
+
+CREATE procedure [gen].[getHTTP] @sUrl text, @g uniqueidentifier output, @proxyAddress nvarchar(500)=''  
+as
+
+	--sp_configure 'show advanced options', 1;
+	--GO
+	--RECONFIGURE;
+	--GO
+	--sp_configure 'Ole Automation Procedures', 1;
+	--GO
+	--RECONFIGURE;
+	--GO
+
+	DECLARE @token int, @hr int, @chrStatus varchar (64) 
+	EXEC @hr = sp_OACreate 'MSXML2.ServerXMLHTTP.3.0', @token OUTPUT 
+	EXEC sp_OAMethod @token, 'open', NULL, 'GET',@sUrl, false 
+	EXEC sp_OAMethod @token, 'setRequestHeader', NULL, 'Authorization', 'Basic {username:password}' -- encoded in Base 64 
+	EXEC sp_OAMethod @token, 'setRequestHeader', NULL, 'Content-Type', 'application/xml' 
+	EXEC sp_OAMethod @token, 'setRequestHeader', NULL, 'Accept', 'text/xml; charset=UTF-8' 
+
+	if isnull(@proxyAddress,'')&lt;&gt;'' EXEC sp_OAMethod @token, 'setproxy', NULL, '2', @proxyAddress 
+
+	--(Optional) Ignore Certificate Verification 
+	--EXEC sp_OAMethod @token, 'setOption' ,null, 2, 13056 
+	EXEC @hr = sp_OAMethod @token, 'send', NULL, '' 
+	exec @hr = sp_OAGetProperty @token, 'status', @chrStatus OUT 
+	if @chrStatus &lt;&gt; 200 begin print @chrStatus END 
+	
+	IF object_id ( 'tempdb..#xml' ) is not null DROP TABLE #xml 
+	CREATE TABLE #xml (data text NULL) 
+	
+	INSERT into #xml (data) 
+	EXEC @hr = sp_OAGetProperty @token, 'responseText' 
+	
+	declare @nGUID uniqueidentifier
+	set @nGUID=NEWID()
+	
+	insert into CoHTTP (httpGUID, HttpText)
+	select @nGUID, data 
+	from #xml
+	
+	set @g=@nGUID
+	
+	DROP TABLE #xml 
+	
+	EXEC @hr = sp_OADestroy @token
+	
+
+
+
+
+
+
+
+
+
+

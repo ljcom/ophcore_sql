@@ -1,0 +1,86 @@
+create procedure core.addReport_v3 @accountid nvarchar(50), @v3DB nvarchar(50), @dataDB nvarchar(50), @isdebug bit=0
+as
+
+	declare @accountguid uniqueidentifier, @accountdbGUID uniqueidentifier, @curMaster bit, @themePageGUID uniqueidentifier
+	declare @sqlstr nvarchar(max)
+
+	select @accountguid=a.AccountGUID, @accountdbGUID=AccountDBGUID, @curMaster=isMaster 
+	from acct a
+		inner join acctdbse b on a.AccountGUID=b.AccountGUID
+	where accountid=@accountid and b.DatabaseName=@v3DB
+
+	set @sqlstr='select @themepageGUID = themepageGUID from '+@dataDB+'.dbo.thmepage where pageURL=''report''' 
+	exec sp_executesql @sqlstr, N'@themepageGUID uniqueidentifier output', @themepageGUID output
+
+
+	set @sqlstr='
+	insert into '+@dataDB+'.dbo.modl (ModuleGUID, AccountGUID, ModuleID, ModuleDescription, settingMode, 
+		AccountDBGUID, ParentModuleGUID, OrderNo, needLogin, ThemePageGUID, ModuleStatusGUID)
+	select 
+		newid(), @accountGUID, QueryCode, QueryName, 5, 
+		@accountdbGUID, NULL, NULL, 1, @themepageGUID, NULL
+	from '+@v3DB+'.dbo.coqury a
+		left join '+@dataDB+'.dbo.modl b ON a.QueryCode = b.moduleid
+	where left(querycode, 1) = ''y'' and isdeleted = 0 and querytypeflag = ''isReport'' and a.queryname <> ''''
+		AND b.ModuleGUID is NULL 
+
+
+	insert into '+@dataDB+'.dbo.modlinfo (ModuleGUID, InfoKey, InfoValue)
+	select 
+		moduleguid, InfoKey, InfoValue
+	from (
+		select 
+			b.moduleguid, cast(a.QueryTypeFlag as varchar(MAX)) [QueryTypeFlag], cast(a.AllowPDF as varchar(MAX)) [AllowPDF], 
+			cast(a.ReportName as varchar(MAX)) [ReportName], cast(a.AllowXLS as varchar(MAX)) [AllowXLS], 
+			cast(a.XLSTitleName as varchar(MAX)) [XLSTitleName], cast(a.QuerySQL as varchar(MAX)) [QuerySQL], 
+			cast(a.templateCode as varchar(MAX)) [templateCode]
+		from '+@v3DB+'.dbo.coqury a
+			inner join '+@dataDB+'.dbo.modl b ON a.queryCode = b.moduleid
+			left join (select ModuleGUID from '+@dataDB+'.dbo.modlinfo group by ModuleGUID) c ON b.ModuleGUID = c.ModuleGUID
+		where left(querycode, 1) = ''y'' and isdeleted = 0 and a.querytypeflag = ''isReport'' and a.queryname <> '''' AND c.ModuleGUID is NULL
+	) modl
+	UNPIVOT (
+		InfoValue for InfoKey IN (QueryTypeFlag, AllowPDF, ReportName, AllowXLS, XLSTitleName, QuerySQL, templateCode)
+	) unpivoted
+
+	insert into '+@dataDB+'.dbo.modlcolm (ColumnGUID, ModuleGUID, colKey, colType, colOrder, titlecaption, 
+		createdDate, updatedDate)
+	select 
+		QueryParameterGUID, b.moduleguid, QueryParName, 
+		case QueryParTypeFlag when ''isDate'' then ''40'' when ''isSuggestBox'' then ''12'' else '''' end, a.OrderNo, QueryParCaption,
+		GETDATE(), NULL
+	from '+@v3DB+'.dbo.coqurypara a
+		inner join '+@v3DB+'.dbo.coqury a1 on a.queryguid=a1.queryguid
+		inner join '+@dataDB+'.dbo.modl b ON a1.querycode = b.moduleid
+		left join '+@dataDB+'.dbo.modlcolm c ON a.QueryParName = c.colKey
+	where c.ColumnGUID is NULL
+
+	insert into '+@dataDB+'.dbo.modlcolminfo (ColumnGUID, InfoKey, InfoValue)
+	select a.* 
+	from (
+		select 
+			columnGUID [ColumnGUID], InfoKey, InfoValue
+		from (
+			select b.columnGUID, cast(SuggestBoxFieldKey as varchar(MAX)) [cbKey], cast(SuggestBoxFieldId as varchar(MAX)) [cbId], 
+				cast(SuggestBoxFieldDesc as varchar(MAX)) [cbName], cast(SuggestBoxSQL as varchar(MAX)) [cbTable], 
+				cast(isText as varchar(MAX)) [isText], cast(isDate as varchar(MAX)) [isDate], cast(isMonth as varchar(MAX)) [isMonth], 
+				cast(isYear as varchar(MAX)) [isYear]
+			from '+@v3DB+'.dbo.coqurypara a
+				inner join '+@v3DB+'.dbo.coqury a1 on a.queryguid=a1.queryguid
+				inner join '+@dataDB+'.dbo.modl b1 ON a1.querycode = b1.moduleid
+				inner join '+@dataDB+'.dbo.modlcolm b ON a.QueryParName = b.colKey and b1.moduleGUID=b.moduleGUID
+		) colminfo
+		UNPIVOT (
+			InfoValue for InfoKey IN (cbKey, cbId, cbName, cbTable, isText, isDate, isMonth, isYear)
+		) unpivoted
+		) a 
+		inner join '+@dataDB+'.dbo.modlcolm b ON a.ColumnGUID = b.ColumnGUID
+		left join '+@dataDB+'.dbo.modlcolminfo c ON a.ColumnGUID = c.ColumnGUID AND a.InfoKey = c.InfoKey
+	where c.ColumnInfoGUID is NULL AND LEN(a.InfoValue) > 0 AND a.InfoValue != ''0'' 
+		AND LEFT(a.InfoKey, 2) = case colType when 12 then ''cb'' when ''40'' then ''is'' end' 
+
+
+	if @isdebug=1 print @sqlstr
+	exec sp_executesql @sqlstr, N'@accountGUID uniqueidentifier, @accountdbGUID uniqueidentifier, @themepageGUID uniqueidentifier', 
+		@accountguid, @accountdbguid, @themepageGUID 
+

@@ -1,0 +1,9 @@
+create procedure job.createDBs
+as	
+	declare @sqlstr nvarchar(max)=	'select ''exec core.createdb ''''''+AccountId+'''''''' from acct'
+
+	print @sqlstr
+	exec core.slowExecute @sqlstr, @isdebug=1
+
+
+	

@@ -1,0 +1,88 @@
+
+
+
+
+
+CREATE procedure [gen].[copyApprovalLevel] @tbl nvarchar(20), @sourcedb nvarchar(100)
+as	
+
+	declare @accountid nvarchar(20)
+	select @accountid=accountid from coACCT
+
+	declare @sqlstr nvarchar(4000)
+	
+	if @sourcedb is not null begin
+		select @sqlstr='
+			select distinct a.approvalugrpId, a.approvalUgrpName 
+			into #newGroupTable
+			from '+@sourceDB+'.caMODLUGRP a
+				left join coUGRP b
+					on a.approvalugrpid=b.GroupId
+			where a.moduleid='''+@tbl+''' and b.UGroupGUID is null
+
+			insert into coUGRP (UGroupGUID, GroupId, GroupDescription, ModuleGUID)
+			select distinct newid(), a.approvalugrpId, a.approvalUgrpName, c.moduleGUID
+			from '+@sourceDB+'.caMODLUGRP a
+				left join coUGRP b
+					on a.approvalugrpid=b.GroupId
+				inner join coMODL c
+					on a.moduleid=c.moduleid
+			where a.moduleid='''+@tbl+''' and b.UGroupGUID is null
+
+			insert into coUGRPUSER (UserUGroupGUID, UGroupGUID, MemberFlag, 
+				isUser, MemberUserGUID, isGroup, MemberGroupGUID, MemberName)
+			select NEWID(), d.UGroupGUID, c.memberFlag,
+				c.isUser, e.userGUID, c.isGroup, f.ugroupGUID, c.MemberName
+			--select * 
+			from #newGroupTable a
+				inner join '+@sourceDB+'.caUGRP b
+					on a.approvalugrpid=b.groupid
+				inner join '+@sourceDB+'.caUGRPUSER c
+					on b.ugroupGUID=c.ugroupGUID
+				inner join coUGRP d
+					on a.approvalugrpid=d.GroupId
+				left join coUSER e
+					on c.selectedUserId=e.userId
+				left join coUGRP f
+					on c.selectGroupId=f.GroupId
+
+			delete coMODLUGRP 
+			--select * 
+			from coMODLUGRP a
+				inner join coMODL b
+					on a.moduleGUID=b.moduleGUID
+			where b.moduleid='''+@tbl+'''
+			
+			insert into CoMODLUGRP (ModuleUgrpGUID, ModuleGUID, ApprovalGroup, 
+				ApprovalUgrpGUID, ApproveLevel, UpperUgrpGUID, 
+				IsRequired, NeedComplete, OnBudget, NeedMinValue, ITTypeOnly, InvestmentTypeOnly, 
+				PoolOnly, isFA, VendorPaymentDay, SubChannelFlag, TechMark, 
+				EmployeeOnly)
+			select NEWID(), b.ModuleGUID, a.approvalGroup,
+				b2.UGroupGUID, a.approveLevel, b3.UGroupGUID, 
+				a.IsRequired, a.NeedComplete, a.OnBudget, a.NeedMinValue, a.ITTypeOnly, a.InvestmentTypeOnly, 
+				a.PoolOnly, a.isFA, a.VendorPaymentDay, a.SubChannelFlag, a.TechMark, 
+				a.EmployeeOnly
+			--select * 
+			from '+@sourceDB+'.caMODLUGRP a
+				inner join coMODL b 
+					on a.moduleid=b.moduleid
+				inner join coUGRP b2
+					on a.approvalugrpid=b2.groupid
+				inner join CoUGRP b3
+					on a.upperugrpid=b3.GroupId
+				left join dbo.caMODLUGRP c
+					on a.moduleid=c.moduleid
+					and a.approvalUgrpid=c.approvalugrpid
+			where a.moduleid = '''+@tbl+''' and c.ModuleUgrpGUID is null'
+		print @sqlstr			
+		exec sp_executesql @sqlstr
+	end
+	
+
+
+
+
+
+
+

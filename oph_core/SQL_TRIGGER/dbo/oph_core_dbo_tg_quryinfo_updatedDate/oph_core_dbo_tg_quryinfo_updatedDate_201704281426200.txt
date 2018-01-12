@@ -1,0 +1,13 @@
+
+create TRIGGER dbo.tg_quryinfo_updatedDate 
+   ON  quryinfo
+   AFTER INSERT, UPDATE
+AS 
+BEGIN
+	update quryinfo
+	set updatedDate=getdate()
+	from quryinfo a
+		inner join inserted b on a.QueryInfoGUID=b.QueryInfoGUID
+
+END
+

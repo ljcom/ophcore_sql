@@ -1,0 +1,10 @@
+
+CREATE VIEW [dbo].[MoCTGR_3]
+as	--CreatedBy eLs ON Jan, 2017
+
+	select 
+		a.CTGRGUID, a.ID, a.Name, a.PARNCTGRGUID, a.CreatedDate, a.CreatedUser, a.UpdatedDate, a.UpdatedUser
+	from MoCTGR a
+		inner join MoCTGR_2 b ON a.PARNCTGRGUID = b.CTGRGUID
+		
+

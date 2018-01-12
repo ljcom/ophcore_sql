@@ -1,0 +1,66 @@
+
+
+
+
+
+
+
+
+
+CREATE procedure [api].[convertXML2FieldList] @Code varchar(14), @saveXML xml, @db varchar(10)=''
+--WITH ENCRYPTION
+as
+	SELECT 
+		fieldid = typenode.value('@id', 'varchar(50)'),
+		fieldValue = replace(typenode.value('value[1]', 'varchar(MAX)'),'''','''''')
+	INTO #temp
+	FROM
+		@saveXML.nodes('/sqroot/field') AS XTbl(typenode)
+	
+	--declare @instr varchar(max)
+	--declare @sqlstr nvarchar(max)='
+	--	set @instr= stuff((
+	--		select '', ''''''+colname+''''''''
+	--		from (
+	--			select colname--, isviewable, iseditable
+	--			from '+@db+'.gen.cotabl a 
+	--				inner join '+@db+'.gen.cotablfiel b
+	--					on a.tableguid=b.tableguid
+	--			where a.tablename like '''+@Code+''' and iseditable in (1, 2, 3, 4)) x
+	--		for xml path('''')), 1, 2, '''')
+	--	'
+	declare @instr varchar(max)
+	declare @sqlstr nvarchar(max)='
+		set @instr= stuff((
+			select '', ''''''+b.colkey+'''''''' 
+				   from modl a
+				   inner join modlcolm b on b.moduleGUID = a.moduleGUID
+				   inner join modlcolminfo iseditable on b.columnGUID = iseditable.columnGUID and iseditable.infokey = ''iseditable'' and iseditable.infovalue in (''1'', ''2'', ''3'', ''4'')
+				   where a.moduleid = '''+@code+'''
+			for xml path('''')), 1, 2, '''')
+		'
+
+	exec sp_executesql @sqlstr,N'@instr varchar(max) output',@instr output
+
+	--print @instr
+
+	set @sqlstr='
+		select * 
+		from #temp
+		where fieldid in ('+@instr+')'	
+	
+	exec(@sqlstr)
+
+
+
+
+
+
+
+
+
+
+
+
+
+

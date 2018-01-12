@@ -1,0 +1,147 @@
+
+
+CREATE procedure [gen].[getHTTP] @sUrl nvarchar(max), @g uniqueidentifier output, @proxyAddress nvarchar(500)='',
+	@method nvarchar(10)='GET',  @mimeType nvarchar(50)=null, @postString nvarchar(max)=null--, @body nvarchar(max)=null
+--, @user varchar(max)='ap\corpidadministrator', @pwd varchar(max)='Urbanher0'  
+as
+	/*modified @ 2016-11-01*/
+	--declare @user varchar(max), @pwd varchar(max)
+	--select @user = serverUserID, @pwd = ServerPAssword from CoSRVR 
+	--select @user, @pwd
+
+	--basic authorization di IIS harus enabled.
+	--set basic password
+	--declare @upwd varchar(max)
+	--if @user<>'' begin
+	--	SELECT @upwd='Basic '+
+	--		CAST(N'' AS XML).value(
+	--			  'xs:base64Binary(xs:hexBinary(sql:column("bin")))'
+	--			, 'VARCHAR(MAX)'
+	--		)   
+	--	FROM (
+	--		SELECT CAST(@user+':'+@pwd AS VARBINARY(MAX)) AS bin
+	--	) AS bin_sql_server_temp;
+		
+	--	print @upwd
+	--end
+	--else set @upwd='Basic {user:password}'		
+	
+	--post: exec @Erreur = sp_OAMethod @Objet, 'setRequestHeader', NULL, 'Content-Type', 'application/x-www-form-urlencoded'
+
+	/*
+
+	DECLARE @token int, @hr int, @chrStatus varchar (64), @source varchar(4000), @desc varchar(4000)
+	EXEC @hr = sp_OACreate 'MSXML2.ServerXMLHTTP', @token OUTPUT 
+	EXEC @hr = sp_OAMethod @token, 'open', NULL, @method, @sUrl, 'false' 
+	IF @hr <> 0 
+	BEGIN
+		  EXEC sp_OAGetErrorInfo @token, @source OUT, @desc OUT
+		  SELECT      hResult = convert(varbinary(4), @hr), 
+					  source = @source, 
+					  description = @desc, 
+					  FailPoint = 'Open failed', 
+					  MedthodName = @method 
+		  goto destroy 
+		  return
+	END
+
+	--EXEC sp_OAMethod @token, 'setRequestHeader', NULL, 'Authorization', @upwd --'Basic {username:password}' -- encoded in Base 64 
+
+	if @method='POST' and @mimetype is null set @mimetype='application/x-www-form-urlencoded'
+
+	if @mimetype is null begin
+		EXEC @hr = sp_OAMethod @token, 'setRequestHeader', NULL, 'Content-Type', 'application/xml' 
+		EXEC @hr = sp_OAMethod @token, 'setRequestHeader', NULL, 'Accept', 'text/xml; charset=UTF-8' 
+	end
+	else
+	begin
+		EXEC @hr = sp_OAMethod @token, 'setRequestHeader', NULL, 'Content-Type', @mimetype
+		print 'setRequestHeader'+cast(@hr as nvarchar(50))
+		--EXEC @hr = sp_OAMethod @token, 'setRequestHeader', NULL, 'Accept', @mimetype
+		print 'setRequestHeader'+cast(@hr as nvarchar(50))
+	end
+
+	if isnull(@proxyAddress,'')<>'' begin
+		EXEC sp_OAMethod @token, 'setproxy', NULL, '2', @proxyAddress 
+		print 'setProxy'+cast(@hr as nvarchar(50))
+	end
+
+
+	--(Optional) Ignore Certificate Verification 
+	--EXEC sp_OAMethod @token, 'setOption' ,null, 2, 13056 
+
+	declare @len int
+	set @len = len(@postString) 
+	EXEC @hr = sp_OAMethod @token, 'setRequestHeader', null, 'Content-Length', @len 
+
+	declare @sendstr varchar(8000)='send'
+	if @method='POST' and isnull(@poststring,'')<>'' set @sendstr='send("' + REPLACE(@poststring, '"', '''') + '")'
+	
+	declare @c int=0
+	while @c<3 begin
+		EXEC @hr = sp_OAMethod @token, @sendstr, NULL
+		
+		print 'send'+cast(@hr as nvarchar(50))
+		if @hr=0 break
+		set @c=@c+1
+	end
+
+	IF @hr <> 0 
+	BEGIN
+			EXEC sp_OAGetErrorInfo @token, @source OUT, @desc OUT
+			SELECT      hResult = convert(varbinary(4), @hr), 
+						source = @source, 
+						description = @desc, 
+						FailPoint = 'Send failed', 
+						MedthodName = @method 
+			goto destroy 
+			return
+	END
+
+	exec @hr = sp_OAGetProperty @token, 'status', @chrStatus OUT 
+	print 'status'+cast(@hr as nvarchar(50))
+
+	if @chrStatus <> 200 begin print @chrStatus END 
+	
+	IF object_id ( 'tempdb..#xml' ) is not null DROP TABLE #xml 
+	CREATE TABLE #xml (data nvarchar(max) NULL) 
+	
+	INSERT into #xml (data) 
+	EXEC @hr = sp_OAGetProperty @token, 'responseText'
+	print 'responseText'+cast(@hr as nvarchar(50))
+
+	declare @nGUID uniqueidentifier
+	set @nGUID=NEWID()
+	
+	insert into http (httpGUID, HttpText)
+	select @nGUID, data 
+	from #xml
+	
+	--select * from #xml
+	
+	set @g=@nGUID
+	
+	----DROP TABLE #xml 
+destroy:	
+	EXEC @hr = sp_OADestroy @token
+
+	*/
+
+
+	--clr
+	declare @r nvarchar(max)
+
+	if @method='POST' 
+		set @r=oph_core.gen.fn_post_webrequest(@surl, @postString, default, default)
+	else
+		set @r=oph_core.gen.fn_get_webrequest(@surl, default, default)
+
+	declare @nGUID uniqueidentifier
+	set @nGUID=NEWID()
+	
+	insert into http (httpGUID, HttpText)
+	select @nGUID, @r
+	
+	set @g=@nGUID
+	
+

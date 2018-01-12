@@ -1,0 +1,37 @@
+CREATE procedure oph.TeCONF_force
+	@GUID uniqueidentifier, @hostGUID uniqueidentifier, @comment nvarchar(4000)
+as --automatic creation by system, you have to remove this comment to customize this procedure
+ 	declare @userGUID uniqueidentifier, @userName nvarchar(100)
+	if dbo.fn_checkObject('dbo','TeCONF_force_custom')=0 begin
+		select @userGUID=userguid from coUSERHOST where hostGUID=@hostGUID
+
+		select @username=username
+		from coUSER
+		where userguid=@userguid
+
+		update ToCONF
+		set Status = case when isnull(ToCONF.Status,0)&lt;3 then 300 else 500 end, closedDate=getdate()
+		from ToCONF
+		where ToCONF.CONFGUID=@GUID
+
+		update ToCONF
+		set statuscomment = case when isnull(ToCONF.Status,0)=300 then @comment+' Rejected by '+@username
+				else 'Closed by '+ @username end
+		from ToCONF
+		where ToCONF.CONFGUID= @GUID and status in (300, 500)
+
+
+		if exists(select * from oph.ToCONF where CONFGUID = @GUID and status in(3)) 
+			update ToCONFAPRV
+			set Status = 3
+			from ToCONFAPRV
+			where ToCONFAPRV.approvaluserGUID = @userGUID and ToCONFAPRV.CONFGUID=@GUID
+
+		if exists(select * from oph.ToCONF where CONFGUID = @GUID and status in(300,500)) begin 
+			if dbo.fn_checkObject('dbo', 'TaCONF_mail_send')=1 exec dbo.TaCONF_mail_send @GUID, @hostGUID, @comment
+		end
+
+		select null forced
+	end else
+		exec dbo.TeCONF_force_custom @GUID, @hostGUID, @comment
+

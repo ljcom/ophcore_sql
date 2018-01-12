@@ -1,0 +1,229 @@
+
+
+
+
+
+
+
+
+
+CREATE procedure [gen].[RelatedObject] @obj nvarchar(100) = null
+as
+	declare @endLoop int
+	
+	declare @findSel int
+	declare @findUpd int
+	declare @findInto int
+	declare @findJoin int
+	declare @findComment int
+	declare @findCrlf int
+
+	declare @findNo int
+	declare @findLen int
+	declare @findObject nvarchar(20)
+	declare @nextColId int
+	DECLARE #cur CURSOR
+	READ_ONLY
+	FOR 
+		select name, syscomments.text, xx.colid
+		from sysobjects
+			inner join syscomments
+				on sysobjects.id = syscomments.id
+			left join syscomments xx
+				on syscomments.id = xx.id
+				and xx.colid = syscomments.colid + 1
+		where xtype in ('V', 'P', 'FN') and name = case when @obj is null then name else @obj end
+		order by syscomments.id, syscomments.colid
+	
+	DECLARE @name nvarchar(100), @text nvarchar(4000), @nextText nvarchar(4000), @oldName nvarchar(100)
+	OPEN #cur
+	
+	FETCH NEXT FROM #cur INTO @name, @NextText, @nextColId
+	WHILE (@@fetch_status &lt;&gt; -1)
+	BEGIN
+		IF (@@fetch_status &lt;&gt; -2)
+		BEGIN
+			if @oldname = @name begin
+				print 'next...' 
+				--print @text
+				set @findNo = len(@text)
+				print @findNo
+				if len(@nextText)&gt;4000-@findNo begin
+					set @findLen = len(@nextText)-(4000-@findNo)
+					set @findNo = 4000-@findNo
+				print @findNo
+				print len(@nextText)
+				end
+				else begin
+					set @findNo = len(@nextText)
+					set @findLen = 0
+				end
+				select @text = @text + substring(@nextText, 1, @findNo)
+				if @findLen &gt; 0
+					select @nextText = substring(@nextText, @findNo+1, @findLen)
+				else
+					select @nextText = ''
+				print '-----------'
+				print @nexttext
+			end
+			else begin
+				select @text = @nextText
+				select @nexttext = ''
+				--print @text
+			end
+
+			print '##' + @name
+	--		print @text
+			set @endLoop = 0
+			if @nextColid is not null and len(@nextText) = 0 
+				set @endLoop = 1
+			while @endLoop = 0
+			begin
+				set @text = replace(@text,char(13),' ')
+				set @text = replace(@text,char(9),' ')
+				set @text = replace(@text,'(','#')
+
+				select @findSel = charindex('from ', @text)
+				select @findUpd = charindex('update ', @text)
+				select @findJoin = charindex('join ', @text)
+				select @findInto = charindex('into ', @text)
+				select @findComment = charindex('--', @text)
+				select @findCrlf = charindex(char(10), @text)
+	
+				set @findNo = len(@text)
+				
+				if @findSel &lt; @findNo and @findSel &gt; 0 and @findLen &lt;&gt;2 begin
+					set @findNo = @findSel
+					set @findLen = 5
+--	print '--1'
+				end
+				if @findUpd &lt; @findNo and @findUpd &gt; 0 and @findLen &lt;&gt;2 begin
+					set @findNo = @findUpd
+					set @findLen = 7
+--	print '--2'
+				end
+				if @findJoin &lt; @findNo and @findJoin &gt; 0 and @findLen &lt;&gt;2 begin
+					set @findNo = @findJoin
+					set @findLen = 5
+--	print '--3'
+				end
+				if @findInto &lt; @findNo and @findInto &gt; 0 and @findLen &lt;&gt;2 begin
+					set @findNo = @findInto
+					set @findLen = 5
+--	print '--4'
+				end
+				if @findCrlf &lt; @findNo and @findCrlf &gt; 0 begin
+					set @findNo = @findCrlf
+					set @findLen = 1
+--	print '--5'
+				end
+				if @findComment &lt; @findNo and @findComment &gt; 0 and @findLen &lt;&gt;2 begin
+					set @findNo = @findComment
+					set @findLen = 2
+--	print '--6'
+				end
+
+				if @findNo &lt; len(@text) begin
+					--print @findNo
+					--print @findLen
+					set @text = ltrim(substring(@text, @findNo+@findLen, len(@text)-@findNo))
+					--print @text
+					if @findLen &gt; 2 begin
+						select @findNo = charindex(' ', @text)
+						set @findObject = substring(@text, 1, @findNo)
+						set @findObject = replace(@findObject, char(10), ' ')
+						set @findObject = rtrim(ltrim(@findObject))
+						select @findLen = len(@findObject)
+						print '''' + @findObject + ''''
+						set @text = ltrim(substring(@text, @findNo+@findLen, len(@text)-@findNo))
+						--print @text
+						if left(@findObject,1) &lt;&gt; '('
+							and left(@findObject,1) &lt;&gt; '''' 
+							and left(@findObject,1) &lt;&gt; '@' 
+							and left(@findObject,1) &lt;&gt; '#' begin
+							if exists(select * from sysRelatedObject
+								where objectName = @name and RelatedObjectName = @findObject)
+		
+								update sysRelatedObject
+								set updatedDate = getdate()						
+								where objectName = @name 
+									and RelatedObjectName = @findObject
+							else
+								insert into sysRelatedObject (objectName, relatedObjectName, CreatedDate, UpdatedDate)
+								values (@name, @findObject, getdate(), getdate())
+						end
+						if @nextText&lt;&gt; '' begin
+							print @text
+		--------------
+							set @findNo = len(@text)
+							if len(@nextText)&gt;4000-@findNo begin
+								set @findLen = len(@nextText)-(4000-@findNo)
+								set @findNo = 4000-@findNo
+							end
+							else begin
+								set @findNo = len(@nextText)
+								set @findLen = 0
+							end
+							select @text = @text + substring(@nextText, 1, @findNo)
+							if @findLen &gt; 0 
+								select @nextText = substring(@nextText, @findNo+1, @findLen)
+							else
+								select @nextText = ''
+		--------------
+						end
+
+					end
+
+				end
+
+				else begin
+					if @nextText&lt;&gt; '' begin
+						print @text
+--------------
+						set @findNo = len(@text)
+						if len(@nextText)&gt;4000-@findNo begin
+							set @findLen = len(@nextText)-(4000-@findNo)
+							set @findNo = 4000-@findNo
+						end
+						else begin
+							set @findNo = len(@nextText)
+							set @findLen = 0
+						end
+						select @text = @text + substring(@nextText, 1, @findNo)
+						if @findLen &gt; 0 
+							select @nextText = substring(@nextText, @findNo+1, @findLen)
+						else
+							select @nextText = ''
+--------------
+					end
+					else
+						set @endLoop = 1
+				end			
+	
+			end
+			set @oldName = @name
+		END
+		FETCH NEXT FROM #cur INTO @name, @nexttext, @nextColId
+	END
+	
+	CLOSE #cur
+	DEALLOCATE #cur
+
+	select * from sysRelatedObject
+		left join sysObjects
+			on sysRelatedObject.relatedObjectName = sysObjects.name
+	where sysObjects.name is null
+
+
+
+
+
+
+
+
+
+
+
+
+
+

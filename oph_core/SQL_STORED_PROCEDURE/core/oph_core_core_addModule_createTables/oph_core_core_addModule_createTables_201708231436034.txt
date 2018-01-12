@@ -1,0 +1,61 @@
+
+CREATE procedure [core].[addModule_createTables] @accountId nvarchar(50), @dataDB nvarchar(50), 
+	@v4DB nvarchar(50)=null, @svr nvarchar(50)=null, @isdelTable bit=0, @isdebug bit=0
+as
+
+	declare @coreDB nvarchar(50)=db_name()
+	if @svr is null set @svr=@@SERVERNAME
+	declare @sqlstr nvarchar(max)
+
+	declare #cur CURSOR READ_ONLY FOR
+		select distinct migratedb
+		from acctdbse a
+			inner join acct b on a.AccountGUID=b.AccountGUID
+		where (version in('2.0', '3.0') 
+			and isnull(migratedb,'')<>'') 
+			and AccountId = IIF(isNULL(@accountId, '') = '', AccountID, @accountid)
+			and a.migratedb = IIF(isNULL(@v4DB, '') = '', a.migratedb, @v4DB)
+			--and a.migratedb is not null
+
+	OPEN #cur
+
+	FETCH NEXT FROM #cur INTO @v4db
+	WHILE (@@fetch_status = 0)
+	BEGIN
+		set @sqlstr='
+		use '+@datadb+'
+		declare @xstr nvarchar(max)=replace((
+			select ''
+				exec [gen].[createTable] '''''+@dataDB+''''', '''''+@v4DB+''''', '''''+isnull(@svr,'')+''''', ''+m.moduleid+'', '''''+iif(@isdelTable=1,'1','0')+''''', '''''+iif(@isdebug=1,'1','0')+'''''
+
+				''
+			from modl m
+				inner join '+@coredb+'.dbo.acctdbse ad on m.AccountDBGUID=ad.AccountDBGUID
+			where settingmode in (1,2,3,4) and m.moduleid not like ''%APRV'' AND MigrateDB='''+@v4DB+'''
+			order by moduleid
+			for xml path('''')), ''&'+'#x0D;'', '''')
+
+		print @xstr
+		exec sp_executesql @xstr					
+		'
+		print @sqlstr
+		exec sp_executesql @sqlstr
+
+		FETCH NEXT FROM #cur INTO @v4db
+	END
+	CLOSE #cur 
+	DEALLOCATE #cur
+
+	set @sqlstr='
+		update '+@dataDB+'.dbo.modl set settingmode=40 where settingmode=4
+		update '+@dataDB+'.dbo.modl set settingmode=4 where settingmode=40
+		
+		update i set infovalue=''1''
+		from '+@dataDB+'.dbo.modlcolminfo i
+			inner join '+@dataDB+'.dbo.modlcolm c
+				on i.ColumnGUID=c.ColumnGUID
+		where infokey=''primarycol'' and infovalue=''1'' and c.colOrder<>1
+		'
+	exec sp_executesql @sqlstr
+
+

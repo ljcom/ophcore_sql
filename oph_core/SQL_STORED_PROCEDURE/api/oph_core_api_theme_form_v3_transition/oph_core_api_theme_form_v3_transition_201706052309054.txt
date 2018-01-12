@@ -1,0 +1,143 @@
+
+
+
+
+CREATE procedure [api].[theme_form_v3_transition] 
+	@hostGUID uniqueidentifier, @code nvarchar(50), @guid uniqueidentifier, @v3DB nvarchar(50), @withPrimary int=0, @isdebug bit=0
+--WITH ENCRYPTION
+as
+
+	--get authorization
+	declare --@code nvarchar(10)='tafass', @HostGUID uniqueidentifier='A301DDF2-763B-42C3-BB8C-799091ADB6FD', 
+	@allowadd bit, @allowBrowse bit, @allowEdit bit, @allowDelete bit, @allowWipe bit, @allowForce bit, @allowExport bit
+
+	declare @ver nvarchar(10), @db nvarchar(50), @typecode nvarchar(1)
+	exec gen.getDBInfo @hostguid, @code, @ver output, @db output, @typecode output
+
+	exec gen.verifyAuth @code, @HostGUID, 
+		@allowadd output, @allowBrowse output, @allowEdit output, @allowDelete output, @allowWipe output, @allowForce output, @allowExport output
+
+
+	declare @fieldkey nvarchar(50)
+	select @fieldkey=colkey
+	from modl a
+		inner join modlcolm b on a.moduleguid=b.moduleguid
+	where a.moduleid=@code
+		and colorder=(
+			select min(colorder)
+			from modl a
+				inner join modlcolm b on a.moduleguid=b.moduleguid
+			where a.moduleid=@code
+		)
+
+	declare @sqlstr nvarchar(max)
+
+	declare @tblCode nvarchar(50), @oCode nvarchar(50)--, @tblCode nvarchar(20)
+	set @tblCode= stuff(@code, 2, 1, 'a')
+	set @oCode= stuff(@code, 2, 1, 'o')
+
+	declare @hasDeleted bit=0, @isdeleted bit=0
+	exec [gen].[checkIsDeleted] @hostguid, @code, @hasDeleted output
+	declare @stateid int, @statecode nvarchar(1)
+		set @sqlstr='
+			select @stateid='+iif(@typecode='T', 'status', '0')+', @isdeleted='+iif(@isdeleted=1, 'isdeleted', '0')+' 
+			from '+@v3DB+'.dbo.['+@oCode+']
+			where '+@fieldkey+'='''+cast(@guid as nvarchar(50))+''''
+		exec sp_executesql @sqlstr, N'@stateid int output, @isdeleted bit output', @stateid output, @isdeleted output
+
+	if @isdeleted=1 set @tblCode= stuff(@code, 2, 1, 'd')
+	else if @stateid between 400 and 499 set @tblCode= stuff(@code, 2, 1, 'e')
+	else if @stateid between 500 and 599 set @tblCode= stuff(@code, 2, 1, 'c')
+
+	declare @fieldList nvarchar(max), @fieldList2 nvarchar(max)--, @fieldListPrimary nvarchar(max)
+	set @fieldList=stuff((
+		select ', '+colkey
+		from modl a
+			inner join modlcolm b on a.moduleguid=b.moduleguid
+			--left join modlcolminfo c on b.ColumnGUID=c.ColumnGUID and c.InfoKey='primaryCol'
+		where a.moduleid=@code and colKey not in (@fieldkey, 'accountguid')
+			--and isnull(c.infovalue,0) < case when @withPrimary=1 then 6 else 1 end
+		for xml path('')),1,2, '')
+
+
+
+	set @fieldList2=stuff((
+		select ', cast('+colkey+' as nvarchar(max)) '+colkey --cast(menuid as nvarchar(max)) menuid
+		from modl a
+			inner join modlcolm b on a.moduleguid=b.moduleguid
+		where a.moduleid=@code and colKey not in (@fieldkey, 'accountguid')
+		for xml path('')),1,2, '')
+
+
+	select @sqlstr =  N'
+		select columnguid, moduleguid, infokey, infovalue, null,null 
+		From (
+			select convert(nvarchar(max),colkey) as colkey, --convert(nvarchar(max),coltype) as coltype, 
+				titlecaption, convert(nvarchar(max),colorder) as colorder, a.moduleguid, a.columnguid 
+			from modlcolm a
+				inner join modlcolminfo b on a.columnguid=b.columnguid and b.infokey=''isviewable'' and b.infovalue=''1''
+				left join modlcolminfo e on a.columnguid=e.columnguid and e.infokey=''iseditable'' 
+				left join modlcolminfo d on a.columnguid=d.columnguid and d.infokey=''primarycol''
+				inner join modl c on a.moduleguid=c.moduleguid
+			where c.moduleid ='''+@code+''' 
+				and '+ case when @withPrimary = 0 then '' else ' not' end +'(d.infovalue is null or d.infovalue ='''' or e.infovalue in (1,2,4))
+			) a 
+		unpivot (infovalue for infokey in(colkey, colorder, titlecaption)) as upvt 
+		
+		union
+		
+		select a.columnguid, b.moduleguid, a.infokey, a.infovalue, null, null 
+		from modlcolminfo a		
+			inner join modlcolm b on a.columnguid = b.columnguid 
+			inner join modlcolminfo c on b.columnguid=c.columnguid and c.infokey=''isviewable'' and c.infovalue=''1''
+			left join modlcolminfo e on a.columnguid=e.columnguid and e.infokey=''iseditable'' 
+			left join modlcolminfo d on a.columnguid=d.columnguid and d.infokey=''primarycol''
+			inner join modl f on b.moduleguid=f.moduleguid
+		where f.moduleid ='''+@code+'''
+			and '+ case when @withPrimary = 0 then '' else ' not' end +'(d.infovalue is null or d.infovalue ='''' or e.infovalue in (1,2,4))
+		
+		union
+		-- settingmode>0
+		select ColumnGUID,b.moduleguid,''colValue'',ColValue,colvaluedate,colvaluemoney 
+		From docmcolm a 
+			inner join docm b on a.docguid = b.docguid 
+			inner join modlcolm c on a.ColKey = c.colKey and b.ModuleGUID = c.ModuleGUID 
+		where a.docguid ='''+cast(@guid as nvarchar(50))+'''
+		
+		-- settingmode=0
+		union
+
+		select columnGUID, moduleguid, ''colValue'', fextstring, null colvaluedate, null colvaluemoney   
+		from (
+			SELECT y.columnGUID, z.moduleguid, fextkey, fextstring
+			FROM
+			(	select '+@fieldkey+', '+@fieldList2+' 
+				from '+@v3DB+'.oph.['+@tblCode+']
+				where '+@fieldKey+'='''+cast(@guid as nvarchar(50))+''') t
+			UNPIVOT
+			(	fextstring FOR fextkey  IN ('+@fieldList+')
+			) x
+				inner join modlcolm y
+					on x.fextkey=y.colkey
+				inner join modl z on z.moduleguid=y.moduleguid
+			where z.moduleid='''+@code+'''
+		) xx 
+			
+		order by columnguid, infokey
+		'
+
+	if @isdebug=1 print @sqlstr
+	exec (@sqlstr)
+
+
+
+
+
+
+
+
+
+
+
+
+

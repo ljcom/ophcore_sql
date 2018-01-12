@@ -1,0 +1,226 @@
+
+CREATE procedure [xml].[view_status1] @hostGUID uniqueidentifier, @tablename varchar(100), 
+	@GUID uniqueidentifier, @editMode int=0, @debug bit=0
+as
+	declare @xhead varchar(max), @xcontent varchar(max), @xfilter varchar(max), @xinfo varchar(max), 
+	@xapproval varchar(max), @xtalk varchar(max), @x2 varchar(max), @skinFolder varchar(100), @aTableName varchar(15)
+
+	set @aTableName= left(@tablename,1)+ 'a' +right(@tablename,len(@tablename)-2 )
+
+	if @GUID is null set @GUID=newid()
+	--fieldkey
+	declare @fieldKey varchar(100)
+	declare @minCol int
+	select @minCol=min(colorder)
+		from gen.coTABL a
+			inner join gen.coTABLFIEL b
+				on a.TableGUID=b.tableGUID
+		where tablename=@atablename
+
+	select @fieldKey=ColName
+		from gen.coTABL a
+			inner join gen.coTABLFIEL b
+				on a.TableGUID=b.tableGUID
+		where tablename=@atablename and b.colorder=@mincol
+
+	--skin
+	select @skinFolder=c.skinFolder 
+	from CoUSER a
+		inner join CoUSERHOST b
+			on a.userguid=b.userguid
+		inner join CoSKIN c
+			on a.skinguid=c.skinguid
+	where b.hostguid=@hostguid
+
+	declare @allowAdd bit=0, @allowBrowse bit=0, @allowEdit bit=0, @allowDelete bit=0, @allowWipe bit=0,
+		@allowClose bit=0, @isDeletedTable bit=0
+
+	if substring(@tablename,2,1)='d' set @isDeletedTable=1	
+	--check permission
+	select @allowadd=allowAdd, @allowBrowse=allowBrowse, @allowEdit=AllowEdit, @allowDelete=AllowDelete,
+		@allowWipe=case when @isdeletedTable=1 and AllowWipe=1 then 1 else 0 end
+	from coMODL where moduleid=@atablename
+
+	--xinfo
+	set @xinfo= '
+		select
+			case when isnull(moduleid,'''')='''' then null else moduleid end ''tableName'',
+			case when isnull(moduleDescription,'''')='''' then null else moduleDescription end ''description'',
+			isnull((	select '+@fieldKey+' 
+						from oph.'+@tablename+' '+@tablename+'
+						where '+@fieldKey+'='''+convert(varchar(50),@GUID)+'''),'''+case when @editMode=2 then convert(varchar(50),newid()) else '00000000-0000-0000-0000-000000000000' end+''') ''GUID'',
+			'''+@skinfolder+''' ''skinFolder'','+
+			cast(@editMode as varchar(1))+' ''editMode'','+
+			cast(@allowAdd as varchar(1))+' ''permission/allowAdd'','+
+			cast(@allowEdit as varchar(1))+' ''permission/allowEdit'','+
+			cast(@allowDelete as varchar(1))+' ''permission/allowDelete'','+
+			cast(@allowWipe as varchar(1))+' ''permission/allowWipe''
+		from coMODL a
+		where moduleid='''+@atablename+'''
+		for xml path(''''), type'
+	--select @xinfo
+
+	declare @xViewPage xml
+	set @xViewPage=
+			(
+			select ViewPageNo '@pageNo', 
+				(
+				select b1.ViewRowNo 'statusRow/@rowNo',
+					(
+					select b2.viewcolNo 'statusCol/@colNo',
+						(
+						select b3.ViewOrderNo 'statusOrder/@orderNo',
+							(
+							select 
+								--b4.colname 'field/@fieldName',
+								case when b4.colname='status' then b4.colname+'parval' else b4.colname end 'field/@fieldName',
+								case when isnull(b4.comboType,0) not in (1,2,3,10,11,12,4,40,41,42,43,44,45) and b4.xtype in(36) and  b4.colname='status'
+										then '#*'+b4.colname+'parval'+'*#'
+									 when isnull(b4.comboType,0) not in (1,2,3,10,11,12,4,40,41,42,43,44,45) and b4.xtype in(36)
+										then '#*'+b4.colname+'*#'
+									 when isnull(b4.comboType,0) not in (1,2,3,10,11,12,4,40,41,42,43,44,45) and b4.xtype not in(36, 104) and  b4.colname='status'
+										then '#!'+b4.colname+'parval'+'!#'
+									 when isnull(b4.comboType,0) not in (1,2,3,10,11,12,4,40,41,42,43,44,45) and b4.xtype not in(36, 104)
+										then '#!'+b4.colname+'!#' end 'field/textBox/value',
+								case when isnull(b4.comboType,0) not in (1,2,3,10,11,12,4,40,41,42,43,44,45) and b4.xtype not in(104) 
+										then b4.TitleCaption else null end 'field/textBox/titleCaption',
+								case when b4.xType=104 
+									then '#!'+b4.colname+'!#' else null end 'field/checkBox/value',
+								case when b4.xType=104 
+										then b4.TitleCaption else null end 'field/checkBox/titleCaption',
+								case when isnull(b4.comboType,0) in (4,40,41,42,43,44,45) 
+									then '#@'+b4.colname+'@#' end 'field/dateBox/value',
+								case when isnull(b4.comboType,0) in (4,40,41,42,43,44,45) 
+										then b4.TitleCaption else null end 'field/dateBox/titleCaption',
+
+								case when isnull(b4.comboType,0) in (1,2,3) and b4.xtype in(36) 
+									then '#!'+b4.ComboFieldId+'!#' else null end 'field/autoSuggestBox/id',
+								case when isnull(b4.comboType,0) in (1,2,3) and b4.xtype in(36) 
+									then '#!'+b4.ComboFieldName+'!#' else null end 'field/autoSuggestBox/name',
+								case when isnull(b4.comboType,0) in (10,12) and b4.xtype in(36) 
+									then '#!'+b4.colname+'cbid'+'!#' else null end 'field/autoSuggestBox/id',
+								case when isnull(b4.comboType,0) in (10,12) and b4.xtype in(36) 
+									then '#!'+b4.colname+'cbnm'+'!#' else null end 'field/autoSuggestBox/name',
+								case when isnull(b4.comboType,0) in (1,2,3,10,12) and b4.xtype in(36) 
+									then b4.ComboTable else null end 'field/autoSuggestBox/tableName',
+								case when isnull(b4.comboType,0) in (1,2,3,10,12) 
+										then b4.TitleCaption else null end 'field/autoSuggestBox/titleCaption'
+
+							from gen.coTABL a4
+								inner join gen.coTABLFIEL b4
+									on a4.TableGUID=b4.tableGUID
+							where tablename=@atablename and isViewable&gt;0 and b4.ViewPageNo=b3.ViewPageNo 
+								and b4.viewrowNo=b3.ViewRowNo and b4.viewColNo=b3.ViewColNo and b4.ViewOrderNo=b3.ViewOrderNo
+								and b4.viewpageNo=9 and isnull(b4.ViewColWidth,40)&gt;0							
+							order by b4.viewpageNo, b4.ViewRowNo, b4.ViewColNo, b4.ViewOrderNo, b4.colname
+							for xml path(''), type
+							) 'statusOrder/fields/*'
+						from gen.coTABL a3
+							inner join gen.coTABLFIEL b3
+								on a3.TableGUID=b3.tableGUID
+						where tablename=@atablename and isViewable&gt;0 and b3.ViewPageNo=b2.ViewPageNo 
+							and b3.viewrowNo=b2.ViewRowNo and b3.viewColNo=b2.ViewColNo
+						group by b3.viewpageNo, b3.ViewRowNo, b3.ViewColNo, b3.ViewOrderNo
+						order by b3.viewpageNo, b3.ViewRowNo, b3.ViewColNo, b3.ViewOrderNo
+						for xml path(''), type
+						) 'statusCol/statusOrders/*'
+					from gen.coTABL a2
+						inner join gen.coTABLFIEL b2
+							on a2.TableGUID=b2.tableGUID
+					where tablename=@atablename and isViewable&gt;0 and b2.ViewPageNo=b1.ViewPageNo and b2.viewrowNo=b1.ViewRowNo
+					group by b2.viewpageNo, b2.ViewRowNo, b2.ViewColNo
+					order by b2.viewpageNo, b2.ViewRowNo, b2.ViewColNo
+					for xml path(''), type
+					) 'statusRow/statusCols/*'
+				from gen.coTABL a1
+					inner join gen.coTABLFIEL b1
+						on a1.TableGUID=b1.tableGUID
+				where tablename=@atablename and isViewable&gt;0 and b1.ViewPageNo=b.ViewPageNo
+					and ViewPageNo=9
+				group by b1.viewpageNo, b1.ViewRowNo
+				order by b1.viewpageNo, b1.ViewRowNo
+				for xml path(''), type
+				) 'statusRows'
+			from gen.coTABL a
+				inner join gen.coTABLFIEL b
+					on a.TableGUID=b.tableGUID
+			where a.tablename=@atablename and isViewable&gt;0 
+			group by b.ViewPageNo
+			order by b.ViewPageNo
+			for xml path('viewPage'), type
+			)
+
+	declare @nullstr1 varchar(max)
+	declare @nullstr2 varchar(max)
+	declare @c int
+	select @c=count(*)
+	from gen.coTABLFIEL a 
+		inner join gen.coTABL b
+			on a.tableGUID=b.TableGUID
+	where b.TableName=@atablename
+		if @editMode = 2
+		begin
+		set @nullstr1='union all select '+replicate('null, ',@c-1)+'null'
+		end
+	else begin
+		set @nullstr1='--union all select '+replicate('null, ',@c-1)+'null'
+		end
+	--set @nullstr1='union all select '+replicate('null, ',@c-1)+'null'
+	set @nullstr2='union all select null'
+				
+					
+	set @x2='
+	declare @x xml
+	select @x=
+	'''+replace(
+			replace(
+				replace(
+					replace(
+						replace(
+							replace(
+								cast(@xViewPage as varchar(max))
+								,'#*','''+isnull(convert(varchar(50),')
+							,'*#','),'''')+''')
+						,'#!','''+replace(isnull(cast(')
+					,'!#',' as varchar(max)),''''),''&amp;'',''&amp;amp;'')+''')
+				,'#@','''+
+				(select isnull(xdate, getdate())+''''
+							from 
+								(	select '),'@#',' xdate 
+									from oph.'+@tablename+' '+@tablename+'
+									where '+@fieldKey+'='''+convert(varchar(50),@GUID)+''' '+@nullstr2+') '+@tablename+' 
+									for xml path(''''),
+								)+''')
+		+'''
+	from (
+		select top 1 * 
+		from ( 
+			select * 
+			from oph.'+@tablename+' '+@tablename+'
+			where '+@fieldKey+'='''+convert(varchar(50),@GUID)+'''
+			'+@nullstr1+'
+		) '+@tablename+'
+	) '+@tablename+'
+
+	select 
+		(	select ('+@xinfo+')
+		for xml path(''''), type
+		) ''info'',
+		(	select @x
+			for xml path(''''), type
+		) ''viewPages'', null
+	for xml path(''view''), root'
+
+	if @debug=1 select @x2
+	exec(@x2)
+--select @xViewPage
+
+
+
+
+
+
+
+
+
+

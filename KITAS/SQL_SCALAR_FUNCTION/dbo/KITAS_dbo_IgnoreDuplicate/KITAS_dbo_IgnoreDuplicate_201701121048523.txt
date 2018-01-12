@@ -1,0 +1,14 @@
+
+CREATE FUNCTION [dbo].[IgnoreDuplicate] (@existStr nvarchar(4000), @newStr nvarchar(100)) 
+RETURNS nvarchar(100)
+AS
+begin
+	declare @x nvarchar(100)
+	select @x = case when charindex(@newStr, @existStr)=0 then @newStr else '' end
+	RETURN @x
+end
+
+
+
+
+

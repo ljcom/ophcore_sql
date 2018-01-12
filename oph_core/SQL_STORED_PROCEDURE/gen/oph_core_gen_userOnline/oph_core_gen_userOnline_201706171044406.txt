@@ -1,0 +1,14 @@
+
+CREATE procedure [gen].[userOnline] @lastMin int=5
+as
+	select count(*)
+	from (
+		select createduser
+		from evnt
+		where datediff(n, Createddate, getdate())<@lastMin
+		group by createduser) x
+	for xml path('result'), root('sqroot')
+
+--order by CreatedDate desc
+
+

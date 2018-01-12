@@ -1,0 +1,88 @@
+
+
+
+
+
+
+CREATE procedure [gen].[addtriggers] @tablename1 nvarchar(100)=''
+as 
+--b 20131229
+
+	declare @accountid nvarchar(20)
+
+	declare @id int, @tableName nvarchar(50), @tableName2 nvarchar(50), @colName nvarchar(50)
+	declare @triggerName nvarchar(100),
+		@content varchar(8000), @content1 varchar(8000), @content2 varchar(8000)
+
+	select @accountid = accountid from coACCT
+
+	DECLARE cur CURSOR
+	   FOR 	select sys.objects.object_id, sys.objects.name, sys.columns.name 
+	   from sys.columns
+			inner join sys.objects
+				on sys.columns.object_id = sys.objects.object_id
+			inner join sys.schemas
+				on sys.objects.schema_id=sys.schemas.schema_id
+			inner join (
+				select b.tablename from gen.cotablfiel a
+					inner join gen.cotabl b
+						on a.tableguid=b.tableGUID
+				group by b.tablename			
+			) x
+				on x.tablename=sys.objects.name
+		where sys.columns.column_id=1 and sys.objects.type in ('U') and sys.objects.name like '[CMPRSTY]%'   
+			and sys.schemas.name='dbo'
+			and sys.objects.name = case when @tablename1='' then 
+					sys.objects.name else @tablename1 end
+			and charindex('_', sys.objects.name, 1)=0
+		order by sys.objects.name
+
+	OPEN cur
+	FETCH NEXT FROM cur
+	into @id, @tableName, @colName
+	WHILE @@FETCH_STATUS = 0
+	BEGIN	
+		set @triggerName=@tablename+'_lastData'
+		set @tablename2=left(@tablename,1)+'a'+substring(@tablename, 3, len(@tablename)-2)
+
+		set @content=char(9)+'SET NOCOUNT ON'+char(13)+char(13)+
+					char(9)+'declare @c int'+char(13)+
+					char(9)+'select @c=count(*) '+char(13)+ 
+					char(9)+'from '+@tablename+''+char(13)+char(13)+
+
+					char(9)+'update coMODL '+char(13)+
+					char(9)+'set LastDataDate=getdate(), nbRecords=@c'+char(13)+ 
+					char(9)+'where moduleid='''+@tablename2+''' and datediff(MINUTE, lastdatadate, getdate())&gt;1'+char(13)+char(13)
+
+
+		exec gen.addtrigger @triggerName, @tablename, @content, @content1, @content2
+
+		FETCH NEXT FROM cur
+		into @id, @tableName, @colName
+	end
+	CLOSE cur
+	DEALLOCATE cur
+	
+	set @tablename='gen.coTABLFIEL'
+	set @triggerName=@tablename+'_refresh'
+
+	set @content=char(9)+'SET NOCOUNT ON'+char(13)+char(13)+
+				char(9)+'if update(isBrowsable) or update(isViewable) or update(isEditable) begin'+char(13)+
+				char(9)+char(9)+'declare @tablename nvarchar(100), @sqlstr nvarchar(max)'+char(13)+char(13)+
+				char(9)+char(9)+'select @tablename=tablename'+char(13)+
+				char(9)+char(9)+'from inserted b'+char(13)+
+				char(9)+char(9)+char(9)+'inner join gen.coTABL a'+char(13)+
+				char(9)+char(9)+char(9)+char(9)+'on a.tableguid=b.tableguid'+char(13)+char(13)+
+				char(9)+char(9)+'print @tableName'+char(13)+char(13)+
+				--char(9)+char(9)+'set @sqlstr=''exec gen.refresh ''+isnull(@tablename,'''')'+char(13)+
+					
+				--char(9)+char(9)+'exec gen.onetimejob @sqlstr, ''maxfourv3'''+char(13)+
+				char(9)+'end'
+	set @content1=''
+	set @content2=''
+
+	exec gen.addtrigger @triggerName, @tablename, @content, @content1, @content2
+
+
+
+

@@ -1,0 +1,30 @@
+
+CREATE procedure [gen].[addAllUsers]
+as
+	insert into cougrpuser1 (userugroupguid, ugroupguid, memberuserguid)
+	select newid(), '9A3DBC55-D942-4C5A-A472-D2427AAA8067', a.userguid 
+	from couser a
+		left join (
+			select * from cougrpuser1
+			where ugroupguid='9A3DBC55-D942-4C5A-A472-D2427AAA8067'
+		) b
+		on a.userguid=b.memberuserguid
+	where b.memberuserguid is null
+
+
+	update a
+	set tokenuser=left(b.member, len(b.member)-1)
+	--select a.ugroupguid, left(b.member, len(b.member)-1), tokenuser, tokenuser
+	from cougrp a
+		inner join (
+		select ugroupguid, (
+			select cast(memberuserguid as varchar(max))+'*' 
+			from cougrpuser1
+			where ugroupguid=cougrp.ugroupguid
+			for xml path('')) member
+		from cougrp) b
+			on a.ugroupguid=b.ugroupguid
+	where left(b.member, len(b.member)-1) &lt;&gt; isnull(tokenuser,'')
+		and a.ugroupguid='9A3DBC55-D942-4C5A-A472-D2427AAA8067'
+
+

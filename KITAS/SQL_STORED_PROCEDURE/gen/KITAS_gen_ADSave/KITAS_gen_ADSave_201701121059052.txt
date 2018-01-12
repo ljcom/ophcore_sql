@@ -1,0 +1,77 @@
+
+
+
+
+CREATE procedure [gen].[ADSave]
+as
+--sp_configure 'show advanced options', 1;
+--GO
+--RECONFIGURE;
+--GO
+--sp_configure 'Ole Automation Procedures', 1;
+--GO
+--RECONFIGURE;
+
+
+	declare @newGUID uniqueidentifier
+	set @newGUID=NEWID()
+--	drop table #tmp_userAD 
+
+	create table #tmp_userAD 
+	(	Userid nvarchar(100) null, 
+		UserName nvarchar(100) null, 
+		email1 nvarchar(100) null, 
+		email2 nvarchar(100) null, 
+		mobile nvarchar(100) null, 
+		streetAddress nvarchar(4000) null,
+		cat nvarchar(4000) null
+	)
+
+	insert into #tmp_userAD
+	Exec spQueryAD 'SELECT distinguishedName, streetAddress, mobile, 
+				userPrincipalName, mail, cn, SamAccountName
+			FROM ''LDAP://dc=ap,dc=loreal,dc=intra''
+			WHERE objectCategory=''person'' and objectclass=''user'' and mail=''*id.loreal.com''',0
+
+	delete 
+	--select * 
+	from #tmp_userAD
+	where cat not like '%CORPID%'			
+	
+	declare @password nvarchar(10), @accountid nvarchar(20)
+	set @password='1234'
+	select @accountid=accountid from coACCT
+	
+	insert coUSER (UserGUID, UserId, UserName, SignInitial, 
+		[Password], ConfirmPassword, DivisionXGUID,
+		MobilePhone, PersonalEmail, isDeleted, DeletedDate, 
+		CreatedDate, UpdatedDate, DeletedUser, CreatedUser, UpdatedUser, SAPUserCode)
+	select NEWID(), 'AP\'+a.userid, a.UserName, a.Userid, 
+		dbo.ep_CoGNRL_EncryptText(lower(@password), lower(a.userID)+lower(@accountid)), 
+		dbo.ep_CoGNRL_EncryptText(lower(@password), lower(a.userID)+lower(@accountid)), 
+		'00000000-0000-0000-0000-000000000000',
+		mobile, a.email1, 0, null,
+		GETDATE(), getdate(), null, null,null, null
+	from #tmp_userAD a
+		left join coUSER b
+			on 'AP\'+a.Userid=b.userid
+	where b.UserId is null
+	
+	insert into CoUSERHOST (UserHostGUID, UserGUID, SiteGUID, HostGUID, MobileHost, DelegateUserGUID)
+	--values (NEWID(), @newGUID, null, @newGUID, @newGUID, null)
+	select NEWID(), a.UserGUID, null, NEWID(), NEWID(), null
+	from coUSER a
+		left join coUSERhost b
+			on a.UserGUID=b.UserGUID
+	where b.UserguId is null
+
+
+
+
+
+
+
+
+
+
+

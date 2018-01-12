@@ -1,0 +1,248 @@
+
+CREATE procedure [gen].[mail_creator]
+	@HostGUID uniqueidentifier, @code varchar(20), @GUID uniqueidentifier, @action varchar(20), @isDebug bit = 0
+as	--CreatedBy eLs ON Jul, 2017
+
+	--declare @HostGUID uniqueidentifier = gen.gethost('ap\iman.satyagraha'), @code nvarchar(20) = 'userdele', 
+	--	@GUID uniqueidentifier = 'FBF7BD7C-ECB7-4707-B55F-610E9D307FDF', @action varchar(20) = 'delete',
+	--	@isDebug bit = 1
+
+	SET NOCOUNT ON
+	declare @sqlstr nvarchar(MAX), @sqlstr2 nvarchar(MAX), @tblModule nvarchar(50), @bodyUpdate nvarchar(MAX), @forKey nvarchar(MAX), 
+		@forColumn nvarchar(max), @profile nvarchar(50), @bcc nvarchar(MAX), @stateID int, @recipient nvarchar(MAX), @additional nvarchar(MAX), 
+		@cc nvarchar(MAX), @subject nvarchar(500), @body nvarchar(MAX), @attachments nvarchar(MAX), @definedTable nvarchar(MAX),
+		@parentKey nvarchar(50), @timestamp datetime, @comment nvarchar(max)
+
+	declare @errMsg nvarchar(MAX), @errSvrt int, @errStt int, @status int, @moduleType  varchar
+
+	exec gen.getDBInfo @HostGUID, @code, @moduleType=@moduleType OUTPUT
+	if @moduleType = 'T' begin
+		set @sqlstr = 'select @status = status from ' + IIF(@moduleType = 'T', '', 'doc.') + QUOTENAME(@code) + char(10) +
+			'where DocGUID = ''' + cast(@GUID as varchar(50)) + ''''
+		exec sp_executesql @sqlstr, N'@status int OUTPUT', @status OUTPUT
+	end
+
+	if Not Exists(
+		select ModuleId, Subject, Body, ActionGUID, TokenStatus, d.ParameterDescription [action], e.ParameterValue [Status] from modl a
+			inner join modlmail b ON a.ModuleGUID = b.ModuleGUID
+			inner join mail c ON b.MailGUID = c.MailGUID
+			inner join gen.getPara('MACT', '') d ON b.ActionGUID = d.ParameterValueGUID
+			inner join gen.getPara('MLST', '') e ON b.TokenStatus like '%'+cast(e.ParameterValueGUID as varchar(50))+'%'
+		where ModuleId = @code AND ISNULL(Subject, '') != '' AND ISNULL(Body, '') != '' 
+			AND d.ParameterDescription = @action AND e.ParameterValue = cast(@status as nvarchar(5))
+	) begin
+		print 'ATTENTION! ModuleId / Subject / Body / Status can''t be NULL!'
+		return
+	end
+
+	if OBJECT_ID('tempdb..#modls') is Not NULL drop table #modls 
+	select * into #modls from gen.getModlColmInfo('buat table temporary modls')
+
+	if OBJECT_ID('tempdb..#mdval') is Not NULL drop table #mdval
+	create table #mdval (InfoKey nvarchar(50), Value0 nvarchar(MAX), Value1 nvarchar(MAX), Value2 nvarchar(MAX))
+
+	if OBJECT_ID('tempdb..#view') is Not NULL drop table #view
+	create table #view(vcolKey varchar(50), vcbKey varchar(50), vcbID varchar(MAX), vcbName varchar(MAX))					
+
+	--CURSOR FOR How Many Mail Creator for each action & status
+	declare #CUR cursor for	
+		select
+			c.ProfileName, c.BCC, Additional, CC, 
+			Subject, REPLACE(REPLACE(REPLACE(b.Body, '<', '<'), '>', '>'), '>'+char(10), '>' ) [Body], 
+			REPLACE(ReportAttachment, '*', ';') [attachment], DefinedTable
+		from modl a
+			inner join modlmail b ON a.ModuleGUID = b.ModuleGUID
+			inner join mail c ON b.MailGUID = c.MailGUID
+			inner join gen.getPara('MACT', '') d ON b.ActionGUID = d.ParameterValueGUID
+			inner join gen.getPara('MLST', '') e ON b.TokenStatus like '%'+cast(e.ParameterValueGUID as varchar(50))+'%'
+		where ModuleId = @code AND ISNULL(Subject, '') != '' AND ISNULL(Body, '') != '' 
+			AND d.ParameterDescription = @action AND e.ParameterValue = @status 
+
+	open #CUR fetch next from #CUR into @profile, @bcc, @additional, @cc, @subject, @body, @attachments, @definedTable
+	while (@@FETCH_STATUS = 0) begin
+
+		--Cursor for how many child that parents have
+		declare #CUR2 cursor for	
+			select ModuleID, ParentKey from (
+				--select a.ModuleGUID, ModuleID, b.colKey [ParentKey] from modl a
+				--	inner join modlcolm b ON a.ModuleGUID = b.ModuleGUID
+				--	inner join modlcolminfo c ON b.ColumnGUID = c.ColumnGUID AND c.InfoKey = 'isParentKey'
+				--where ParentModuleGUID in (select ModuleGUID from modl where ModuleId = @code)
+				--union
+				select ModuleGUID, ModuleID, NULL [ParentKey] from modl where ModuleId = @code
+			) a inner join modlcolm b ON a.ModuleGUID = b.ModuleGUID
+			group by ModuleID, ParentKey
+
+		open #CUR2 fetch next from #CUR2 into @tblModule, @parentKey
+		while (@@FETCH_STATUS = 0) begin
+			--reseting table records
+			truncate table #modls; truncate table #mdval; truncate table #view;
+
+			insert into #modls 
+			select a.* from gen.getModlColmInfo(@tblModule) a
+				inner join (select @body [body]) b ON b.body like '%##'+a.colKey+'##%' OR b.body like '%##'+a.colKey+'[[][012]]%'
+
+			--Get the value from table @code
+			begin try
+				set @forKey = STUFF((select ','+QUOTENAME(colKey) from #modls for xml path('')),1,1,'')
+				set @forColumn = STUFF((select ',' + 
+						case  
+							when colType in(40, 61) then 'convert(nvarchar(MAX),'+colKey+',106)'
+							when colType in (56, 60) then 'cast(format('+colKey+', ''#,#0.##'') as nvarchar(MAX))'
+							when colType in (104) then 'cast(iif('+colKey+' = 1, ''true'', ''false'') as nvarchar(MAX))'
+							else 'cast('+ colKey+ ' as nvarchar(MAX))'
+						end + SPACE(1) + QUOTENAME(colKey) 
+					from #modls for xml path('')), 1, 1, '') 
+				set @sqlstr2 = 'select InfoKey, InfoValue from (select '+@forColumn+' from doc.' +@tblModule + ' where '+
+					iif(@parentKey is NULL, 'docGUID', 'parentDocGUID')+' = '''+cast(@GUID as nvarchar(50))+''') x' +char(10)+ 
+					'unpivot (InfoValue for InfoKey in ('+@forKey+')) u' 
+
+				insert into #mdval(InfoKey, Value0) exec(@sqlstr2)
+			end try
+			begin catch
+				set @errMsg = ERROR_MESSAGE() + ' Find & check this "Get the first value". <cursor Module:' + @tblModule + '>'
+				select @errSvrt = ERROR_SEVERITY(), @errStt = ERROR_STATE()
+				if @isDebug=1 RAISERROR(@errMsg, @errSvrt, @errStt)
+			end catch
+
+			--ComboTable Parameter			
+			update a set 
+				Value1 = REPLACE(ParameterValue, '''', ''), Value2 = REPLACE(ParameterDescription, '''', '')
+			from #mdval a
+				left join (
+					select 
+						c1.colKey, a1.ParameterId, b1.ParameterValueGUID, b1.ParameterValue, b1.ParameterDescription 
+					from para a1
+						inner join paravalu b1 ON a1.ParameterGUID = b1.ParameterGUID
+						left join #modls c1 ON charindex('par(', c1.comboTable) > 0
+					where ParameterId = REPLACE(REPLACE(c1.comboTable, 'par(', ''), ')', '')
+				) b ON a.InfoKey = b.colKey AND CAST(ParameterValueGUID as varchar(50)) = a.Value0
+
+			--ComboTable View & Table
+			set @sqlstr2 = (
+				select 'select ''' + colKey + ''' [colKey], ' + 
+					'CAST(' + comboKey + ' as varchar(MAX))' + QUOTENAME(comboKey) + ', ' + 
+					'CAST(' + comboID + ' as varchar(MAX))' + QUOTENAME(comboID) + ', ' + 
+					'CAST(' + comboName + ' as varchar(MAX))' + QUOTENAME(comboName) + space(1) +
+					'from ' + IIF((select settingMode from modl where ModuleID = comboTable) = 0, '', 'doc.') +
+						+ IIF(CHARINDEX('(', comboTable) = 0, QUOTENAME(comboTable), 
+						@tblModule+ '_' + replace(replace(comboTable, 'view(',''), ')', '')) + space(1) +
+					'where CAST(' + comboKey + ' as varchar(MAX)) = ''' + b.Value0 + '''' + ';' + char(10)
+				from #modls a
+					inner join #mdval b ON a.colKey = b.InfoKey
+				where CHARINDEX('view(', comboTable) > 0 OR (comboTable is Not NULL AND CHARINDEX('(', comboTable) = 0)
+				for xml path('')
+			) 
+					
+			begin try
+				insert into #view exec(@sqlstr2)
+				update a set Value1 = REPLACE(vcbID, '''', ''), Value2 = REPLACE(vcbName, '''', '')
+				from #mdval a inner join #view b ON a.InfoKey = b.vcolKey
+				drop table #view
+			end try
+			begin catch
+				set @errMsg = ERROR_MESSAGE() + ' Please check "ComboTable View & Table" : #view / @sqlstr2.'
+				select @errSvrt = ERROR_SEVERITY(), @errStt = ERROR_STATE()
+				if @isDebug=1 RAISERROR(@errMsg, @errSvrt, @errStt)
+			end catch
+
+			set @bodyUpdate = (
+				select 
+					'set @body = replace(@body, ''##'+colKey+'##'', '''+isNULL(Value0, '')+''')' + char(10)+char(9)+
+					'set @body = replace(@body, ''##'+colKey+'[1]##'', '''+isNULL(Value1, '')+''')' + char(10)+char(9)+
+					'set @body = replace(@body, ''##'+colKey+'[2]##'', '''+isNULL(Value2, '')+''')' + char(10)+char(9)
+				from #modls a
+					left join #mdval b ON a.colKey = b.InfoKey
+				for xml path('')
+			) 
+			set @sqlstr = 'set @body = ''' + @body + '''' + CHAR(10) + isNULL(REPLACE(REPLACE(@bodyUpdate, '<', '<'), '>', '>'), '')
+
+			begin try
+				execute sp_executesql @sqlstr, N'@body nvarchar(MAX) OUTPUT', @body = @body OUTPUT
+			end try
+			begin catch
+				select @errMsg = ERROR_MESSAGE(), @errSvrt = ERROR_SEVERITY(), @errStt = ERROR_STATE()
+				if @isDebug=1 RAISERROR(@errMsg, @errSvrt, @errStt)
+			end catch
+
+			fetch next from #CUR2 into @tblModule, @parentKey
+		end
+		close #CUR2 deallocate #CUR2
+
+		--set the recipient from approvals
+		if @action = 'execute' begin
+			set @sqlstr = 'set @recipient = (
+			select Email + '';'' from (
+				select Email from doc.'+@code+'APRV a 
+					inner join (
+						select min(Lvl) [minLvl] from doc.'+@code+'APRV where DocGUID = '''+cast(@GUID as varchar(50))+''' AND Status is NULL 
+					) b ON a.Lvl = b.minLvl
+					left join [user] c ON a.ApprovalUserGUID = c.UserGUID
+				where a.DocGUID = '''+cast(@GUID as varchar(50))+'''
+				UNION
+				select Email from doc.'+@code+'APRV a
+					inner join (
+						select min(Lvl) [minLvl] from doc.'+@code+'APRV where DocGUID = '''+cast(@GUID as varchar(50))+''' AND Status is NULL 
+					) b ON a.Lvl = b.minLvl
+					left join [user] c ON a.DelegateUserGUID = c.UserGUID
+				where a.DocGUID = '''+cast(@GUID as varchar(50))+'''
+			) x for xml path(''''))'
+		end
+		else if @action = 'force' begin
+			set @sqlstr = NULL
+		end
+		else if @action = 'reopen' begin
+			set @sqlstr = NULL
+		end
+		else if @action = 'delete' begin
+			set @sqlstr = NULL
+		end
+		else if @action = 'wipe' begin
+			set @sqlstr = NULL
+		end
+		else if @action = 'save' begin
+			set @sqlstr = NULL
+		end
+		else set @sqlstr = NULL
+		
+		if @sqlstr is Not NULL 
+			exec sp_executesql @sqlstr, N'@recipient nvarchar(MAX) OUTPUT', @recipient OUTPUT
+
+		--send mail
+		begin try
+			set @timestamp = CURRENT_TIMESTAMP
+			set @additional = (select Email+';' from [user] where @additional like '%'+cast(UserGUID as varchar(50))+'%' for xml path(''))		
+			set @cc = iif(@cc = '', NULL, (select Email+';' from [user] where @additional like '%'+cast(UserGUID as varchar(50))+'%' for xml path('')))
+			set @bcc = iif(@bcc = '', NULL, (select Email+';' from [user] where @additional like '%'+cast(UserGUID as varchar(50))+'%' for xml path('')))
+			set @attachments = iif(@attachments = '', NULL, @attachments)
+			set @recipient = isNULL(@recipient, '') + replace(@additional, '*', ';')
+			set @comment = 'gen.sendMail' + SPACE(1) + isNULL(''''+@profile+'''', 'NULL') + ', ' + isNULL(''''+@recipient+'''', 'NULL') + ', ' + 
+				isNULL(''''+@subject+'''', 'NULL') + ', ' + isNULL(''''+@body+'''', 'NULL') + ', ' + isNULL(''''+@cc+'''', 'NULL') + ', ' + 
+				isNULL(''''+@bcc+'''', 'NULL') + ', ' + isNULL(''''+@attachments+'''', 'NULL')
+
+			exec gen.sendMail @profile, @recipient, @subject, @body, @cc, @bcc, @attachments, 1
+
+			exec gen.evnt_save @HostGUID, @code, @GUID, @timestamp, @comment
+
+			--print 'to: ' + @recipient + char(10) 
+			--print 'subject : ' + @subject
+			--print 'content :'
+			--print @body + char(10)
+		end try
+		begin catch
+			select @errMsg = ERROR_MESSAGE(), @errSvrt = ERROR_SEVERITY(), @errStt = ERROR_STATE()
+			if @isDebug=1 RAISERROR(@errMsg, @errSvrt, @errStt)
+		end catch
+
+		--select @profile, @recipient, @subject, @body, @cc, @bcc, @attachments
+
+	fetch next from #CUR into @profile, @bcc, @additional, @cc, @subject, @body, @attachments, @definedTable
+	end
+	close #CUR deallocate #CUR
+
+	if OBJECT_ID('tempdb..#modls') is Not NULL drop table #modls
+	if OBJECT_ID('tempdb..#mdval') is Not NULL drop table #mdval
+	if OBJECT_ID('tempdb..#view') is Not NULL drop table #view
+
+
+

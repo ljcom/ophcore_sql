@@ -1,0 +1,16 @@
+
+create function [gen].[getAccountID]()
+returns nvarchar(100)
+as
+begin
+	return (
+		select a.accountid
+		from acct a
+			inner join acctdbse d
+				on a.accountguid=d.accountguid 
+		where databasename=DB_NAME() and isnull(servername, @@servername)=@@SERVERNAME
+	)
+
+end
+
+

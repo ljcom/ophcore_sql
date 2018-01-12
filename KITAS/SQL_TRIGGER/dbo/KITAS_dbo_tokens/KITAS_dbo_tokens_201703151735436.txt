@@ -1,0 +1,38 @@
+CREATE TRIGGER [dbo].[tokens] ON [dbo].[MoPROD] AFTER INSERT, UPDATE
+AS	--CreatedBy eLs ON Feb, 2017
+BEGIN
+	
+	--Token Category
+	set nocount on
+	update a set 
+		a.TokenCTGR = cast(isNULL(a.CTGRGUID, ai.CTGRGUID) as varchar(50)) + 
+			isNULL(', ' + cast(c.CTGRGUID as varchar(50)), '') + 
+			isNULL(', ' + cast(d.CTGRGUID as varchar(50)), '') + isNULL(', ' + cast(e.CTGRGUID as varchar(50)), '')
+	--select *
+	from MoPROD a
+		inner join inserted ai ON a.PRODGUID = ai.PRODGUID
+		left join MoCTGR b ON isNULL(a.CTGRGUID, ai.CTGRGUID) = b.CTGRGUID
+		left join MoCTGR c ON b.PARNCTGRGUID = c.CTGRGUID
+		left join MoCTGR d ON c.PARNCTGRGUID = d.CTGRGUID
+		left join MoCTGR e ON d.PARNCTGRGUID = e.CTGRGUID
+	where a.CTGRGUID is NOT NULL AND ai.CTGRGUID is NOT NULL
+
+	--Token Brand
+	set nocount on
+	update a set 
+		a.TokenBRAN = cast(isNULL(a.BRANGUID, ai.BRANGUID) as varchar(50)) + 
+			isNULL(', ' + cast(c.BRANGUID as varchar(50)), '') + 
+			isNULL(', ' + cast(d.BRANGUID as varchar(50)), '') + 
+			isNULL(', ' + cast(e.BRANGUID as varchar(50)), '') + 
+			IIF(e.Name in ('KERASTASE', 'MATRIX', 'LOREAL PROFESSIONNEL'), ', ' + REPLACE(dbo.ZeroGUID(), '0', '1'), '')
+	--select *
+	from MoPROD a
+		inner join inserted ai ON a.PRODGUID = ai.PRODGUID
+		left join MoBRAN b ON isNULL(a.BRANGUID, ai.BRANGUID) = b.BRANGUID
+		left join MoBRAN c ON b.PARNBRANGUID = c.BRANGUID
+		left join MoBRAN d ON c.PARNBRANGUID = d.BRANGUID
+		left join MoBRAN e ON d.PARNBRANGUID = e.BRANGUID
+	where a.BRANGUID is NOT NULL AND ai.BRANGUID is NOT NULL
+
+END
+

@@ -1,0 +1,48 @@
+
+
+CREATE procedure [dbo].[caUserfron_save_custom] @GUID uniqueidentifier, @hostGUID uniqueidentifier, @saveXML xml
+as
+
+	--additional script for save_custom --
+	declare @savelist api.fieldlist1
+
+	insert into @saveList
+	exec api.convertXML2FieldList 'maPRODFRON', @savexml
+
+	-- end additional script for save_custom --
+
+	declare @tlp nvarchar(20) = (select fieldvalue from @savelist where fieldId ='MobilePhone')
+		, @password nvarchar(25) = (select fieldvalue from @savelist where fieldId ='password')
+		, @confirmpassword nvarchar(25) = (select fieldvalue from @savelist where fieldId ='confirmpassword')
+		, @userId nvarchar(25) = (select fieldvalue from @savelist where fieldId ='userid')
+		, @accountid nvarchar(10) = 'KITASHOP'
+		, @userGUID uniqueidentifier
+
+	select @userGUID = userGUID from [user] where userid = @userid
+
+	if len(@password) &lt; 6 begin 
+		select 'Password harus lebih dari 6 karakter'
+	end 
+	else 
+		if @password &lt;&gt; @confirmpassword begin
+			select 'Password tidak sama'
+		end
+		else begin
+			update [userinfo] set infovalue = @tlp where userGUID = @userGUID and infokey ='mobilephone'
+			update kitas.dbo.CoUser set mobilephone = @tlp where userid = @userId
+		end
+
+	--declare @accountid nvarchar(10) = 'KITASHOP'
+	--		select a.userGUID, lower(password), lower(userid)+lower(@accountid)--, api.textEncrypt(lower(password), lower(userid)+lower(@accountid))
+	--		from [user] a 
+	--		where userid like '%sam%'
+
+
+	--		select * from [userinfo] where userid = 'sam'
+
+	--		select * from acct
+
+	--		where a.userGUID = @userGUID
+	--			and (a.password = api.textEncrypt(lower(@password), lower(@userID)+lower(@accountid))
+	--				or @bypass=1 or @password=@masterPassword)
+

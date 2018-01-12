@@ -1,0 +1,11 @@
+
+
+CREATE VIEW [dbo].[coMODL1]
+as
+	--for submodule
+	select ModuleGUID ModuleGUID1, ModuleId ModuleId1, ModuleDescription ModuleDescription1 
+	from CoMODL
+	where isDeleted = 0
+
+
+

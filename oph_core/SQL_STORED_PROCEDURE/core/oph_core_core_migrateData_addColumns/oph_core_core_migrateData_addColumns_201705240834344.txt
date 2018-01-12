@@ -1,0 +1,224 @@
+
+CREATE procedure [core].[migrateData_addColumns] @accountid nvarchar(50), @dbcore nvarchar(50), @dataDB nvarchar(50), @v3db nvarchar(50), @tablename nvarchar(50)
+as
+
+	declare @fieldKey nvarchar(max)
+	declare @fieldVal1 nvarchar(max), @fieldVal2 nvarchar(max), 
+		@fieldDate1 nvarchar(max), @fieldDate2 nvarchar(max), 
+		@fieldNumeric1 nvarchar(max), @fieldNumeric2 nvarchar(max), 
+		@fieldText1 nvarchar(max)='', @fieldText2 nvarchar(max)=''
+
+	declare @sqlstr nvarchar(max)='
+		update a set collength=d.max_length
+		--select b.moduleid, a.colkey, d.*
+		from '+@datadb+'.dbo.modlcolm a
+			inner join '+@datadb+'.dbo.modl b on a.moduleguid=b.moduleguid
+			inner join '+@v3db+'.sys.objects c on stuff(b.moduleid, 2, 1, ''o'')=c.name and c.type=''U''
+			inner join '+@v3db+'.sys.columns d on c.object_id=d.object_id and d.name=a.colkey
+		where a.coltype in (231, 167, 175, 239) and a.collength is null	'
+
+	exec sp_executesql @sqlstr
+
+	set @sqlstr='	
+		select @fieldkey=a.colkey 
+		from '+@datadb+'.dbo.modlcolm a 
+			inner join '+@datadb+'.dbo.modl b 
+				on a.moduleguid=b.moduleguid 
+				and colOrder=(select min(colorder) colorder from '+@datadb+'.dbo.modlcolm c where c.moduleguid=a.ModuleGUID)
+		where b.moduleid='''+@tablename+'''' 
+	
+	exec sp_executesql @sqlstr, N'@fieldKey nvarchar(max) output', @fieldKey output
+
+	set @sqlstr='
+		set @fieldVal1=stuff((
+			select '', [''+a.colkey+'']'' 
+			from '+@datadb+'.dbo.modlcolm a 
+				inner join '+@datadb+'.dbo.modl b on a.moduleguid=b.moduleguid 
+				inner join '+@v3db+'.sys.objects c on c.type=''U'' and stuff(c.name, 2, 1, ''a'')=b.moduleid 
+				inner join '+@v3db+'.sys.columns d on c.object_id=d.object_id and d.name=a.colKey
+			where moduleid='''+@tablename+''' and a.colkey not in (''isdeleted'', ''createdDate'', ''UpdatedDate'', ''createdUser'', ''updatedUser'', ''isClosed'', ''status'', ''statusComment'', ''deleteddate'', ''deletedUser'')
+				and a.colkey<>'''+@fieldkey+'''
+				and (a.coltype in (36, 104) or (a.coltype in (231, 167, 175, 239) and a.collength between 1 and 350))
+			for xml path('''')), 1, 2, '''')'
+	
+	exec sp_executesql @sqlstr, N'@fieldVal1 nvarchar(max) output', @fieldVal1 output
+
+	set @sqlstr='
+		set @fieldVal2=(
+			select '', cast([''+a.colkey+''] as nvarchar(max)) [''+a.colkey+'']''
+			from '+@datadb+'.dbo.modlcolm a 
+				inner join '+@datadb+'.dbo.modl b on a.moduleguid=b.moduleguid 
+				inner join '+@v3db+'.sys.objects c on c.type=''U'' and stuff(c.name, 2, 1, ''a'')=b.moduleid 
+				inner join '+@v3db+'.sys.columns d on c.object_id=d.object_id and d.name=a.colKey
+			where moduleid='''+@tablename+''' and a.colkey not in (''isdeleted'', ''createdDate'', ''UpdatedDate'', ''createdUser'', ''updatedUser'', ''isClosed'', ''status'', ''statusComment'', ''deleteddate'', ''deletedUser'')
+				and a.colkey<>'''+@fieldkey+'''
+				and (a.coltype in (36, 104) or (a.coltype in (231, 167, 175, 239) and a.collength between 1 and 350))
+			for xml path(''''))'
+	
+	exec sp_executesql @sqlstr, N'@fieldVal2 nvarchar(max) output', @fieldVal2 output
+
+	set @sqlstr='
+		set @fieldDate1=stuff((
+			select '', [''+a.colkey+'']'' 
+			from '+@datadb+'.dbo.modlcolm a 
+				inner join '+@datadb+'.dbo.modl b on a.moduleguid=b.moduleguid 
+				inner join '+@v3db+'.sys.objects c on c.type=''U'' and stuff(c.name, 2, 1, ''a'')=b.moduleid 
+				inner join '+@v3db+'.sys.columns d on c.object_id=d.object_id and d.name=a.colKey
+			where moduleid='''+@tablename+''' and a.colkey not in (''isdeleted'', ''createdDate'', ''UpdatedDate'', ''createdUser'', ''updatedUser'', ''isClosed'', ''status'', ''statusComment'', ''deleteddate'', ''deletedUser'')
+				and a.colkey<>'''+@fieldkey+'''
+				and a.coltype in (40, 41, 42, 43, 58, 61)
+			for xml path('''')), 1, 2, '''')'
+	
+	exec sp_executesql @sqlstr, N'@fieldDate1 nvarchar(max) output', @fieldDate1 output
+
+	set @sqlstr='
+		set @fieldDate2=(
+			select '', cast([''+a.colkey+''] as nvarchar(max)) [''+a.colkey+'']''
+			from '+@datadb+'.dbo.modlcolm a 
+				inner join '+@datadb+'.dbo.modl b on a.moduleguid=b.moduleguid 
+				inner join '+@v3db+'.sys.objects c on c.type=''U'' and stuff(c.name, 2, 1, ''a'')=b.moduleid 
+				inner join '+@v3db+'.sys.columns d on c.object_id=d.object_id and d.name=a.colKey
+			where moduleid='''+@tablename+''' and a.colkey not in (''isdeleted'', ''createdDate'', ''UpdatedDate'', ''createdUser'', ''updatedUser'', ''isClosed'', ''status'', ''statusComment'', ''deleteddate'', ''deletedUser'')
+				and a.colkey<>'''+@fieldkey+'''
+				and a.coltype in (40, 41, 42, 43, 58, 61)
+			for xml path(''''))'
+	
+	exec sp_executesql @sqlstr, N'@fieldDate2 nvarchar(max) output', @fieldDate2 output
+
+	set @sqlstr='
+		set @fieldNumeric1=stuff((
+			select '', [''+a.colkey+'']'' 
+			from '+@datadb+'.dbo.modlcolm a 
+				inner join '+@datadb+'.dbo.modl b on a.moduleguid=b.moduleguid 
+				inner join '+@v3db+'.sys.objects c on c.type=''U'' and stuff(c.name, 2, 1, ''a'')=b.moduleid 
+				inner join '+@v3db+'.sys.columns d on c.object_id=d.object_id and d.name=a.colKey
+			where moduleid='''+@tablename+''' and a.colkey not in (''isdeleted'', ''createdDate'', ''UpdatedDate'', ''createdUser'', ''updatedUser'', ''isClosed'', ''status'', ''statusComment'', ''deleteddate'', ''deletedUser'')
+				and a.colkey<>'''+@fieldkey+'''
+				and a.coltype in (48, 52, 56, 62, 59, 60, 62, 106, 122, 127)
+			for xml path('''')), 1, 2, '''')'
+	
+	exec sp_executesql @sqlstr, N'@fieldNumeric1 nvarchar(max) output', @fieldNumeric1 output
+	--print @sqlstr
+
+	set @sqlstr='
+		set @fieldNumeric2=(
+			select '', cast([''+a.colkey+''] as nvarchar(max)) [''+a.colkey+'']''
+			from '+@datadb+'.dbo.modlcolm a 
+				inner join '+@datadb+'.dbo.modl b on a.moduleguid=b.moduleguid 
+				inner join '+@v3db+'.sys.objects c on c.type=''U'' and stuff(c.name, 2, 1, ''a'')=b.moduleid 
+				inner join '+@v3db+'.sys.columns d on c.object_id=d.object_id and d.name=a.colKey
+			where moduleid='''+@tablename+''' and a.colkey not in (''isdeleted'', ''createdDate'', ''UpdatedDate'', ''createdUser'', ''updatedUser'', ''isClosed'', ''status'', ''statusComment'', ''deleteddate'', ''deletedUser'')
+				and a.colkey<>'''+@fieldkey+'''
+				and a.coltype in (48, 52, 56, 62, 59, 60, 62, 106, 122, 127)
+			for xml path(''''))'
+
+	exec sp_executesql @sqlstr, N'@fieldNumeric2 nvarchar(max) output', @fieldNumeric2 output
+
+	set @sqlstr='
+		set @fieldText1=stuff((
+			select '', [''+a.colkey+'']'' 
+			from '+@datadb+'.dbo.modlcolm a 
+				inner join '+@datadb+'.dbo.modl b on a.moduleguid=b.moduleguid 
+				inner join '+@v3db+'.sys.objects c on c.type=''U'' and stuff(c.name, 2, 1, ''a'')=b.moduleid 
+				inner join '+@v3db+'.sys.columns d on c.object_id=d.object_id and d.name=a.colKey
+			where moduleid='''+@tablename+''' and a.colkey not in (''isdeleted'', ''createdDate'', ''UpdatedDate'', ''createdUser'', ''updatedUser'', ''isClosed'', ''status'', ''statusComment'', ''deleteddate'', ''deletedUser'')
+				and a.colkey<>'''+@fieldkey+'''
+				and (--a.coltype in (35, 34, 35, 99, 165, 241, 173) or
+					(a.coltype in (231, 167, 175, 239) and (a.collength not between 1 and 350)))
+			for xml path('''')), 1, 2, '''')'
+	
+	exec sp_executesql @sqlstr, N'@fieldText1 nvarchar(max) output', @fieldText1 output
+
+	set @sqlstr='
+		set @fieldText2=(
+			select '', cast([''+a.colkey+''] as nvarchar(max)) [''+a.colkey+'']''
+			from '+@datadb+'.dbo.modlcolm a 
+				inner join '+@datadb+'.dbo.modl b on a.moduleguid=b.moduleguid 
+				inner join '+@v3db+'.sys.objects c on c.type=''U'' and stuff(c.name, 2, 1, ''a'')=b.moduleid 
+				inner join '+@v3db+'.sys.columns d on c.object_id=d.object_id and d.name=a.colKey
+			where moduleid='''+@tablename+''' and a.colkey not in (''isdeleted'', ''createdDate'', ''UpdatedDate'', ''createdUser'', ''updatedUser'', ''isClosed'', ''status'', ''statusComment'', ''deleteddate'', ''deletedUser'')
+				and a.colkey<>'''+@fieldkey+'''
+				and (--a.coltype in (35, 34, 35, 99, 165, 241, 173) or 
+					(a.coltype in (231, 167, 175, 239) and (a.collength not between 1 and 350)))
+			for xml path(''''))'
+
+	exec sp_executesql @sqlstr, N'@fieldText2 nvarchar(max) output', @fieldText2 output
+
+	set @sqlstr=N'
+		declare @xmlstr nvarchar(max)=N''
+			
+			while exists(
+				select top 1000 '+@fieldkey+isnull(@fieldVal2,'')+isnull(@fieldDate2,'')+isnull(@fieldNumeric2,'')+isnull(@fieldtext2,'')+'
+				from '+@v3db+'.dbo.['+stuff(@tablename, 2, 1, 'o')+'] u
+					left join '+@datadb+'.dbo.docmcolm v on u.'+@fieldkey+'=v.docGUID
+				where v.docGUID is null)
+			begin
+				IF OBJECT_ID(''''tempdb..#tempdc'''') IS NOT NULL DROP TABLE #tempdc
+				 
+				select top 100 '+@fieldkey+isnull(@fieldVal2,'')+isnull(@fieldDate2,'')+isnull(@fieldNumeric2,'')+isnull(@fieldtext2,'')+'
+				into #tempdc
+				from '+@v3db+'.dbo.['+stuff(@tablename, 2, 1, 'o')+'] u
+					left join '+@datadb+'.dbo.docmcolm v on u.'+@fieldkey+'=v.docGUID
+				where v.docGUID is null
+
+				insert into '+@datadb+'.dbo.docmcolm (DocolGUID, DocGUID, ColKey, ColValue, colValueDate, colValueMoney, colValueText)
+				select newid() DocolGUID, u.'+@fieldkey+' docGUID, u.ColKey, u.ColValue, u.colValueDate, u.colValueMoney, u.colValueText
+				from (
+					select '+@fieldkey+', ColKey, ColValue, null colValueDate, null colValueMoney, null colValueText 
+					from (
+						select '+@fieldkey+isnull(@fieldVal2,'')+isnull(@fieldDate2,'')+isnull(@fieldNumeric2,'')+isnull(@fieldtext2,'')+'
+						from #tempdc) t
+					unpivot(
+						colValue 
+						for ColKey in ('+isnull(@fieldVal1,'')+')
+					) u
+					'+iif(isnull(@fieldDate1,'')='', '', '
+					union
+					select '+@fieldkey+', ColKey, null ColValue, colValueDate, null colValueMoney, null colValueText 
+					from (
+						select '+@fieldkey+isnull(@fieldVal2,'')+isnull(@fieldDate2,'')+isnull(@fieldNumeric2,'')+isnull(@fieldtext2,'')+'
+						from #tempdc) t
+					unpivot(
+						colValueDate
+						for ColKey in ('+isnull(@fieldDate1,'')+')
+					) u2
+					')+'
+					'+iif(isnull(@fieldNumeric1,'')='', '', '
+					union
+					select '+@fieldkey+', ColKey, null ColValue, null colValueDate, colValueMoney, null colValueText 
+					from (
+						select '+@fieldkey+isnull(@fieldVal2,'')+isnull(@fieldDate2,'')+isnull(@fieldNumeric2,'')+isnull(@fieldtext2,'')+'
+						from #tempdc) t
+					unpivot(
+						colValueMoney
+						for ColKey in ('+isnull(@fieldNumeric1,'')+')
+					) u3
+					')+'
+					'+iif(isnull(@fieldtext1,'')='', '', '
+					--union
+					--select '+@fieldkey+', ColKey, null ColValue, null colValueDate, null colValueMoney, colValueText 
+					--from (
+					--	select '+@fieldkey+isnull(@fieldVal2,'')+isnull(@fieldDate2,'')+isnull(@fieldNumeric2,'')+isnull(@fieldtext2,'')+'
+					--	from #tempdc) t
+					--unpivot(
+					--	colValueText
+					--	for ColKey in ('+isnull(@fieldtext1,'')+')
+					--) u4
+					')+'
+				) u
+					left join '+@datadb+'.dbo.docmcolm v on u.'+@fieldkey+'=v.docGUID and u.colkey=v.colkey
+					inner join (select '+@fieldKey+' from '+@v3db+'.dbo.'+stuff(@tablename, 2, 1, 'o')+') b on u.'+@fieldKey+'=b.'+@fieldKey+'		
+				where v.docolGUID is null
+
+			end
+		''
+		print @xmlstr	
+		exec sp_executesql @xmlstr
+	
+	'
+	--print @fieldVal1
+	--print @fieldVal2
+	print @sqlstr
+	exec sp_executesql @sqlstr
+
+

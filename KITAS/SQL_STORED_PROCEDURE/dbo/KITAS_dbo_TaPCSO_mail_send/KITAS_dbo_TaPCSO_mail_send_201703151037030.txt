@@ -1,0 +1,78 @@
+CREATE PROCEDURE [dbo].[TaPCSO_mail_send] @GUID uniqueidentifier, @HostGUID uniqueidentifier
+as	--CreatedBy eLs ON Dec, 2016
+
+--declare @GUID uniqueidentifier = '1E5AEE3D-81FB-4E4B-9402-8713578AEDFE'
+--declare @hostguid uniqueidentifier = gen.gethost('oph', null)
+
+	set nocount on
+	declare @recipient varchar(MAX), @docStatus int, @subject varchar(MAX), @body varchar(MAX), @HostName varchar(50)
+	declare @cc varchar(MAX), @header varchar(MAX), @footer varchar(MAX)
+
+	select @docStatus = Status from ToPCSO where PCSOGUID = @GUID
+	select @HostName = UserName from CoUSER a
+		inner join CoUSERHOST b ON a.UserGUID = b.UserGUID
+	where HostGUID = @HostGUID
+
+	if @HostName is NULL or @HostName = '' set @HostName = '"L`OREAL EFORM System"'
+	
+	set @subject = N'KITASHOP - Mail Notification'
+
+	if @docStatus = 100 begin		
+		set @header = 'Your transaction is successfully placed on KITASHOP and now are waiting for confirmation by our Admin : &lt;br/&gt;'
+	end
+	else if @docStatus = 300 begin
+		print 'No Mail Send'
+		return
+	end	
+	else if @docStatus = 400 begin
+		set @header = 'All of your items already received by KITASHOP in good conditions : &lt;br/&gt;'
+		set @footer = 'Please pick them up at KITASHOP today.&lt;br/&gt;'
+	end
+	else if @docStatus = 500 begin
+		set @header = 'Here are all your items that were already received by you in good conditions : &lt;br/&gt;'
+		set @footer = ''
+		set @recipient = isnull(STUFF((
+			select ';'+email from (
+				select b.PersonalEmail [email] from ToPCSO a
+					inner join oph.CaUSER b ON a.CarolGUID = b.UserGUID and ISNULL(b.PersonalEmail, '') != ''
+				where PCSOGUID = @GUID 
+			) x group by email for xml path('')), 1, 1, ''), '')
+	end
+
+	print 'To : ' + @recipient
+
+	if exists(select * from ToPCSODETA where PCSOGUID = @GUID AND (QtyReject &gt; 0 OR QtyReturn &gt; 0)) begin
+		set @cc = 'traffic@loreal.com;rizki.anugrah@loreal.com'
+		print 'cc : ' + @cc
+	end
+
+	print 'Subject : ' + @subject
+	select 
+		@body = 
+			N'&lt;html&gt;'+char(13)+'Hello '+b.UserName+',&lt;br /&gt;&lt;br /&gt;'+char(13)+char(13)+
+			@header + char(13)+
+			'Order No. : '+isnull(a.DocNo, '-')+'&lt;br /&gt;'+char(13)+
+			'Purchase Item : &lt;br /&gt;'+ char(13)+ 
+			'&lt;ul&gt;'+char(13)+isNULL(replace(replace((	
+				select 
+					char(9)+'&lt;li&gt;('+cast(sum(a.Qty) as varchar(5))+' pcs) ' + b.Name +'&lt;/li&gt;'+char(10)
+				from ToPCSODETA a
+					inner join MoPROD b ON a.PRODGUID = b.PRODGUID
+				where PCSOGUID = @GUID group by PCSOGUID, b.Name for xml path('')), '&amp;lt;', '&lt;'), '&amp;gt;', '&gt;'),
+				'&lt;li&gt;&amp;nbsp;&lt;/li&gt;') + '&lt;/ul&gt;'+CHAR(13)+
+			'Total Amount : &lt;b&gt;' + dbo.currMode(a.TotalSales, 1, 'indonesia') +'&lt;/b&gt;&lt;br/&gt;&lt;br/&gt;'+CHAR(13)+CHAR(13)+
+			@footer+char(13) + 'Thank you very much for shopping at KITA SHOP &amp; have a nice day!&lt;br/&gt;&lt;br/&gt;'+char(13)+
+			'Sincerely,&lt;br /&gt;'+char(13)+
+			'Kita Shop System&lt;br/&gt;&lt;br/&gt;'+char(13)+char(13)+
+			'*) This is an automatic mail system, please do not reply.&lt;/html&gt;'
+	--select * 
+	from ToPCSO a
+		inner join CoCAROLID b ON a.CarolGUID = b.CarolGUID
+	where a.isDeleted = 0 AND a.PCSOGUID = @GUID
+
+	print 'Body : ' + char(13) + @body
+
+	if LEN(@recipient) &gt; 1 
+		--exec gen.sendMail @GUID, @HostGUID, 'SQLMail', @recipient, @body, @subject, NULL, @cc
+		return
+

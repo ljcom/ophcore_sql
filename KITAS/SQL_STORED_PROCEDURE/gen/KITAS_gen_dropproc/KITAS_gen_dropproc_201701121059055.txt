@@ -1,0 +1,41 @@
+
+
+
+
+
+
+
+CREATE procedure [gen].[dropproc] @procName nvarchar(50)
+as
+	declare @sqlstr varchar(8000)
+	if exists (
+		select * 
+		from sysObjects
+		where name = @procName) 
+	begin
+		if exists (
+			select text from syscomments 
+			inner join sysObjects on sysComments.id = sysObjects.id
+			where sysObjects.name = @procName and text like '%as --automatic creation by system, you have to remove this comment to customize this procedure%')
+		begin
+			set @sqlstr = 'drop procedure oph.' + @procName
+			print @sqlstr
+			exec (@sqlstr)
+		end
+	end
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

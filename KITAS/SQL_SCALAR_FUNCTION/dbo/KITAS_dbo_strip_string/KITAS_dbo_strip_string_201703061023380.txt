@@ -1,0 +1,12 @@
+CREATE FUNCTION [dbo].[strip_string] (@String nvarchar(MAX), @MatchExpression varchar(255))
+RETURNS nvarchar(MAX)
+AS	--CreatedBy eLs ON Mar, 2017
+BEGIN
+    set @MatchExpression =  '%['+@MatchExpression+']%'
+
+    while PatIndex(@MatchExpression, @String) &gt; 0
+        SET @String = Stuff(@String, PatIndex(@MatchExpression, @String), 1, '')
+
+    RETURN @String
+
+END

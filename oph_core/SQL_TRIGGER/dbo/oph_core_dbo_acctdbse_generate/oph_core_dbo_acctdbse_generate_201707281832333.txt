@@ -1,0 +1,26 @@
+CREATE TRIGGER [dbo].[acctdbse_generate]
+   ON  [dbo].[acctdbse] 
+   AFTER insert, update
+AS 
+BEGIN
+	SET NOCOUNT ON;
+	declare @acct as nvarchar(50), @svr nvarchar(50), @db nvarchar(50), @ver nvarchar(10), @ism bit, 
+		@sqlstr nvarchar(max), @coredb nvarchar(50)=db_name(), @accountGUID uniqueidentifier
+
+	select @acct=b.AccountId, @svr=isnull(servername, @@servername), @db=a.databasename, @ver=a.[version], @ism=a.ismaster, @accountGUID=b.AccountGUID
+	from inserted a 
+		inner join acct b on a.accountguid=b.accountguid
+
+	
+	if exists(select * from acctdbse where AccountGUID=@accountguid and DatabaseName<>@db and ismaster=1 and [version]=@ver) and @ism=1
+	begin
+		declare @err nvarchar(max)='You cannot have two Master Database for each version!'
+		RAISERROR ( @err, 16, 1)
+	end
+	else begin
+		set @sqlstr='core.createDB_createfile '''+@svr+''', '''+@db+''', '+iif(@ism=1,'1','0')+', '''+@acct+''''
+		exec gen.onetimejob @sqlstr, @coredb, @isdebug=0
+	end
+	return
+END
+

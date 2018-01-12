@@ -1,0 +1,40 @@
+
+CREATE procedure [core].[addModule_v3_insertViews] @accountId nvarchar(50), @isdebug bit=0
+as
+	select code
+	from (
+		select replace(replace(replace(replace(replace(replace(replace(left(value, charindex(' ', value)), '[dbo].', ''), '[oph].', ''), 'oph.', ''), 'dbo.', ''), '[', ''), ']', ''), ')', '') code, *
+		from (
+			SELECT moduleinfoguid, LTRIM(RTRIM(replace(replace(replace(Split.a.value('.', 'VARCHAR(100)'), char(10), ' '), char(13), ' '), char(9), ' '))) 'Value'
+			FROM  
+			(     
+				SELECT moduleinfoguid, CAST ('<M>' + REPLACE(infovalue+' --', 'view ', '</M><M>') + '</M>' AS XML) AS Data            
+				from modlinfo 
+				where infokey='script_view'
+			) AS A 
+			CROSS APPLY Data.nodes ('/M') AS Split(a)
+			union
+			SELECT moduleinfoguid, LTRIM(RTRIM(replace(replace(replace(Split.a.value('.', 'VARCHAR(100)'), char(10), ' '), char(13), ' '), char(9), ' '))) 'Value' 
+			FROM  
+			(     
+				SELECT moduleinfoguid, CAST ('<M>' + REPLACE(infovalue+' --', 'from ', '</M><M>') + '</M>' AS XML) AS Data            
+				from modlinfo 
+				where infokey='script_view'
+			) AS A 
+			CROSS APPLY Data.nodes ('/M') AS Split(a)
+			union
+			SELECT moduleinfoguid, LTRIM(RTRIM(replace(replace(replace(Split.a.value('.', 'VARCHAR(100)'), char(10), ' '), char(13), ' '), char(9), ' '))) 'Value' 
+			FROM  
+			(     
+				SELECT moduleinfoguid, CAST ('<M>' + REPLACE(infovalue+' --', 'join ', '</M><M>') + '</M>' AS XML) AS Data            
+				from modlinfo 
+				where infokey='script_view'
+			) AS A 
+			CROSS APPLY Data.nodes ('/M') AS Split(a)
+		) x
+		where value not like 'create%' and value not like '(%' and value not like '%[cm]oprmt%' 
+	) y
+	where code not like '%.%' and isnull(code,'')<>'' and code not like '[cp]%'
+	group by code
+	
+

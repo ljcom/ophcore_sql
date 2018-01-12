@@ -1,0 +1,57 @@
+CREATE function [gen].[authModl] (@hostGUID uniqueidentifier, @moduleGroupGUID uniqueidentifier=null)
+RETURNS 
+@result TABLE 
+(moduleGUID uniqueidentifier, moduleid nvarchar(50), allowAccess bit, AllowAdd bit, allowedit bit, allowAddSave bit, allowdelete bit, AllowForce bit, AllowWipe bit, AllowExport bit)
+--WITH ENCRYPTION
+AS
+BEGIN
+	declare @allExceptModule bit=0
+	if exists(select * from gen.authugrp(@hostGUID) where allexceptmodule=1) set @allExceptModule=1
+
+	insert into @result (moduleGUID, moduleid, allowAccess, AllowAdd, allowedit, allowAddSave, allowdelete, AllowForce, AllowWipe, AllowExport)
+	select a.moduleGUID, a.moduleid, 
+			min(iif(allowAccess=1,1,0)) allowAccess, min(iif(allowAdd=1,1,0)) allowAdd, min(iif(allowedit=1,1,0)) allowedit, 
+			min(iif(allowAddSave=1,1,0)) allowAddSave, min(iif(allowdelete=1,1,0)) allowdelete, min(iif(allowwipe=1,1,0)) allowwipe, 
+			min(iif(allowforce=1,1,0)) allowforce, min(iif(allowexport=1,1,0)) allowexport 
+	from (
+		select a.moduleGUID, a.moduleid, 
+				iif(((isnull(xx.allowaccess,@allExceptModule)=1 and allowAccess.InfoValue='1') or needlogin=0), 1, 0) allowAccess, 
+				iif(isnull(xx.allowAdd,@allExceptModule)=1 and allowAdd.InfoValue='1', 1, 0) allowAdd, 
+				iif(isnull(xx.allowedit,@allExceptModule)=1 and allowedit.InfoValue='1', 1, 0) allowedit, 
+				iif(isnull(xx.allowAddSave,@allExceptModule)=1 and allowAddSave.InfoValue='1', 1, 0) allowAddSave, 
+				iif(isnull(xx.allowdelete,@allExceptModule)=1 and allowdelete.InfoValue='1', 1, 0) allowdelete, 
+				iif(isnull(xx.allowwipe,@allExceptModule)=1 and allowwipe.InfoValue='1', 1, 0) allowwipe, 
+				iif(isnull(xx.allowforce,@allExceptModule)=1 and allowforce.InfoValue='1', 1, 0) allowforce,
+				case when allowexport.InfoValue=1 then 1 else 0 end allowexport
+		--select * 
+		from modl a 
+			inner join gen.authmodg(@hostGUID) b on a.ModuleGroupGUID=b.moduleGroupGUID 
+			left join modlinfo allowAccess on a.ModuleGUID=allowAccess.ModuleGUID and (allowAccess.infokey='AllowBrowse' or allowAccess.infokey='AllowAccess')
+			left join modlinfo allowAdd on a.ModuleGUID=allowAdd.ModuleGUID and allowAdd.infokey='AllowAdd'
+			left join modlinfo allowEdit on a.ModuleGUID=allowEdit.ModuleGUID and allowEdit.infokey='AllowEdit'
+			left join modlinfo allowAddSave on a.ModuleGUID=allowAddSave.ModuleGUID and allowAddSave.infokey='AllowAddSave'
+			left join modlinfo allowDelete on a.ModuleGUID=allowDelete.ModuleGUID and allowDelete.infokey='AllowDelete'
+			left join modlinfo allowWipe on a.ModuleGUID=allowWipe.ModuleGUID and allowWipe.infokey='AllowWipe'
+			left join modlinfo allowForce on a.ModuleGUID=allowForce.ModuleGUID and allowForce.infokey='AllowForce'
+			left join modlinfo allowExport on a.ModuleGUID=allowExport.ModuleGUID and allowExport.infokey='AllowExport'
+			left join (
+				select z.moduleguid, max(iif(z.AllowAccess=1,1,null)) AllowAccess, 
+					max(iif(z.AllowAdd=1,1,null)) AllowAdd, max(iif(z.AllowDelete=1,1,null)) AllowDelete, 
+					max(iif(z.AllowEdit=1,1,null)) AllowEdit, max(iif(z.AllowAddSave=1,1,null)) AllowAddSave, 
+					max(iif(z.AllowForce=1,1,null)) AllowForce, max(iif(z.AllowWipe=1,1,null)) AllowWipe
+				--select *
+				from ugrp x
+					inner join gen.authUgrp(@hostGUID) y on x.UGroupGUID=y.ugroupGUID
+					left join ugrpmodl z on x.UGroupGUID=z.UGroupGUID
+				group by z.ModuleGUID
+				) xx
+				on a.ModuleGUID=xx.ModuleGUID
+		) a
+	where (isnull(allowAccess,0)+isnull(allowAdd,0)+isnull(allowedit,0)+isnull(allowAddSave,0)+isnull(allowdelete,0)+isnull(allowwipe,0)
+						+isnull(allowforce,0)>0)
+	group by moduleGUID, moduleid
+
+	RETURN 
+END
+
+

@@ -1,0 +1,82 @@
+
+
+
+
+
+CREATE procedure [gen].[addprocs_save_addons] @tablename varchar(50), @otablename varchar(50), @colname varchar(50), 
+	@status varchar(50), @updatestr varchar(max), @valuestr varchar(max),
+	@insertstr varchar(max), @par varchar(max), @tableApproveName varchar(50), @debug int=0, @isEnc bit=1, @isdebug bit=0
+as
+	declare @primaryDate nvarchar(50), @autonumbercol nvarchar(50), @refno nvarchar(50)
+	declare @primaryDateEdit int
+	
+	declare @attachmentField nvarchar(50), @fieldkey nvarchar(50)
+
+	declare @content varchar(max)
+	declare @content1 varchar(max)
+	declare @content2 varchar(max)
+	
+	declare @sp varchar(max)
+	declare @parameter varchar(max)
+
+--	if @status &lt;&gt; ''
+--	begin
+
+		--only enable to save or insert
+		if @updatestr &lt;&gt; '' and @insertstr &lt;&gt; '' and @par &lt;&gt; '' 
+		begin
+			select @primarydate = colname 
+			from gen.cotablfiel a
+				inner join gen.cotabl b
+					on a.tableguid=b.tableguid	
+			where tablename = @tablename and primarycol=2
+
+			select @PrimaryDateEdit=isnull(iseditable,0) 
+			from gen.cotablfiel a
+				inner join gen.cotabl b
+					on a.tableguid=b.tableguid	
+			where tablename = @tablename and primarycol=2
+			
+			--set @primarydateedit=isnull(@primarydateedit,0)
+
+			select @autonumbercol = colname 
+			from gen.cotablfiel a
+				inner join gen.cotabl b
+					on a.tableguid=b.tableguid	
+			where tablename = @tablename and primarycol=3
+
+			select @attachmentField = colname 
+			from gen.cotablfiel a
+				inner join gen.cotabl b
+					on a.tableguid=b.tableguid	
+			where tablename = @tablename and (ComboType=5 or combotype=50)
+
+			select @fieldkey = colname 
+			from gen.cotablfiel a
+				inner join gen.cotabl b
+					on a.tableguid=b.tableguid	
+			where tablename = @tablename and a.colorder=10
+
+
+			set @content = ''
+			set @sp = ''+@tableName+'_save_update_before'
+			set @parameter = char(9)+'@GUID uniqueidentifier, @hostGUID uniqueidentifier, '+replace(@par,', ', ' OUTPUT, ') +', @isCancel bit=0 OUTPUT, @msg varchar(max)='''' OUTPUT '
+			set @content = 	char(13)+char(10)
+			set @content2=''
+
+			exec gen.addproc @sp, @parameter, @content, @schema='dbo', @isEnc=@isenc
+
+			set @content = ''
+			set @sp = ''+@tableName+'_save_update_after'
+			set @parameter = char(9)+'@GUID uniqueidentifier, @hostGUID uniqueidentifier, @isUpdate bit'
+			set @content = char(13)+char(10)
+			set @content2=''
+			exec gen.addproc @sp, @parameter, @content, @schema='dbo', @isEnc=@isenc
+
+		end
+
+
+
+
+
+

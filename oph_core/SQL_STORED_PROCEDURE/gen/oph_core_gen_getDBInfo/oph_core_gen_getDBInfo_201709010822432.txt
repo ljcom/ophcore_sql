@@ -1,0 +1,122 @@
+
+CREATE procedure [gen].[getDBInfo] @hostGUID uniqueidentifier, @code nvarchar(50), 
+	@ver nvarchar(10)=null OUTPUT, @db nvarchar(50)=null OUTPUT, @moduleType nvarchar(1)=null OUTPUT, 
+	@themeName nvarchar(50)=null OUTPUT, @masterPassword nvarchar(50)=null OUTPUT, 
+	@companyName nvarchar(50)=null output, @accountGUID uniqueidentifier=null output, 
+	@accountId nvarchar(50)=null output, @coreDB nvarchar(50)=null output, @migrateDB nvarchar(50)=null output, 
+	@productName nvarchar(50)=null output,
+	@isdebug bit=0
+--WITH ENCRYPTION
+as	
+
+	select @accountid=accountid, @coredb=coreDB 
+	from userhost 
+	where hostguid=@hostGUID
+	if @hostguid is null begin
+		declare @accountDBGUID uniqueidentifier, @themepageGUID uniqueidentifier--, @masterPassword nvarchar(50)
+
+		select @accountguid=accountguid 
+		from dbo.acct a
+		where accountid=gen.getAccountID()
+		
+		select @masterPassword=infovalue
+		from acctinfo
+		where accountguid=@accountguid and infokey='masterPassword'
+
+		select @companyName=infovalue
+		from acctinfo
+		where accountguid=@accountguid and infokey='companyName'
+
+		select @productName=infovalue
+		from acctinfo
+		where accountguid=@accountguid and infokey='productName'
+
+		select @accountdbguid=accountdbguid, 
+			@moduletype=
+				case settingMode
+					when 0 then 'C'
+					when 1 then 'M'
+					when 2 then 'P'
+					when 3 then 'S'
+					when 4 then 'T'
+					when 5 then 'Y'
+					when 6 then 'B' end, 
+			@themePageGUID=themePageGUID
+		from modl 
+		where moduleid=@code
+
+		select @themename=themecode
+		from thme a
+			inner join thmepage b on a.themeguid=b.themeguid
+		where themepageguid=@themepageguid
+
+		select @ver=version, @db=databasename, @migrateDB=migrateDB
+		from acctdbse
+		where accountdbguid=@accountdbguid	
+
+	end
+	else begin
+		declare @sqlstr nvarchar(max)='
+			declare @accountDBGUID uniqueidentifier, @themepageGUID uniqueidentifier--, @masterPassword nvarchar(50)
+
+			select @accountguid=accountguid 
+			from '+@coreDB+'.dbo.acct 
+			where accountid='''+@accountid+'''
+		
+			select @masterPassword=infovalue
+			from '+@coreDB+'.dbo.acctinfo
+			where accountguid=@accountguid and infokey=''masterPassword''
+
+			select @companyName=infovalue
+			from '+@coreDB+'.dbo.acctinfo
+			where accountguid=@accountguid and infokey=''companyName''
+
+			select @productName=infovalue
+			from '+@coreDB+'.dbo.acctinfo
+			where accountguid=@accountguid and infokey=''productName''
+
+			select @accountdbguid=accountdbguid, 
+				@moduletype=
+					case settingMode
+						when 0 then ''C''
+						when 1 then ''M''
+						when 2 then ''P''
+						when 3 then ''S''
+						when 4 then ''T''
+						when 5 then ''Y''
+						when 6 then ''B'' end, 
+				@themePageGUID=themePageGUID
+			from modl 
+			where moduleid='''+@code+'''
+
+			select @themename=themecode
+			from thme a
+				inner join thmepage b on a.themeguid=b.themeguid
+			where themepageguid=@themepageguid
+
+			select @ver=version, @db=databasename, @migrateDB=migrateDB
+			from '+@coreDB+'.dbo.acctdbse
+			where accountdbguid=@accountdbguid		 
+
+		'+iif([api].[setSettingMode](@code) = 2 AND len(@code) > 5 AND len(@code) % 4 > 1, '
+			select @ver=version, @db=databasename from '+@coreDB+'.dbo.acctdbse 
+			where AccountGUID = @accountguid AND isMaster = 1 AND version=''3.0''
+		', '')+'
+
+		'
+
+		if @isdebug=1 print @sqlstr
+		declare @sqlpar nvarchar(max)='@accountGUID uniqueidentifier output, @ver nvarchar(10) output, @db nvarchar(50) OUTPUT, 
+			@moduleType nvarchar(1) OUTPUT, @themename nvarchar(50) OUTPUT, @masterPassword nvarchar(50) OUTPUT, 
+			@companyName nvarchar(50) OUTPUT, @migrateDB nvarchar(50) OUTPUT, @productName nvarchar(50) output
+			'
+		exec sp_executesql @sqlstr, @sqlpar, @accountGUID output, @ver OUTPUT, @db OUTPUT, @moduleType OUTPUT, @themename OUTPUT, @masterPassword OUTPUT, 
+			@companyName OUTPUT, @migrateDB OUTPUT, @productName output
+
+	
+	end
+
+
+
+
+

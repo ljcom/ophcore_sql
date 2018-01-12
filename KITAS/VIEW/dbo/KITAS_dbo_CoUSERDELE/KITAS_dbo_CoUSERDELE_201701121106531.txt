@@ -1,0 +1,15 @@
+
+
+
+
+CREATE VIEW [dbo].[CoUSERDELE]
+as	--CreatedBy eLs ON May, 2015	
+--#For DelegateUser
+
+	select 
+		UserGUID [UserDelegateGUID], UserId [DelegateID], UserName [DelegateName]
+	from CoUSER
+	where isDeleted = 0 
+
+
+

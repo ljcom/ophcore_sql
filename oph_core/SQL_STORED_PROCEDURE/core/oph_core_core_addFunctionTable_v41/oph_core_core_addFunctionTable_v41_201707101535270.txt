@@ -1,0 +1,115 @@
+
+CREATE procedure [core].[addFunctionTable_v41] @code nvarchar(50), @dataDB nvarchar(50)=null, @V4db nvarchar(50), @server nvarchar(50)=null, @isdebug bit=0
+as
+	print 'pending -- changed by syn'
+
+	--if isnull(@server, '')='' set @server=@@SERVERNAME
+	--if isnull(@dataDB, '')='' set @dataDB=db_name()
+
+	--declare @declareList nvarchar(max)
+	--declare @fieldList nvarchar(max) 
+	--declare @docList nvarchar(max) 
+	--declare @docname nvarchar(50)
+
+
+	--declare @pstr nvarchar(max)='	
+	--		select @docname = replace(cast(moduleguid as nvarchar(50)), ''-'', '''')
+	--		from '+@server+'.'+@dataDB+'.dbo.modl where moduleid='''+@code+'''
+
+	--		select @docList = 
+	--			stuff(
+	--				(select '', [''+replace(cast(c.columnguid as nvarchar(50)), ''-'', '''')+''] [''+c.colkey+'']''
+	--				from '+@server+'.'+@dataDB+'.dbo.modl m
+	--					inner join '+@server+'.'+@dataDB+'.dbo.modlcolm c on m.moduleguid=c.moduleguid
+	--				where m.moduleid='''+@code+'''
+	--					and colkey not in (''DocGUID'', ''AccountGUID'', ''ModuleGUID'', ''Status'', ''StatusComment'', ''CreatedDate'', ''CreatedUser'', 
+	--						''updatedDate'', ''updatedUser'', ''isClosed'', ''isDeleted'', ''parentDocGUID'', ''oldId'')
+	--					order by colorder
+	--				for xml path('''')), 1, 2, '''')
+
+	--		select @fieldList = 
+	--			stuff(
+	--				(select '', [''+c.colkey+'']'' 
+	--				from '+@server+'.'+@dataDB+'.dbo.modl m
+	--					inner join '+@server+'.'+@dataDB+'.dbo.modlcolm c on m.moduleguid=c.moduleguid
+	--				where m.moduleid='''+@code+'''
+	--					and colkey not in (''DocGUID'', ''AccountGUID'', ''ModuleGUID'', ''Status'', ''StatusComment'', ''CreatedDate'', ''CreatedUser'', 
+	--						''updatedDate'', ''updatedUser'', ''isClosed'', ''isDeleted'', ''parentDocGUID'', ''oldId'')
+	--				order by colorder
+	--				for xml path('''')), 1, 2, '''')
+
+	--		select @declareList = 
+	--			stuff(
+	--				(select '', [''+c.colkey+''] ''+
+	--						case 
+	--							when c.coltype in (59,60,62,122,106) then ''money'' 
+	--							when c.coltype in (40,41,42,43,58,61,189) then ''datetime'' 
+	--							when c.coltype in (48,52,56,108,127,104) then ''bigint'' 
+	--							when c.coltype in (36) then ''uniqueidentifier'' 
+	--							when c.coltype in (167,173,175,231,239) and c.collength between 1 and 300 then ''nvarchar(300)'' 
+	--							else ''nvarchar(max)''
+	--						end					
+					
+	--				from '+@server+'.'+@dataDB+'.dbo.modl m
+	--					inner join '+@server+'.'+@dataDB+'.dbo.modlcolm c on m.moduleguid=c.moduleguid
+	--				where m.moduleid='''+@code+'''
+	--					and colkey not in (''DocGUID'', ''AccountGUID'', ''ModuleGUID'', ''Status'', ''StatusComment'', ''CreatedDate'', ''CreatedUser'', 
+	--						''updatedDate'', ''updatedUser'', ''isClosed'', ''isDeleted'', ''parentDocGUID'', ''oldId'')
+	--				order by colorder
+	--				for xml path('''')), 1, 2, '''')
+	--'
+	--if @isdebug=1 print @pstr
+	--exec sp_executesql @pstr, N'@declareList nvarchar(max) output, @fieldList nvarchar(max) output, @docList nvarchar(max) output, @docname nvarchar(50) output', @declarelist output, @fieldlist output, @docList output, @docname output
+	
+
+	--if @isdebug=1 print @fieldList
+	--if @isdebug=1 print @declareList
+	--if @isdebug=1 print @docname
+
+	--declare @execstr nvarchar(max)
+	--set @execstr='
+	--	exec '+@server+'.'+@dataDB+'..sp_executesql @sqlstr'
+
+	--declare @sqlstr nvarchar(max)
+	--set @sqlstr='
+	--	if exists(select * from sys.objects where name='''+@code+''') 
+	--		drop function doc.'+@code+''
+
+	--if @isdebug=1 print @sqlstr
+	--exec sp_executesql @execstr, N'@sqlstr nvarchar(max)', @sqlstr
+
+	--set @sqlstr='
+	--	if exists(select * from sys.objects where name='''+@code+''' and type=''FT'') drop function doc.'+@code
+
+	--if @isdebug=1 print @sqlstr
+	--exec sp_executesql @execstr, N'@sqlstr nvarchar(max)', @sqlstr
+
+	--set @sqlstr='
+	--	create'+' '+'function doc.'+@code+'(@hostGUID uniqueidentifier)
+	--	RETURNS 
+	--	@result TABLE 
+	--	(
+	--		docGUID uniqueidentifier, parentDocGUID uniqueidentifier, AccountGUID uniqueidentifier, ModuleGUID uniqueidentifier, 
+	--		'+@declareList+', Status int, StatusComment nvarchar(max), CreatedDate datetime, CreatedUser uniqueidentifier, 
+	--		updatedDate datetime, updatedUser uniqueidentifier, isClosed bit, isDeleted bit, oldId nvarchar(50)
+
+	--	)
+	--	--WITH ENCRYPTION
+	--	as
+	--	begin
+ 
+	--		insert into @result (docGUID, parentDocGUID, AccountGUID, ModuleGUID, '+@fieldlist+', Status, StatusComment, CreatedDate, CreatedUser, updatedDate, updatedUser, isClosed, isDeleted, oldId)
+	--		select docGUID, parentDocGUID, AccountGUID, ModuleGUID, '+@doclist+', Status, StatusComment, CreatedDate, CreatedUser, updatedDate, updatedUser, isClosed, isDeleted, oldId 
+	--		from '+@server+'.'+@V4db+'.doc.['+@docname+']
+
+	--		return
+	--	end
+
+						
+	--	'
+	--if @isdebug=1 print @sqlstr
+	--exec sp_executesql @execstr, N'@sqlstr nvarchar(max)', @sqlstr
+
+
+
+

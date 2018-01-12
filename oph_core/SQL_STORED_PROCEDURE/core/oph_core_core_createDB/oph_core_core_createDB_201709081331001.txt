@@ -1,0 +1,31 @@
+
+
+
+CREATE procedure [core].[createDB] @accountid nvarchar(50)=null, @isDropScript bit=1, @isEnc bit=1, 
+	@isDelTable bit=0, @isDropTable bit=0, @mirrorServer nvarchar(50)=null, @isScriptOnly bit=0, @isMigrate bit=0, @isdebug bit=0
+--with encryption
+as
+
+	DECLARE #cur_createDB CURSOR
+	READ_ONLY
+	FOR 
+		select accountID from acct
+		where accountid=isnull(@accountid, accountid)
+
+	DECLARE @name varchar(40)
+	OPEN #cur_createDB
+
+	FETCH NEXT FROM #cur_createDB INTO @name
+	WHILE (@@fetch_status <> -1)
+	BEGIN
+		IF (@@fetch_status <> -2)
+		BEGIN
+			exec core.createdb_insertdata @accountid, @isDropScript, @isEnc, @isDelTable, @isDropTable, @mirrorServer, @isScriptOnly, @isMigrate, @isdebug
+		END
+		FETCH NEXT FROM #cur_createDB INTO @name
+	END
+
+	CLOSE #cur_createDB
+	DEALLOCATE #cur_createDB
+
+	if @ismigrate=1 exec core.migrateData @accountid

@@ -1,0 +1,83 @@
+
+
+CREATE procedure [gen].[downloadChild] @hostGUID uniqueidentifier, @code nvarchar(50), @ParentGUID uniqueidentifier, @isdebug bit=0
+--WITH ENCRYPTION
+as
+	declare @ver varchar(10), @db varchar(50), @typecode varchar(1)
+	exec gen.getDBInfo @hostguid, @code, @ver output, @db output, @typecode output
+
+	declare @colname varchar(100), @combotype int, @fieldkeyParent varchar(100), @fieldkey varchar(100), 
+		@parentCode varchar(6), @schema nvarchar(10), @fieldlist nvarchar(max), @nulllist nvarchar(max)
+	declare @titleCaption varchar(50)
+
+	select @parentCode=p.ModuleID 
+	from modl c
+		inner join modl p on c.ParentModuleGUID=p.ModuleGUID	
+	where c.moduleid=@code
+
+	select @fieldkey=a.colKey 
+	from modlcolm a
+		inner join modl b on a.ModuleGUID=b.ModuleGUID
+	where b.moduleid=@code
+		and a.colOrder=(
+			select min(colorder)
+			from modl a
+				inner join modlcolm b on a.moduleguid=b.moduleguid
+			where a.moduleid=@code)
+
+	select @fieldkeyParent=a.colKey 
+	from modlcolm a
+		inner join modl b on a.ModuleGUID=b.ModuleGUID
+	where b.moduleid=@parentCode
+		and a.colOrder=(
+			select min(colorder)
+			from modl a
+				inner join modlcolm b on a.moduleguid=b.moduleguid
+			where a.moduleid=@parentCode)
+
+	set @fieldlist=stuff((
+		select ', '+colkey 
+		from modl c
+			inner join modlcolm a on c.moduleguid=a.moduleguid
+			inner join modlcolminfo b on a.ColumnGUID=b.ColumnGUID and infokey='iseditable' and infovalue='1'
+		where moduleid=@code
+		for xml path('')), 1, 2, '')
+
+	set @nulllist=stuff((
+		select ', null' 
+		from modl c
+			inner join modlcolm a on c.moduleguid=a.moduleguid
+			inner join modlcolminfo b on a.ColumnGUID=b.ColumnGUID and infokey='iseditable' and infovalue='1'
+		where moduleid=@code
+		for xml path('')), 1, 2, '')
+
+	if @ver='3.0'
+	begin
+		set @schema='oph'
+	end
+	else begin
+		set @schema='dbo'
+		if @typecode<>'C' begin
+			set @fieldkey='docGUID'
+			set @fieldkeyParent='parentDocGUID'			
+		end
+	end
+
+	if isnull(@fieldlist,'')<>''
+	begin
+		declare @sqlstr nvarchar(max)
+		set @sqlstr='
+			select '+@fieldkey+', '+@fieldkeyParent+', '+@fieldlist+' from '+@db+'.'+@schema+'.'+@code+'
+			where '+@fieldkeyParent+'='''+cast(@ParentGUID as nvarchar(50))+'''
+			union
+			select null, null, '+@nulllist
+
+		if @isdebug=1 print @sqlstr
+		exec (@sqlstr)
+	end
+
+
+
+
+
+

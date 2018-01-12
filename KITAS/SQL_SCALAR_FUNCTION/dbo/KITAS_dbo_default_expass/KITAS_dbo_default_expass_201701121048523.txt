@@ -1,0 +1,10 @@
+
+CREATE FUNCTION [dbo].[default_expass]()
+RETURNS date
+AS	--CreatedBy eLs ON Oct, 2015
+BEGIN
+	declare @expirydate date
+	select @expirydate = GETDATE() + 180
+	return @expirydate
+END
+

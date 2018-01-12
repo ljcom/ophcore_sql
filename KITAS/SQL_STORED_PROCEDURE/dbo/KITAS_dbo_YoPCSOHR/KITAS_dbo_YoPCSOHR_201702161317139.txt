@@ -1,0 +1,14 @@
+CREATE PROCEDURE [dbo].[YoPCSOHR] @HostGUID uniqueidentifier, @startDate date, @endDate date
+as	--CreatedBy eLs ON Feb 2017
+
+	select 
+		CarolId [Member ID], UserName [Name], FORMAT(Sales, 'N') [Total Sales (include PPN)]
+	from (
+		select 
+			CarolGUID, SUM(TotalSales) [Sales]
+		from oph.TcPCSO 
+		where DocDate between @startDate and @endDate
+		group by CarolGUID
+	) a
+		inner join CoCAROLID b ON a.CarolGUID = b.CarolGUID
+

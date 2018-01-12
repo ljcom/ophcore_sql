@@ -1,0 +1,29 @@
+
+
+CREATE procedure core.[verifyToken] 
+	@accountId nvarchar(50), @userID as nvarchar(100), @password as nvarchar(50)
+--WITH ENCRYPTION
+as
+
+	declare @timestamp datetime=current_timestamp
+	declare @sessionToken uniqueidentifier
+
+	update r
+	set sessionToken=newid()
+	from acctrepl r 
+		inner join acct a on a.AccountGUID=r.accountGUID
+	where r.userId=@userid and r.privateToken=@password and a.AccountId=@accountId
+
+	select @sessionToken=r.sessionToken 
+	from acctrepl r 
+		inner join acct a on a.AccountGUID=r.accountGUID
+	where r.userId=@userid and r.privateToken=@password and a.AccountId=@accountId
+
+	select @sessionToken sessionToken
+	for xml path('')
+
+	--declare @timestamp datetime=current_timestamp
+	declare @comment nvarchar(max)='api.verifyToken @userId:'+@userid+', @sessionToken:'+cast(@sessionToken as nvarchar(50))
+	exec gen.evnt_save null, 'token', @password, @timestamp, @comment
+
+

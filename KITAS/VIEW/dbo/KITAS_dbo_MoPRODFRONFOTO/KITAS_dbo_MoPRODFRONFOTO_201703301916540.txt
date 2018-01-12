@@ -1,0 +1,14 @@
+
+
+
+
+
+
+CREATE view [dbo].[MoPRODFRONFOTO]
+as
+	select 
+		PRODFOTOGUID, PRODGUID,  ROW_NUMBER() OVER(PARTITION BY PRODGUID ORDER BY isPP desc, createddate ASC)-1 FotoID, FotoName, isPP, replace(replace(attachment, 'D:\','http://104.199.130.13\') , '\', '/') Attachment, AttachmentBLOB, CreatedDate, CreatedUser, UpdatedDate, UpdatedUser
+	from MoPRODFOTO
+
+
+

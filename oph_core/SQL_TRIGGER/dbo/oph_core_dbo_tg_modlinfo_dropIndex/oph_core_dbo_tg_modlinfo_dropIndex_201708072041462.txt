@@ -1,0 +1,29 @@
+
+CREATE TRIGGER [dbo].[tg_modlinfo_dropIndex]
+   ON  [dbo].[modlinfo]
+   AFTER DELETE
+AS 
+BEGIN
+	SET NOCOUNT ON;
+
+	declare @code nvarchar(50), @ext nvarchar(50), @Procname nvarchar(200), @content nvarchar(max), @resultText nvarchar(max)
+
+	if exists(select * from deleted where infokey like 'unique_%') 
+		or exists(select * from deleted where infokey like 'index_%')
+	begin
+		select @code=m.moduleid, @ext=i.InfoKey, @content=i.InfoValue
+		from deleted i
+			inner join modl m on i.moduleguid=m.moduleguid
+
+		set @ext=replace(replace(@ext, 'index_', ''), 'unique_', '')
+		set @Procname='IX_'+@code+'_'+@ext
+
+		exec [gen].[dropIndex] @ProcName, @code, 'doc', @resultText output
+
+		if isnull(@resultText,'')<>'' begin
+			RAISERROR (@resultText, 16, 1)
+			--ROLLBACK TRANSACTION
+		end
+	end
+END
+

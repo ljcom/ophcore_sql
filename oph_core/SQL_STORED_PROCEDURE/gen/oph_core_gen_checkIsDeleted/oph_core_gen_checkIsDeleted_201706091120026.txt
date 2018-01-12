@@ -1,0 +1,35 @@
+
+
+CREATE procedure [gen].[checkIsDeleted] @hostguid uniqueidentifier,@code varchar(50), @isColExists bit OUTPUT
+--WITH ENCRYPTION
+AS
+
+BEGIN
+	declare @ver varchar(10), @db varchar(50), @typecode varchar(1)
+	exec gen.getDBInfo @hostguid, @code, @ver output, @db output, @typecode output
+
+	if @ver=2.0 begin
+		set @db=db_name()
+	end
+
+	declare @colname varchar(50)
+	declare @sqlpar nvarchar(max)='@colname varchar(50) OUTPUT'
+	declare @sqlstr nvarchar(max)='
+		select @colname=b.name from '+@db+'.sys.objects a
+			inner join '+@db+'.sys.columns b
+				on a.object_id=b.object_id
+		where a.name='''+@code+''' and b.name=''isdeleted'''
+
+	exec sp_executesql @sqlstr, @sqlpar, @colname OUTPUT
+		
+	set @isColExists=case when @colname='isDeleted' then 1 else 0 end
+END
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,33 @@
+
+
+
+CREATE procedure [gen].[xml_browse_block_talk] 	
+	@hostGUID uniqueidentifier,
+	--@tablename varchar(100), 
+	@GUID uniqueidentifier
+
+as
+	--xtalk
+	
+		select @GUID '@GUID', 
+			(select z.doctalkguid '@DocGUID',
+			z.DocComment 'Message',
+			z.CreatedUsercbId 'userid',
+			z.CreatedUsercbNm 'username',
+				case  
+				when  CAST(DATEDIFF(HOUR, z.CreatedDate, getdate()) AS NVARCHAR(50)) &lt; 1 then CAST(DATEDIFF(MINUTE, z.CreatedDate, getdate()) AS NVARCHAR(50)) + ' minute ago'
+				when  CAST(DATEDIFF(HOUR, z.CreatedDate, getdate()) AS NVARCHAR(50)) between 1 and 23 then CAST(DATEDIFF(HOUR, z.CreatedDate, getdate()) AS NVARCHAR(50)) + ' hour ago'
+				when  CAST(DATEDIFF(HOUR, z.CreatedDate, getdate()) AS NVARCHAR(50)) between 23 and 168 then CAST(DATEDIFF(DAY, z.CreatedDate, getdate()) AS NVARCHAR(50)) + ' days ago'
+				when  CAST(DATEDIFF(HOUR, z.CreatedDate, getdate()) AS NVARCHAR(50)) &gt; 168 then convert(nvarchar(11),z.CreatedDate,13) end as 'sentdate',
+				z.UpdatedDate 'approvaldate'
+			--select * 
+			from oph.fn_caTALK  (''+convert(nvarchar(100), @hostGUID)+'') z
+			where z.DocumentGUID=@GUID
+			order by z.createdDate asc
+			for xml path ('talk'), type) 
+		for xml path ('talks'), type, root
+	
+
+
+
+

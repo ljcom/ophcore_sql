@@ -1,0 +1,51 @@
+CREATE PROCEDURE [dbo].[TaPCSODETA_save_preview]	@GUID uniqueidentifier, @hostGUID uniqueidentifier, @PCSOGUID uniqueidentifier, @EVENGUID uniqueidentifier, @PRODGUID uniqueidentifier, @Qty int, @QtyReject int, @QtyReturn int, @preview int = 0--Automatic Parameters by OPH. Do Not Modify This Parameters Intentionally.
+
+as	--CreatedBy eLs ON Jan, 2017
+
+	declare @MaxQty int, @MaxSales money, @Price money, @availaible int
+
+	if @preview = 1 begin
+		if exists(select * from ToPCSO where PCSOGUID = @PCSOGUID AND Status between 100 AND 399) 
+			select 
+				c.EVENGUID, c.Name [EVENGUID_name],
+				TotalQty, FORMAT(TotalSales, 'N') [TotalSales], 
+				'true' [Qty/@readonly], 'true' [QtyReturn/@readonly], Qty, 
+				isNULL(QtyReturn, 0) [QtyReturn], isNULL(QtyReject, 0) [QtyReject]
+			from ToPCSO a 
+				left join ToPCSODETA b ON b.PCSODETAGUID = @GUID
+				left join MoEVEN c ON isNULL(b.EVENGUID, '9573DD6B-DB6F-4153-8A07-9B7CC8C0ADE7') = c.EVENGUID
+			where a.PCSOGUID = @PCSOGUID 
+			for xml path('root'), type	
+		else if exists(select * from ToPCSO where PCSOGUID = @PCSOGUID AND Status = 400) 
+			select 
+				c.EVENGUID, c.Name [EVENGUID_name],
+				TotalQty, FORMAT(TotalSales, 'N') [TotalSales], 
+				'true' [Qty/@readonly], 'true' [QtyReject/@readonly], 'false' [QtyReturn/@readonly], 
+				Qty, QtyReject
+			from ToPCSO a 
+				left join ToPCSODETA b ON b.PCSODETAGUID = @GUID
+				left join MoEVEN c ON isNULL(b.EVENGUID, '9573DD6B-DB6F-4153-8A07-9B7CC8C0ADE7') = c.EVENGUID
+			where a.PCSOGUID = @PCSOGUID 
+			for xml path('root'), type	
+		else
+			select 
+				'true' [QtyReject/@readonly], 'true' [QtyReturn/@readonly],
+				TotalQty, FORMAT(TotalSales, 'N') [TotalSales], 0 [QtyReturn], 0 [QtyReject],
+				c.EVENGUID, c.Name [EVENGUID_name]
+			from ToPCSO a
+				left join ToPCSODETA b ON b.PCSODETAGUID = @GUID
+				left join MoEVEN c ON isNULL(b.EVENGUID, '9573DD6B-DB6F-4153-8A07-9B7CC8C0ADE7') = c.EVENGUID
+			where a.PCSOGUID = @PCSOGUID 			
+			for xml path('root'), type	
+	end
+	if @preview = 2 begin
+		select
+			IIF(@Qty = 0, IIF(Availaible &gt; 1, 1, 0), @Qty) [Qty], 
+			FORMAT(Price, 'N') [FirstPrice], FORMAT(Price * Discount / 100, 'N') [DiscPrice],
+			FORMAT((IIF(@Qty = 0, IIF(Availaible &lt; MaxQty, Availaible, MaxQty), @Qty) * (Price - Price * Discount / 100)), 'N') [TotalPrice]
+		from MoEVEN a 
+			inner join MoEVENPSKU b ON a.EVENGUID = b.EVENGUID
+		where a.EVENGUID = @EVENGUID AND PRODGUID = @PRODGUID
+		for xml path('root'), type	
+	end
+

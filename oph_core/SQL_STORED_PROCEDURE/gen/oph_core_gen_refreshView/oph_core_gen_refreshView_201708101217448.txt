@@ -1,0 +1,31 @@
+
+CREATE procedure [gen].[refreshView] @isdebug bit=0
+as
+
+
+	DECLARE #cur00 CURSOR
+	READ_ONLY
+	FOR 		
+		select moduleid+iif(infokey='view', '', '_'+replace(infokey, 'view_', '')) viewName, infovalue content
+		from modl m 
+			inner join modlinfo i on i.moduleguid=m.moduleguid
+		where infokey like 'view%'
+
+	DECLARE @viewName nvarchar(100), @content nvarchar(max), @r nvarchar(max)
+	OPEN #cur00
+
+	FETCH NEXT FROM #cur00 INTO @viewName, @content
+	WHILE (@@fetch_status <> -1)
+	BEGIN
+		IF (@@fetch_status <> -2)
+		BEGIN
+			if @isdebug=1 print @viewName
+			exec gen.createView @viewname, @content, 'doc', 1, @r output
+		END
+		FETCH NEXT FROM #cur00 INTO @viewName, @content
+	END
+
+	CLOSE #cur00
+	DEALLOCATE #cur00
+
+

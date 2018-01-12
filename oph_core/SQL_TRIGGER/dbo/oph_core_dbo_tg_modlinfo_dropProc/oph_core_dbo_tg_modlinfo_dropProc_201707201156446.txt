@@ -1,0 +1,29 @@
+
+create TRIGGER [dbo].[tg_modlinfo_dropProc]
+   ON  [dbo].[modlinfo]
+   AFTER DELETE
+AS 
+BEGIN
+	SET NOCOUNT ON;
+
+	declare @code nvarchar(50), @ext nvarchar(50), @Procname nvarchar(200), @content nvarchar(max), @resultText nvarchar(max)
+
+	if exists(select * from deleted where infokey like 'script_%') begin
+		select @code=m.moduleid, @ext=i.InfoKey, @content=i.InfoValue
+		from deleted i 
+			inner join modl m on i.moduleguid=m.moduleguid
+
+		set @ext=replace(@ext, 'script_', '')
+		set @Procname=@code+'_'+@ext
+
+		exec [gen].[dropProc] @ProcName, 'doc', @resultText output
+
+		if isnull(@resultText,'')<>'' begin
+			RAISERROR (@resultText, 16, 1)
+			--ROLLBACK TRANSACTION
+		end
+	end
+END
+
+
+

@@ -1,0 +1,127 @@
+
+CREATE PROCEDURE [gen].[createATAB] @isEnc bit=1, @isdebug bit=0
+as
+	declare @x xml, @sqlstr nvarchar(max)
+
+	--CREATE VIEW CoATAB
+	if exists(select * from CoACCTDBSE)
+		set @sqlstr= (
+			select 
+				CHAR(9) + 'union all' + CHAR(10) +
+				CHAR(9) + 'select a.*, '''+DatabaseName+''' dbName from ['+DatabaseName+'].gen.CoTABL a' + CHAR(10) +
+				CHAR(9) + CHAR(9) + 'inner join '+DatabaseName+'.sys.objects b' + CHAR(10) +
+				CHAR(9) + CHAR(9) + CHAR(9) + 'on left(a.tablename,1)+''o''+substring(a.tablename,3,len(a.tablename)-2)=b.name' + CHAR(10) +
+				CHAR(9) + 'where b.type in(''U'',''V'')' + CHAR(10)
+			from CoACCTDBSE for xml path(''))
+	else
+		set @sqlstr =
+			CHAR(9) + 'union all' + CHAR(10) +
+			CHAR(9) + 'select a.*, '''+DB_NAME()+''' dbName from ['+DB_NAME()+'].gen.CoTABL a' + CHAR(10) +
+			CHAR(9) + CHAR(9) + 'inner join '+DB_NAME()+'.sys.objects b' + CHAR(10) +
+			CHAR(9) + CHAR(9) + CHAR(9) + 'on left(a.tablename,1)+''o''+substring(a.tablename,3,len(a.tablename)-2)=b.name' + CHAR(10) +
+			CHAR(9) + 'where b.type in(''U'',''V'')' + CHAR(10) 
+
+	set @sqlstr = SUBSTRING(@sqlstr, CHARINDEX(CHAR(10), @sqlstr), len(@sqlstr))
+	print 'CoATAB'
+	print '-------'
+	print @sqlstr
+
+	if LEN(@sqlstr) &gt; 0	--AddedBy eLs
+		exec gen.addview 'coATAB', '', @sqlstr, 'dbo', 0, @isdebug
+
+	--CREATE VIEW CoATABFIEL
+	if exists(select * from CoACCTDBSE)
+		set @sqlstr= (
+			select 
+				CHAR(9) + 'union all' + CHAR(10) +
+				CHAR(9) + 'select a1.* from ['+DatabaseName+'].gen.CoTABL a' + CHAR(10) +
+				CHAR(9) + CHAR(9) + 'inner join '+DatabaseName+'.gen.CoTABLFIEL a1' + CHAR(10) +
+				CHAR(9) + CHAR(9) + CHAR(9) + 'on a.tableGUID=a1.tableGUID' + CHAR(10) +
+				CHAR(9) + CHAR(9) + 'inner join '+DatabaseName+'.sys.objects b' + CHAR(10) +
+				CHAR(9) + CHAR(9) + CHAR(9) + 'on left(a.tablename,1)+''o''+substring(a.tablename,3,len(a.tablename)-2)=b.name' + CHAR(10) +
+				CHAR(9) + 'where b.type in(''U'',''V'')' + CHAR(10)
+			from CoACCTDBSE for xml path(''))
+	else
+		set @sqlstr =
+			CHAR(9) + 'union all' + CHAR(10) +
+			CHAR(9) + 'select a1.* from ['+DB_NAME()+'].gen.CoTABL a' + CHAR(10) +
+			CHAR(9) + CHAR(9) + 'inner join '+DB_NAME()+'.gen.CoTABLFIEL a1' + CHAR(10) +
+			CHAR(9) + CHAR(9) + CHAR(9) + 'on a.tableGUID=a1.tableGUID' + CHAR(10) +
+			CHAR(9) + CHAR(9) + 'inner join '+DB_NAME()+'.sys.objects b' + CHAR(10) +
+			CHAR(9) + CHAR(9) + CHAR(9) + 'on left(a.tablename,1)+''o''+substring(a.tablename,3,len(a.tablename)-2)=b.name' + CHAR(10) +
+			CHAR(9) + 'where b.type in(''U'',''V'')' + CHAR(10)
+
+	set @sqlstr = SUBSTRING(@sqlstr, CHARINDEX(CHAR(10), @sqlstr), len(@sqlstr))
+	print 'CoATABFIEL'
+	print '-----------'
+	print @sqlstr	
+
+	if LEN(@sqlstr) &gt; 0	--AddedBy eLs
+		exec gen.addview 'coATABFIEL', '', @sqlstr, 'dbo', 0
+
+	set @x=(
+		select (
+			select 'select '+b.colname+' docGUID, '+isnull(c.colname,'')+' docDate, 
+		'+isnull(d.colname,'')+' docNo, '+isnull(e.colname,'')+' docRefNo, '''+left(a.tablename,1)+'a'+substring(a.tablename,3,len(a.tablename)-2)+''' docType, '+
+		f.xmlSearchStr+' docFields,
+		--(select '+f.xmlBrowseStr+' from '+dbname+'.oph.'+left(a.tablename,1)+'a'+substring(a.tablename,3,len(a.tablename)-2)+' for xml path(''''), type) docXML,
+	status, statuscomment, createddate, createduser, updateddate, updateduser, isdeleted, deleteddate, deleteduser 
+	from '+dbname+'.oph.'+left(a.tablename,1)+'a'+substring(a.tablename,3,len(a.tablename)-2)+' 
+	union all
+	' 
+			--select *
+			from coatab a
+				left join coatabfiel b
+					on a.TableGUID=b.tableguid
+					and b.colorder=10
+				left join coatabfiel c
+					on a.TableGUID=c.tableguid
+					and c.primarycol=2
+				left join coatabfiel d
+					on a.TableGUID=d.tableguid
+					and d.primarycol=3
+				left join coatabfiel e
+					on a.TableGUID=e.tableguid
+					and e.primarycol=4
+				left join coMODL f
+					on a.TableName=f.ModuleId
+			where a.tablename like 'ta%' and len(a.tablename)=6
+				and a.tablename not like '%ALLT%'
+			order by tablename
+			for xml path(''), type))
+
+	set @sqlstr=replace(replace(cast(@x as varchar(max)), '&amp;#x0D;', char(13)),'&amp;lt;','&lt;')
+	set @sqlstr=char(9)+left(@sqlstr, len(@sqlstr)-14)
+
+	print @sqlstr	
+	if LEN(@sqlstr) &gt; 0	--AddedBy eLs
+		exec gen.addview 'ToALLT', '', @sqlstr, 'dbo', 0, 1
+
+	--declare @x xml, @sqlstr varchar(max)
+	set @x=(
+		select (
+			select 'select '+b.colname+' docApprovalGUID, '+isnull(c.colname,'')+' docGUID, ApprovalUserGUID, CurLvl, Lvl, Status, CreatedDate, UpdatedDate, CreatedUser, UpdatedUser, DelegateUserGUID, uGroupGUID, ReapprovalDate, rejectReason, isActive
+	from '+dbname+'.oph.'+left(a.tablename,1)+'a'+substring(a.tablename,3,len(a.tablename)-2)+' 
+	union all
+	' 
+		--select dbname, *
+			from coatab a
+				left join coatabfiel b
+					on a.TableGUID=b.tableguid
+					and b.colorder=1
+				left join coatabfiel c
+					on a.TableGUID=c.tableguid
+					and c.colorder=2
+			where a.tablename like 'to%APRV' and len(a.tablename)=10
+				and a.tablename not like '%ALLT%'
+			order by tablename
+			for xml path(''), type))
+
+	set @sqlstr=replace(replace(cast(@x as varchar(max)), '&amp;#x0D;', char(13)),'&amp;lt;','&lt;')
+	set @sqlstr=char(9)+left(@sqlstr, len(@sqlstr)-14)
+	
+	print @sqlstr
+	if LEN(@sqlstr) &gt; 0	--AddedBy eLs
+		exec gen.addview 'ToALLTAPRV', '', @sqlstr, 'dbo', 0
+	
+

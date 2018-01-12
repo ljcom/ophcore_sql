@@ -1,0 +1,50 @@
+
+CREATE function [gen].[authmenusmnu] (@hostguid uniqueidentifier, @code nvarchar(50))
+RETURNS 
+@result TABLE 
+(
+	menuDetailGUID uniqueidentifier, env nvarchar(50), code nvarchar(50), MenuGUID uniqueidentifier, SubMenuDescription nvarchar(200), 
+		Tag nvarchar(50), URL varchar(8000), OrderNo int, caption nvarchar(50), [type] nvarchar(20), 
+	upperSubmenuGUID uniqueidentifier, icon_fa nvarchar(50), icon_url nvarchar(50)
+)
+--WITH ENCRYPTION
+AS
+BEGIN
+	declare @curenv nvarchar(50)
+	select @curenv=ModuleGroupID
+	from modl inner join modg on modl.ModuleGroupGUID=modg.ModuleGroupGUID
+	where moduleid=@code	
+
+	insert into @result (menuDetailGUID, env, code, MenuGUID, SubMenuDescription, 
+		Tag, URL, OrderNo, caption, type, upperSubmenuGUID, icon_fa, icon_url)
+	select MenuDetailGUID, env, code, MenuGUID, SubMenuDescription, 
+		Tag, URL, OrderNo, caption, type, upperSubmenuGUID, icon_fa, icon_url 
+	from (
+		select menudetailguid, iif(e2b-4-2>0, substring(url, e1+4, e2b-4-2), '') env, 
+			iif(n2b-5-2>0, substring(url, n1+5, n2b-5-2), '') code, MenuGUID, SubMenuDescription, 
+		Tag, URL, OrderNo, caption, type, upperSubmenuGUID, icon_fa, icon_url
+		from (
+			select iif(e1>0 and e2=0, len(url)+1, e2) e2b, 
+				iif(n1>0 and n2=0, len(url)+1, n2) n2b,
+				*
+			from (
+				select iif(e1>0, charindex('&', url, e1), 0) e2, 
+					iif(n1>0, charindex('&', isnull(url,''), n1), 0) n2, *
+				from (
+					select 
+						charindex('env=', url) e1, charindex('code=', isnull(url,'')) n1, * 
+					from menusmnu) ma
+				) mb
+			) mc
+	) a
+		left join gen.authmodl(@hostGUID, null) b
+			on a.code=b.moduleid
+		left join gen.authmodg(@hostGUID) c
+			on a.env=c.moduleGroupId 
+	where (b.moduleGUID is not null or isnull(a.code,'')='')
+		and (c.moduleGroupGUID is not null or isnull(a.env,'')='')
+		and (a.env=@curenv or isnull(a.env,'')='')
+	RETURN 
+END
+
+

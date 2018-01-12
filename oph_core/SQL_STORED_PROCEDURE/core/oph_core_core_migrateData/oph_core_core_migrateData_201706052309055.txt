@@ -1,0 +1,37 @@
+
+
+
+CREATE procedure [core].[migrateData] @accountid nvarchar(50) 
+as
+	declare @coreDB nvarchar(50)=db_name()
+	declare @dataDB nvarchar(50)
+	select @dataDB=DatabaseName from acct a 
+		inner join acctdbse b on a.AccountGUID=b.AccountGUID
+	where isMaster=1 and b.version='4.0' and AccountId=@accountid 
+
+	DECLARE #cur1 CURSOR
+	READ_ONLY
+	FOR select DatabaseName from acct a 
+			inner join acctdbse b on a.AccountGUID=b.AccountGUID
+		where b.version='3.0' and AccountId=@accountid
+
+
+	DECLARE @v3DB nvarchar(50)
+	OPEN #cur1
+
+	FETCH NEXT FROM #cur1 INTO @v3DB
+	WHILE (@@fetch_status <> -1)
+	BEGIN
+		IF (@@fetch_status <> -2)
+		BEGIN
+			select @v3DB
+			exec [core].[migrateData_eachDB] @accountid, @coreDB, @dataDB, @v3DB
+		END
+		FETCH NEXT FROM #cur1 INTO @v3DB
+	END
+
+	CLOSE #cur1
+	DEALLOCATE #cur1
+
+
+

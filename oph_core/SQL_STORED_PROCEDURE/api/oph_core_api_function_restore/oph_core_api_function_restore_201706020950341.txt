@@ -1,0 +1,92 @@
+
+CREATE procedure [api].[function_restore] @accountid varchar(50), @dbcore varchar(50),
+	@hostGUID uniqueidentifier, 
+	@code varchar(20),
+	@GUID uniqueidentifier, 
+	@comment varchar(max), 
+	@isDebug bit=0
+--WITH ENCRYPTION
+as
+	declare @ver varchar(10), @db varchar(50), @typecode varchar(1)
+	exec gen.getDBInfo @accountid, @dbcore, @code, @ver output, @db output, @typecode output
+
+	declare @moduleGUID uniqueidentifier
+	select @moduleguid=ModuleGUID from modl where moduleid=@code
+
+	declare @ocode nvarchar(50), @dbcode varchar(100)=@db+'.dbo.'+quotename(@code)
+	declare @primaryCol varchar(50), @isColExists bit=0
+
+	--if @ver='3.0' and exists(select * from docm where moduleguid=@moduleguid) begin
+	--	set @ver='4.0'
+	--	set @db=db_name()
+	--	set @dbcode=@db+'.dbo.docm'
+	--	set @primaryCol='docGUID'
+	--	set @isColExists=1
+	--end
+	--else begin
+		if @ver='3.0' begin
+			set @ocode=stuff(@code, 2,1, 'o')
+			set @dbcode=@db+'.dbo.'+quotename(@ocode)
+		end
+		exec api.getPrimaryKey @accountid, @dbcore, @code, @primaryCol OUTPUT
+		exec gen.checkisdeleted @accountid, @dbcore, @code, @isColExists output	
+	--end
+
+	declare @isExists bit=0
+
+	--run standard
+	declare @userGUID uniqueidentifier
+	declare @msg nvarchar(100)='', @isCancel bit=0
+		
+	declare @before_proc nvarchar(max)=@code+'_restore_before'
+	declare @before_par nvarchar(max)='@GUID uniqueidentifier, @hostGUID uniqueidentifier, @isCancel OUTPUT, @msg OUTPUT'
+
+	set @isExists=0
+	exec gen.checkObject @before_proc, 'dbo', @db, @isExists OUTPUT
+
+	if @isExists=1 begin
+		set @before_proc='exec '+@db+'.dbo.'+@before_proc+' '''+CAST(@GUID AS VARCHAR(50))+''', '''+CAST(@hostGUID AS VARCHAR(50))+''', @isCancel OUTPUT, @msg OUTPUT'
+		--set @before_proc=@db+'.dbo.'+@before_proc
+		exec sp_executesql @before_proc, @before_par, @GUID, @hostGUID, @isCancel OUTPUT, @msg OUTPUT
+	end
+			
+	select @userGUID=userguid from userhost where hostGUID=@hostGUID
+		
+	if @isCancel=0 begin
+		--run if only not cancelled
+		declare @sqlstr nvarchar(max)
+		if @isColExists=1
+			set @sqlstr='
+				if exists(select * from '+@dbcode+' where '+@primaryCol+' = @GUID and isDeleted=1) and @userGUID is not null
+					update '+@dbcode+'
+					set isDeleted = 0--, deletedDate = null, deletedUser = null
+					where isnull(isDeleted,0) = 1 and '+@primaryCol+' = @GUID
+
+				if exists(select * from '+@dbcode+'
+					where '+@primaryCol+' = @GUID and isDeleted=1) 
+					set @msg=''This record cannot be restored. You might don''''t have any authority to do this.''
+				--else
+					--exec api.function_mail @hostGUID, ''restore'', @code, @GUID
+				'
+				
+		declare @sqlpar nvarchar(max)='@hostGUID uniqueidentifier, @code varchar(50), @GUID uniqueidentifier, @userGUID uniqueidentifier, @msg varchar(max) OUTPUT'
+		exec sp_executesql @sqlstr, @sqlpar, @hostGUID, @code, @GUID, @userGUID, @msg OUTPUT
+		print @sqlstr
+		print @sqlpar
+
+		--additional procedure after execution
+		declare @after_proc nvarchar(max)=@code+'_restore_after'
+		declare @after_par nvarchar(max)='@GUID uniqueidentifier, @hostGUID uniqueidentifier'
+
+		set @isExists=0
+		exec gen.checkObject @after_proc, 'dbo', @db, @isExists OUTPUT
+
+		if @isExists=1 begin
+			set @after_proc='exec '+@db+'.dbo.'+@after_proc+' '''+CAST(@GUID AS VARCHAR(50))+''', '''+CAST(@hostGUID AS VARCHAR(50))+''''
+			--set @after_proc=@db+'.dbo.'+@after_proc
+			exec sp_executesql @after_proc, @after_par, @GUID, @hostGUID
+		end
+	end
+		
+	select @msg restored
+

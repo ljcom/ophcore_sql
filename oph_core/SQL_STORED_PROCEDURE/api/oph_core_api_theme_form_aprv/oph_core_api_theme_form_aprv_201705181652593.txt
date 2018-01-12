@@ -1,0 +1,69 @@
+CREATE PROCEDURE api.theme_form_aprv 
+	@accountid varchar(50), @dbcore varchar(50), @code varchar(20), @GUID uniqueidentifier, @xmlApprovals xml OUTPUT, @isdebug bit = 0
+as	--CreatedBy eLs ON May, 2017
+
+--declare 
+--	@accountid varchar(50) = 'eform', @dbcore varchar(50) = 'oph_core', @code varchar(20) = 'TaDEDU', 
+--	@GUID uniqueidentifier =  '31DA82C7-ECEA-41EA-B512-E8C26E679B65', @xmlApprovals xml, @isdebug bit = 1
+
+	declare @ver varchar(10), @db varchar(50), @typecode varchar(1)
+	exec gen.getDBInfo @accountid, @dbcore, @code, @ver output, @db output, @typecode output
+
+	declare @sqlstr nvarchar(max), @primary varchar(50)
+	if @ver = '3.0' and @typecode='T' begin
+		set @sqlstr = 'use '+@db+' 
+			select @prim = colname from gen.cotablfiel a 
+				join gen.cotabl b on a.tableguid = b.tableguid 
+			where primarycol= 1 and tablename = ''' +@code+'''' 
+
+		exec sp_executesql @sqlstr, N'@prim nvarchar(max) output', @prim = @primary output
+
+		set @sqlstr = '
+		set @xml = (
+			select (
+				select 
+					Lvl [@level], ISNULL(Status, 0) [@status], 
+					REPLACE(ApprovalUserGUIDcbNm, ''.'', '' '') [name],
+					case Status when 400 then
+						case 
+							when DATEDIFF(MINUTE, UpdatedDate, GETDATE()) between 0 and 59
+								then CAST(DATEDIFF(MINUTE, UpdatedDate, GETDATE()) as varchar(5)) + '' minutes ago''
+							when DATEDIFF(MINUTE, UpdatedDate, GETDATE()) between 60 and 1439
+								then CAST(DATEDIFF(HOUR, UpdatedDate, GETDATE()) as varchar(5)) + '' hours ago''
+							when DATEDIFF(HOUR, UpdatedDate, GETDATE()) between 24 and 167
+								then CAST(DATEDIFF(DAY, UpdatedDate, GETDATE()) as varchar(5)) + '' days ago''
+							when DATEDIFF(HOUR, UpdatedDate, GETDATE()) between 168 and 671
+								then CAST(DATEDIFF(WEEK, UpdatedDate, GETDATE()) as varchar(5)) + '' weeks ago''
+							when DATEDIFF(DAY, UpdatedDate, GETDATE()) between 30 and 37
+								then CAST(DATEDIFF(MINUTE, UpdatedDate, GETDATE()) as varchar(5)) + '' month ago''
+							else ''on '' + CONVERT(varchar(22), UpdatedDate, 107)
+						end
+					end [date]
+				from '+@db+'.oph.'+@code+'APRV
+				where '+@primary+' = '''+cast(@GUID as nvarchar(50))+'''
+				order by Lvl
+				for xml path(''approval''), type
+			) for xml path(''approvals''), type
+		)'
+
+		exec sp_executesql @sqlstr, N'@xml xml output', @xml = @xmlApprovals output
+	end
+
+	if @isdebug = 1 print @sqlstr
+
+/*
+     <approvals>
+		<approval level="0" status="400">
+		  <name>Imannuel RASIANOPA</name>
+		  <date>on Mar 11, 2015</date>
+		</approval>
+		<approval level="110" status="0">
+		  <name>FATIMAH</name>
+		</approval>
+		<approval level="120" status="0">
+		  <name>Sutheno Emilia</name>
+		</approval>
+     </approvals>
+*/
+
+	

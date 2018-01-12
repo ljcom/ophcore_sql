@@ -1,0 +1,18 @@
+
+CREATE procedure [core].[storeScriptVersion] @isdebug bit=0
+--WITH ENCRYPTION
+as
+	exec core.[storeScriptVersion_OPH] @isdebug 
+	exec core.[storeScriptVersion_themes] @isdebug 
+	--exec [storeScriptVersion_Accounts] @isdebug 
+
+	exec core.storeScriptVersion_module 'oph'
+	exec core.storeScriptVersion_module 'eform'
+	exec core.storeScriptVersion_module 'libertyPT'
+	exec core.storeScriptVersion_module 'libertyTK'
+	exec core.storeScriptVersion_module 'egchrd'
+	exec core.storeScriptVersion_module 'operahouse'
+
+	exec core.storeScriptVersion_package
+
+

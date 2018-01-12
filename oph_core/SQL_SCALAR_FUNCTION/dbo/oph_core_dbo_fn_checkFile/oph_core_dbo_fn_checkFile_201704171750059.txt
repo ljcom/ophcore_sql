@@ -1,0 +1,25 @@
+CREATE function [dbo].[fn_checkFile] (@filePath varchar(1000))
+returns int
+--WITH ENCRYPTION
+as begin
+	--exec master..xp_fileexist 'c:\..'
+	
+	--sp_configure 'show advanced options', 1;
+	--go
+	--reconfigure;
+	--go
+	--sp_configure 'Ole Automation Procedures', 1;
+	--go
+	--reconfigure;
+		
+	declare @objFSys int, @fileExistence int
+	
+	exec sp_OACreate 'Scripting.FileSystemObject', @objFsys out
+	exec sp_OAMethod @objFSys, 'FileExists', @fileExistence out, @filePath
+	exec sp_OADestroy @objFSys
+	
+	return @fileExistence
+end
+	
+
+

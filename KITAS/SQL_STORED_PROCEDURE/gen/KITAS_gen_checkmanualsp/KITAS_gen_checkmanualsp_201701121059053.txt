@@ -1,0 +1,21 @@
+
+
+
+CREATE procedure [gen].[checkmanualsp] @function nvarchar(20)
+as
+	select sysObjects.id, sysObjects.name, text
+	from syscomments 
+		inner join sysObjects 
+			on sysComments.id = sysObjects.id
+	where text not like '%as --automatic creation by system, you have to remove this comment to customize this procedure%'
+		and sysObjects.xtype='P'
+		and sysObjects.name like '%'+@function+'%'
+		and sysObjects.uid=1
+		and syscomments.colid=1
+				
+	--select * from couserhoststat
+
+
+
+
+

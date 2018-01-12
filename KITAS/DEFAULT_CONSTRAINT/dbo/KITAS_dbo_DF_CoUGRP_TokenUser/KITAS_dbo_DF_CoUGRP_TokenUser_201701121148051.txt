@@ -1,0 +1,1 @@
+(CONVERT([nvarchar](50),[dbo].[ZeroGUID](),(0)))

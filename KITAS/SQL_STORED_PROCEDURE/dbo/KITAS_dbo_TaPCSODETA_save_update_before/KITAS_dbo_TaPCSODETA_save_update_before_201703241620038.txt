@@ -1,0 +1,62 @@
+CREATE PROCEDURE [dbo].[TaPCSODETA_save_update_before]	@GUID uniqueidentifier, @hostGUID uniqueidentifier, @PCSOGUID uniqueidentifier OUTPUT, @EVENGUID uniqueidentifier OUTPUT, @PRODGUID uniqueidentifier OUTPUT, @Qty int OUTPUT, @QtyReject int OUTPUT, @QtyReturn int OUTPUT, @isCancel bit = 0 OUTPUT, @msg nvarchar(1000) = '' OUTPUT--Automatic Parameters by OPH. Do Not Modify This Parameters Intentionally.
+
+as	--CreatedBy eLs ON Jan, 2017
+
+	declare @MaxQty int, @MaxSales money, @Price money, @availaible int
+
+	select
+		@MaxQty = MaxQty, @MaxSales = MaxSales, @Price = Price, @availaible = Availaible 
+	from MoEVEN a 
+		inner join MoEVENPSKU b ON a.EVENGUID = b.EVENGUID
+	where isDeleted = 0 AND a.EVENGUID = @EVENGUID AND PRODGUID = @PRODGUID
+
+	if @Qty &gt; @MaxQty begin
+		select @isCancel = 1, @msg = '3Maximum quantity for this product is ' + CAST(@MaxQty as varchar(2))
+		return
+	end
+	if @availaible = 0 begin
+		select @isCancel = 1, @msg = '3There is no availaible stock for this product.'
+		return
+	end
+	if (@Qty * @Price) &gt; @MaxSales begin
+		select @isCancel = 1, @msg = '3Maximum Total Price for this product is ' + CAST(@MaxSales as varchar(2))
+		return
+	end
+
+	declare @totalQty int, @sales money
+	select 
+		@totalQty = b.Qty, @sales = b.TotalPrice
+	from ToPCSO a
+		inner join (
+			select DocDate, CarolGUID, PRODGUID, Qty, TotalPrice
+			from ToPCSO a1
+				inner join ToPCSODETA b1 ON a1.PCSOGUID = b1.PCSOGUID 
+			where a1.PCSOGUID != @PCSOGUID
+		) b ON a.CarolGUID = b.CarolGUID AND b.PRODGUID = @PRODGUID 
+			and DATEPART(M, a.DocDate) = DATEPART(M, b.DocDate)
+	where a.PCSOGUID = @PCSOGUID
+	
+	if @Qty &gt; @MaxQty OR (@Qty + @totalQty) &gt; @MaxQty begin
+		select @isCancel = 1, @msg = '3You have reached your maximum buying quantities.'
+		return
+	end	
+	if @sales &gt; @MaxSales begin
+		select @isCancel = 1, @msg = '3You have reached your maximum buying budget.'
+		return
+	end
+
+	if @QtyReject &gt; @Qty begin
+		select @isCancel = 1, @msg = '3Qty. Reject can not exceed the main Quantity.'
+		return
+	end
+	
+	if @QtyReturn &gt; @Qty OR @QtyReturn &gt; (@Qty - @QtyReject) begin
+		select @isCancel = 1, @msg = '3Qty. Return can not exceed the main Quantity.'
+		return
+	end
+
+	if exists(select * from ToPCSODETA where PCSOGUID = @PCSOGUID AND PCSODETAGUID != @GUID AND PRODGUID = @PRODGUID) begin
+		select @isCancel = 1, @msg = '3There are already product with the same name in this document. Please use it instead.'
+		return
+	end
+

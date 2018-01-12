@@ -1,0 +1,20 @@
+
+CREATE PROCEDURE [xml].[sidebar]
+	@HostGUID uniqueidentifier, @ModuleGUID uniqueidentifier, @mode int, @xmlSidebar xml OUTPUT, @debug int=0
+as	--CreatedBy eLs ON Dec, 2016
+
+	--declare 
+	--	@HostGUID uniqueidentifier = gen.getHost('ap\restu.widiati', null), @ModuleGUID uniqueidentifier = '6EE876EE-38F1-44E7-8378-B770533E224E', 
+	--	@mode int = 10, @xmlSidebar xml, @debug int=1
+
+	declare @xmlMenu xml
+
+	--menu
+	exec xml.menu @HostGUID, @ModuleGUID, @mode, @xmlMenu OUTPUT, @debug
+
+	if @debug = 1 
+		select (select 'left' [@align], @xmlMenu [menus] for xml path('sidebar'), type) [xmlSidebar]
+	else 
+		set @xmlSidebar = (select 'left' [@align], @xmlMenu [menus] for xml path('sidebar'), type)
+
+

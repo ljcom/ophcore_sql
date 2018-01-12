@@ -1,0 +1,31 @@
+
+CREATE procedure [core].[refresh] @accountid varchar(50), @isdebug bit=0
+--WITH ENCRYPTION
+as
+	DECLARE #cur CURSOR
+	READ_ONLY
+	FOR 
+		select accountid, databasename 
+		from acct a
+			inner join acctdbse b
+				on a.accountguid=b.accountguid
+		where b.version='4.0' and b.isMaster=1 and AccountId=@accountid
+
+	DECLARE @db varchar(50)
+	OPEN #cur
+
+	FETCH NEXT FROM #cur INTO @accountid, @db
+	WHILE (@@fetch_status <> -1)
+	BEGIN
+		IF (@@fetch_status <> -2)
+		BEGIN
+			exec core.refresh_fulfillColumnInfo @db, @isdebug
+		END
+		FETCH NEXT FROM #cur INTO @accountid, @db
+	END
+
+	CLOSE #cur
+	DEALLOCATE #cur
+
+
+

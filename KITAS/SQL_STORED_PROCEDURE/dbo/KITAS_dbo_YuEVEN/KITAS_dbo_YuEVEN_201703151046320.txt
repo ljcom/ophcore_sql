@@ -1,0 +1,94 @@
+CREATE PROCEDURE [dbo].[YuEVEN] @fPath varchar(max), @sep varchar(10), @uGUID uniqueidentifier
+as	--CreatedBy eLs ON Jan, 2017
+
+	--declare 
+	--	@fPath varchar(max) = 'D:\EF_UPLD\document\temp\YtEVEN3.xlsx', 
+	--	@sep varchar(10) = '', 
+	--	@uGUID uniqueidentifier = '3444986B-926F-4C5C-A94D-CC68AC1F6188'
+
+	declare @sql nvarchar(MAX), @msg varchar(MAX)
+
+	set @sql= 'select ''' + cast(@uGUID as varchar(50)) + ''' [UploadGUID], * FROM OPENROWSET(''Microsoft.ace.OLEDB.12.0'', ''Excel 8.0;Database=' + @fPath + ';HDR=YES'', ''SELECT * FROM [YtEVEN$]'')'
+
+	set nocount on 
+	begin try
+		insert into MoEVENUPLD (UploadGUID, no_urut, event_name, product, price, qty)
+		exec(@sql)
+	end try
+	begin catch	
+		print ERROR_MESSAGE()
+		update CoUPLD set StatusUpload = ERROR_MESSAGE() where UploadGUID = @uGUID
+	end catch
+		
+	declare 
+		@EVENGUID uniqueidentifier, @no_urut int, @event_name varchar(200), 
+		@PRODGUID uniqueidentifier, @price money, @qty int, @newid uniqueidentifier
+
+	declare even cursor for
+		select 
+			b.EVENGUID, no_urut, ISNULL(b.Name, event_name) [eventName], d.PRODGUID, a.price, a.qty
+		from MoEVENUPLD a
+			left join oph.MaEVEN b ON a.event_name = b.Name OR b.ID = TRY_CONVERT(int, a.event_name)
+			left join oph.MaPROD d ON (a.product = d.Code OR a.product = d.Name)
+		where UploadGUID = @uGUID
+		order by no_urut
+	open even fetch next from even into @EVENGUID, @no_urut, @event_name, @PRODGUID, @price, @qty
+	while @@FETCH_STATUS = 0 begin
+		
+		--inserting new EVENT
+		if @EVENGUID is NULL AND @event_name is NOT NULL begin
+			set @newid = NEWID()
+
+			set nocount on
+			insert into MoEVEN(EVENGUID, Name) 
+			values (@newid, @event_name)
+
+			set @EVENGUID = @newid
+		end
+
+		--Updating even Product / inserting new product based on category
+		if @EVENGUID is NOT NULL and @PRODGUID is NOT NULL begin
+			if exists(select * from MoEVENPSKU where EVENGUID = @EVENGUID and PRODGUID = @PRODGUID) begin
+				set @msg = 'Row Updated'
+				set nocount on
+				update MoEVENPSKU set 
+					Price = @price, Qty = @qty
+				where EVENGUID = @EVENGUID and PRODGUID = @PRODGUID
+			end
+			else begin
+				set @msg = 'Row Inserted'
+				set nocount on
+				insert into MoEVENPSKU(EVENGUID, PRODGUID, Price, Qty)
+				values (@EVENGUID, @PRODGUID, @price, @qty)
+			end
+
+			if exists(select * from MoEVENPSKU where EVENGUID = @EVENGUID and PRODGUID = @PRODGUID)
+				set @msg = @msg + SPACE(1) + 'successfully.'
+
+			set nocount on
+			update MoEVENUPLD set Status = @msg where UploadGUID = @uGUID AND no_urut = @no_urut
+		end
+		else begin
+			set @msg = IIF(@event_name is NULL OR LEN(@event_name) &lt; 1, ', UNKNOWN "event_name" Values', '')
+			set @msg = @msg + IIF(@PRODGUID is NULL, ', UNKNOWN "product" Values', '')
+			set @msg = SUBSTRING(@msg, 3, LEN(@msg) - 2) + '.'
+
+			set nocount on
+			update MoEVENUPLD set Status = @msg where UploadGUID = @uGUID AND no_urut = @no_urut
+		end 
+
+		fetch next from even into @EVENGUID, @no_urut, @event_name, @PRODGUID, @price, @qty
+	end
+	close even deallocate even
+
+	if exists(select * from MoEVENUPLD where UploadGUID = @uGUID AND [Status] like '%unknown%') begin
+		update CoUPLD set 
+			StatusUpload = 'There was a problem in some rows. Please click &lt;a href="javascript:popTo(''../../include/messenger/msg_rptdialog.aspx?gbox=1&amp;parameter=&amp;outputType=4&amp;queryCode=YtEVENUR&amp;Parameter=GUID:'+cast(UploadGUID as varchar(50))+'&amp;titleName=&amp;subtitleName='');"&gt;here&lt;/a&gt; to review the upload result.'
+		where UploadGUID = @uGUID
+	end
+	else begin
+		update CoUPLD set 
+			StatusUpload = 'All rows was uploaded successfully.'
+		where UploadGUID = @uGUID
+	end
+

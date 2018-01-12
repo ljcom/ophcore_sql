@@ -1,0 +1,62 @@
+
+
+
+CREATE procedure [api].[function] 
+	@hostGUID uniqueidentifier, 
+	@mode varchar(20),
+	@code varchar(20),
+	@GUID uniqueidentifier,
+	@comment varchar(max),
+	@isDebug bit=0
+--WITH ENCRYPTION
+as
+
+	declare @timestamp datetime=current_timestamp
+
+	declare @ver varchar(10), @db varchar(50), @typecode varchar(1)
+	exec gen.getDBInfo @hostguid, @code, @ver output, @db output, @typecode output
+
+	declare @moduleGUID uniqueidentifier
+	select @moduleguid=ModuleGUID from modl where moduleid=@code
+
+	--check customized
+	declare @custom_proc nvarchar(max)=@code+'_'+@mode+'_custom'
+	declare @custom_par nvarchar(max)='@GUID uniqueidentifier, @hostGUID uniqueidentifier'
+	declare @isExists bit=0
+	if @ver='2.0' or @ver='4.0' begin
+		set @ver='4.0'
+		set @db=db_name()
+	end
+	exec gen.checkObject @custom_proc, 'dbo', @db, @isExists OUTPUT
+
+	if @isExists=1 begin
+		set @custom_proc='exec '+@db+'.dbo.'+@custom_proc+' '''+CAST(@GUID AS VARCHAR(50))+''', '''+CAST(@hostGUID AS VARCHAR(50))+''''
+		--set @custom_proc=@db+'.dbo'+@custom_proc
+		exec sp_executesql @custom_proc, @custom_par, @GUID, @hostGUID
+	end
+	else begin
+		--set @code=left(@code,1)+'o'+substring(@code,3,len(@code)-2)
+		print @mode
+		if @mode='delete' exec api.function_delete @hostGUID, @code, @GUID, @comment, @isDebug
+		else if @mode='restore' exec api.function_restore @hostGUID, @code, @GUID, @comment, @isDebug
+		else if @mode='wipe' exec api.function_wipe @hostGUID, @code, @GUID, @comment, @isDebug
+		else if @mode='force' exec api.function_force @hostGUID, @code, @GUID, @comment, @isDebug
+		else if @mode='reopen' exec api.function_reopen @hostGUID, @code, @GUID, @isDebug
+		else if @mode='execute' exec api.function_execute @hostGUID, @code, @GUID, @comment, @isDebug
+
+	end
+
+	--declare @timestamp datetime=current_timestamp
+	declare @comment1 nvarchar(max)='api.function @mode:'+isnull(cast(@mode as nvarchar(20)), '')+' @comment:'+isnull(cast(@comment as nvarchar(max)), '')
+	exec gen.evnt_save @hostGUID, @code, @GUID, @timestamp, @comment1
+	  
+
+
+
+
+
+
+
+
+
+

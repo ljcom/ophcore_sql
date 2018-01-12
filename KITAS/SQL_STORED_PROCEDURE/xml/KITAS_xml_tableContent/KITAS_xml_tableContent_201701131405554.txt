@@ -1,0 +1,81 @@
+
+CREATE procedure [xml].[tableContent] @tableName nvarchar(100), @xmlResult xml output, @withData bit=1, @schemaname nvarchar(10)='dbo'
+as
+	
+	/*declare @x xml = 
+			(select * 
+			from maCOUN
+			for xml path('row'))
+	*/
+	--
+	declare @sql nvarchar(max)
+	declare @x xml
+
+	if @withdata=1 begin
+		set @sql='declare @x xml
+			set @x = (select * 
+			from '+@tableName+'
+			for xml path(''row''))
+			select convert(nvarchar(max), @x)'
+		--print  @sql
+
+		create table #t (xxml xml)
+		insert #t 
+		exec (@sql)
+
+
+		set @x = (select xxml from #t)
+		drop table #t
+	end
+
+
+
+	declare @y xml = 
+			(select b.* from sys.objects a
+				inner join sys.columns b
+					on a.object_id=b.object_id
+				inner join sys.schemas c
+					on a.schema_id=c.schema_id
+			where a.name=@tableName
+				and c.name=@schemaname
+			for xml path('field'))
+
+	declare @z xml = 
+			(select a.* from sys.objects a
+			where a.name=@tableName
+			for xml path(''))
+
+	declare @w xml =
+			(select b.*,  
+				(select * 
+				from sys.index_columns c
+				where b.object_id=c.object_id
+					and b.index_id=c.index_id
+				for xml path('indexcol'), type) indexcols
+			from sys.objects a
+				inner join sys.indexes b
+					on a.object_id=b.object_id
+			where a.name=@tableName
+			for xml path('index'))
+
+	declare @v xml =
+			(select b.*
+			from sys.objects a
+				inner join sys.default_constraints b
+					on a.object_id=b.parent_object_id
+			where a.name=@tableName
+			for xml path('constraint'))
+
+--	select @v
+
+	set @xmlResult=(
+		select @z info, @y fields, @w indexes, @v constraints, @x rows
+			for xml path('table'), root('root'))
+
+--	select @xmlResult
+
+
+
+
+
+

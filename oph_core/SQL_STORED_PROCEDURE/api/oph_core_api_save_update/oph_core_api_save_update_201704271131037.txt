@@ -1,0 +1,55 @@
+CREATE procedure [api].[save_update] @accountid varchar(50), @dbcore varchar(50),
+	@hostGUID uniqueidentifier, @code varchar(50), @GUID uniqueidentifier, 
+	@saveList api.fieldList READONLY, @msg varchar(max) OUTPUT, @isDebug bit = 0
+--WITH ENCRYPTION
+as
+
+	declare @ver varchar(10), @db varchar(50), @typecode varchar(1)
+	exec gen.getDBInfo @accountid, @dbcore, @code, @ver output, @db output, @typecode output
+
+	declare @dbcode varchar(100)=@code
+	if @ver='3.0' set @dbcode=@db+'.dbo.'+@typecode+'o'+substring(@code,3,len(@code)-2)
+
+	declare @primaryCol varchar(50)
+	exec [api].[getPrimaryKey] @accountid, @dbcore, @code, @primaryCol OUTPUT
+	
+	declare @userGUID uniqueidentifier
+	select @userGUID=isnull(userGUID,gen.ZeroGUID()) from userhost where hostguid=@hostguid
+
+	set @userguid = isnull(@userGUID,gen.ZeroGUID())
+
+	if @isDebug=1 select @primarycol as primarycol,@userGUID as userguid,@dbcode as dbcode
+	if @isdebug=1 select * from @savelist
+	
+--updated 2017-03-21
+	declare @sqlstr nvarchar(max) = N'
+		update '+@dbcode+' set '+ 
+		stuff(
+			(select case when fieldvalue<>'' then ', '+fieldid+'='''+fieldValue+'''' else ', '+fieldid+'= NULL' end
+			from @saveList
+			where fieldid<>'cid'		
+			for xml  path('')), 1, 2, '')+', updatedDate=getdate(), updatedUser='''+cast(@userGUID as varchar(50))+''' '+
+		'where '+@primaryCol+'='''+convert(varchar(50),@GUID)+''''
+
+		--'where '+
+		--	stuff(
+		--	(select ', '+@primaryCol+'='''+fieldValue+'''' 
+		--	from @saveList
+		--	where fieldid='cid'		
+		--	for xml  path('')), 1, 2, '')
+
+	declare @sqlpar nvarchar(max) = N'@msg varchar(max) OUTPUT'
+	set @sqlstr='
+		begin try
+		'+@sqlstr+'
+		end try
+		begin catch
+			set @msg=error_message()
+		end catch'		
+	
+	if @isDebug=1 select @sqlstr,@sqlpar, @userGUID,@primaryCol,@dbcode
+	exec sp_executesql @sqlstr, @sqlpar, @msg OUTPUT
+
+
+
+

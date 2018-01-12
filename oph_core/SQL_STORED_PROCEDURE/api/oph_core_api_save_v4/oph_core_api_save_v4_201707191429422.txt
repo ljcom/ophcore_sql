@@ -1,0 +1,147 @@
+CREATE procedure [api].[save_v4] 
+	@hostGUID uniqueidentifier, @code varchar(20), @GUID uniqueidentifier, @saveXML xml, @preview int=0, @isDebug bit=0
+--WITH ENCRYPTION
+as	
+--declare 
+--	@hostGUID uniqueidentifier = gen.gethost('ap\iman.satyagraha'), @code varchar(20) = 'Tadedu', 
+--	@GUID uniqueidentifier = 'AA99A611-61D9-4505-88F7-00C483B92C50', @saveXML xml = '<sqroot><field id="q"><value>,</value></field><field id="cid"><value>AA99A611-61D9-4505-88F7-00C483B92C50</value></field><field id="tadedurequiredname"><value>, TypeGUID, Description, ChainGUID, DivisionGUID</value></field><field id="tadedurequiredtblvalue"><value></value></field><field id="DEDUNo"><value>DN15B0161</value></field><field id="DEDURefNo"><value></value></field><field id="DEDUDate"><value>03/11/2015</value></field><field id="TypeGUID"><value>3370B7B7-02CE-4BDD-85DA-7AA3496DE46F</value></field><field id="Description"><value>SEWA TEMPAT PAJANG PERIODE 04-12-2014 SD 31-12-2014 LSI ,SFT,GDP  GRAND OPENING </value></field><field id="DeductionDate"><value>07/01/2017</value></field><field id="Amount"><value>2,750,000</value></field><field id="isPPN"><value>1</value></field><field id="cbisPPN"><value>1</value></field><field id="InvoiceNo"><value>360251214</value></field><field id="InvoiceAmount"><value>2,750,000</value></field><field id="ChainGUID"><value>C537ED5E-1BC6-44DB-8140-28894EDB7CD8</value></field><field id="DivisionGUID"><value>0812CEDD-2CE2-4D04-AA21-A8CC5C10A3D7</value></field><field id="BrandGUID"><value></value></field><field id="DocumentFlag"><value>IsCompleted</value></field><field id="isBookedAcc"><value>0</value></field><field id="isWriteOff"><value>0</value></field><field id="Comment"><value></value></field></sqroot>'
+--	, @preview int=0, @isDebug bit=1
+
+	SET NOCOUNT ON
+	declare @ver varchar(10), @db varchar(50), @typecode varchar(1), @accountid varchar(50), @coreDB varchar(50)
+
+	exec gen.getDBInfo @hostguid, @code, @ver output, @db output, @typecode output, 
+		@accountid=@accountid output, @coreDB=@coreDB output
+
+	declare @PrimaryKey nvarchar(50), @sqlstr nvarchar(max), 
+		@insertStr nvarchar(max), @insertField nvarchar(max),
+		@updateStr nvarchar(max), @colKey nvarchar(max), @msg varchar(MAX)
+	declare @cid uniqueidentifier, @parentKey nvarchar(50)
+
+	--check parent
+	set @sqlstr='
+		select @parentKey=colkey 
+		from modl a
+			inner join modl b on a.parentmoduleguid=b.moduleguid
+			inner join modlcolm c on b.moduleguid=c.moduleguid and c.colorder=1
+		where a.moduleid='''+@code+'''
+	'
+	exec sp_executesql @sqlstr, N'@parentKey nvarchar(50) OUTPUT', @parentKey OUTPUT
+
+	select @cid=typenode.value('value[1]', 'varchar(MAX)')
+	from @saveXML.nodes('/sqroot/field') AS XTbl(typenode)
+	where typenode.value('@id', 'varchar(50)')='cid'
+	--
+	
+	--set @PrimaryKey = api.fn_PrimaryKey (@code)
+	exec api.getPrimaryKey @hostguid, @code, @PrimaryKey OUTPUT
+	declare @isNew bit=iif(ISNULL(@GUID, gen.ZeroGUID()) = gen.ZeroGUID(),1,0)
+
+	set @colKey = STUFF((
+		select ','+ColKey 
+		--select *
+		from modlcolm a
+			inner join modlcolminfo b ON a.ColumnGUID = b.ColumnGUID
+			inner join modl c ON a.ModuleGUID = c.ModuleGUID
+		where c.ModuleId = @code 
+			and b.InfoKey = 'isEditable' and (b.infoValue = '1' or (@isNew=1 and b.infoValue = '2'))
+		order by colkey
+		for xml path('')), 1, 1, '')
+
+	declare @codex nvarchar(100)=gen.codex(@hostguid, @code, 1)		
+	
+	if @typecode='C' begin
+		print 'type: C'
+		set @insertField = STUFF((
+			select ', '+col+'' 
+			from (
+				select top 1000
+					typenode.value('@id', 'varchar(50)') col
+				from @saveXML.nodes('/sqroot/field') AS XTbl(typenode)
+				where charindex(typenode.value('@id', 'varchar(50)')+',', @colKey+',')>=1
+				order by typenode.value('@id', 'varchar(50)')
+			) x
+			for xml path('')), 1, 2, ''
+		)
+		set @updateStr = STUFF((
+			select ', '+col +' = '''+ val +''''
+			from (
+				select top 1000 typenode.value('@id', 'varchar(50)') col, replace(typenode.value('value[1]', 'varchar(MAX)'),'''','''''') val
+				from @saveXML.nodes('/sqroot/field') AS XTbl(typenode)
+				where @colKey+',' like '%' + typenode.value('@id', 'varchar(50)') + ',' + '%'
+				order by typenode.value('@id', 'varchar(50)')
+			) x
+			for xml path('')), 1, 2, ''
+		)
+	end
+	else begin
+		print 'Type: ' + @typecode
+		set @insertField = STUFF((
+			select ', ['+replace(cast(colKey as nvarchar(50)), '-', '')+']' 
+			from (
+				select top 1000 
+					typenode.value('@id', 'varchar(50)') col
+				from @saveXML.nodes('/sqroot/field') AS XTbl(typenode)
+				where charindex(typenode.value('@id', 'varchar(50)'), @colKey)>=1
+				order by typenode.value('@id', 'varchar(50)')
+			) x
+				inner join modlcolm y on x.col=y.colkey
+				inner join modl z on y.ModuleGUID=z.moduleguid and z.moduleid=@code
+			for xml path('')), 1, 2, ''
+		)
+
+		set @updateStr = STUFF((
+			select ', ['+replace(cast(colKey as nvarchar(50)), '-', '') +'] = '''+ val +''''
+			from (
+				select top 1000 typenode.value('@id', 'varchar(50)') col, replace(typenode.value('value[1]', 'varchar(MAX)'),'''','''''') val
+				from @saveXML.nodes('/sqroot/field') AS XTbl(typenode)
+				where @colKey like '%' + typenode.value('@id', 'varchar(50)') + '%'
+				order by typenode.value('@id', 'varchar(50)')
+			) x	
+				inner join modlcolm y on x.col=y.colkey
+				inner join modl z on y.ModuleGUID=z.moduleguid and z.moduleid=@code
+			for xml path('')), 1, 2, ''
+		)
+
+		set @PrimaryKey = 'DocGUID'
+	end
+
+	set @insertStr = STUFF((
+		select
+			', '''+ replace(typenode.value('value[1]', 'varchar(MAX)'),'''','''''') +''''
+		from @saveXML.nodes('/sqroot/field') AS XTbl(typenode)
+		where charindex(typenode.value('@id', 'varchar(50)')+',', @colKey+',')>=1
+		order by typenode.value('@id', 'varchar(50)')
+		for xml path('')), 1, 2, ''
+	)
+	set @insertStr=replace(@insertStr, '''''', 'null')
+
+	if @isNew=1 begin
+		--'SQL Query Insert' + char(10) + '================'
+		set @GUID=NEWID()
+		set @insertStr = REPLACE(@insertStr, '&amp;', '&')
+		set @sqlstr = 'insert into ' + @codex + ' (' + @PrimaryKey + iif(isnull(@parentKey,'')='','', ', '+@parentKey) + ',' + @insertField + ')' + char(10) +
+			'values(''' + cast(@GUID as varchar(50)) + '''' + iif(isnull(@parentKey,'')='','', ', '''+cast(@cid as varchar(50))+'''') + ',' + @insertStr + ')'
+	end
+	else begin
+		--'SQL Query Update' + char(10) + '================'
+		
+		set @updateStr = replace(@updateStr, '''''', 'null')
+		set @updateStr = REPLACE(@updateStr, '&amp;', '&')
+		set @sqlstr = 'update ' + @codex + ' set ' + @updateStr + ' where ' + @PrimaryKey + ' = ''' + CAST(@GUID as varchar(50)) + ''''
+	end
+
+	--run the scripts
+	if @preview=0 begin
+		begin try
+			print @sqlstr
+			exec(@sqlstr)
+		end try
+		begin catch
+			set @msg = ERROR_MESSAGE()
+			set @guid = null
+		end catch
+	end
+
+	select @msg 'message', @GUID 'guid' for xml path('sqroot')
+

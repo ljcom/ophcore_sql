@@ -1,0 +1,14 @@
+
+
+
+
+
+
+CREATE view [dbo].[MoHOME]
+as
+select newid() [HomeGUID], 1 ID, 'Slider' [Name], 1 '[OrderNo]'
+,0 isDeleted, getdate() CreatedDate, newid() CreatedUser, getdate() UpdatedDate, newid() UpdatedUser, getdate() DeletedDate, newid() DeletedUser
+
+
+
+

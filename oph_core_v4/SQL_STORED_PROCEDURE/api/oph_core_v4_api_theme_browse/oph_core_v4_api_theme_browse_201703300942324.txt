@@ -1,0 +1,42 @@
+
+
+CREATE procedure [api].[theme_browse] 
+	@hostGUID uniqueidentifier,
+	@code varchar(100), 
+	@sqlFilter varchar(max)='', 
+	@searchText varchar(100)='', 
+	@pgNo int=1, 
+	@nbRows int=10,
+	@sortOrder varchar(max)='', 
+	@stateid varchar(10)='', 
+	@isdebug int=0
+as
+	
+	declare @userGUID uniqueidentifier, @accountGUID uniqueidentifier
+
+	select @userGUID=a.userGUID, @accountGUID=b.accountGUID 
+	from userhost a 
+		inner join [user] b on a.userguid=b.userguid
+	where hostguid=@hostguid
+
+	declare @db varchar(50)=api.fn_checkDB(@code)
+	declare @ver varchar(10), @settingMode int
+
+	select @ver=[version], @settingMode=settingMode
+	--select * 
+	from modl a
+		inner join acctdbse	b 
+			on a.accountdbguid=b.accountdbguid
+	where moduleid=@code --and a.AccountGUID=@accountGUID
+
+	if @ver='3.0' begin
+		if @isdebug = 1 print 'exec [api].[theme_browse_v3] '''+convert(nvarchar(max),@hostGUID)+''', '''+ convert(nvarchar(max),@code)+''', '''+ @sqlFilter+''','''+ @searchText+''','''+convert(nvarchar(max), @pgNo)+''','''+ convert(nvarchar(max),@nbRows)+''','''+ @sortOrder+''','''+ convert(nvarchar(max),@stateid)+''',0'
+		exec [api].[theme_browse_v3] @hostGUID, @code, @sqlFilter, @searchText, @pgNo, @nbRows, @sortOrder, @stateid, 0
+	end
+	else begin 
+		if @isdebug = 1 print 'exec [api].[theme_browse_v4] '''+convert(nvarchar(max),@hostGUID)+''','''+ convert(nvarchar(max),@code)+''','''+ @sqlFilter+''','''+ @searchText+''','''+convert(nvarchar(max), @pgNo)+''','''+ convert(nvarchar(max),@nbRows)+''','''+ @sortOrder+''','''+ convert(nvarchar(max),@stateid)+''',0'
+		exec [api].[theme_browse_v4] @hostGUID, @code, @sqlFilter, @searchText, @pgNo, @nbRows, @sortOrder, @stateid, 0
+	
+
+	end
+

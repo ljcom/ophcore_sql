@@ -1,0 +1,91 @@
+
+CREATE procedure [gen].[addview]	@viewName varchar(50), @parameter varchar(200), @content varchar(max), 
+	@schema varchar(10)='dbo', @isEnc bit=1, @isdebug bit=0
+as
+
+-- ver 20141119
+
+	declare @sqlstr varchar(max)
+
+	if exists (select * from sys.objects a
+				inner join syscomments b
+					on a.object_id=b.id
+				inner join sys.schemas c
+					on a.schema_id=c.schema_id
+				where a.name like @viewName and encrypted=1
+					and c.name=@schema)
+	begin
+		set @sqlstr='drop view '+@schema+'.'+@viewName
+		if @isdebug=1 print @sqlstr
+		exec (@sqlstr)
+	end
+
+
+	if not exists (
+		select * 
+		from sysObjects
+		where name = @viewName) 
+	begin
+		set @sqlstr = 'create view ' + @schema + '.' + @viewName + char(13) + char(10) + 
+			case when @isEnc=1 then 'with encryption'+ char(13) + char(10) else '' end +
+			'as --automatic creation by system, you have to remove this comment to customize this view' + char(13) + char(10) + ' ' --+
+
+		if @isdebug=1 print @sqlstr+@content
+		exec (@sqlstr+@content)
+		--exec sp_CaMODLSCRP_save null, null, @moduleGUID, @viewName, @parameter, @sqlstr, 1
+	end
+	else
+	begin
+		if exists (
+			select text from syscomments 
+			inner join sysObjects on sysComments.id = sysObjects.id
+			where sysObjects.name = @viewName and text like '%as --automatic creation by system, you have to remove this comment to customize this view%')
+		begin
+			set @sqlstr = 'alter'+' '+'view ' + @schema + '.' + @viewName + char(13) + char(10) + 
+				case when @isEnc=1 then 'with encryption'+ char(13) + char(10) else '' end +
+				'as --automatic creation by system, you have to remove this comment to customize this view' + char(13) + char(10) + ' ' --+
+
+			if @isdebug=1 print @sqlstr+@content
+
+			exec (@sqlstr+@content)
+
+			--exec sp_CaMODLSCRP_save null, null, @moduleGUID, @viewName, @parameter, @sqlstr, 1
+		end
+		else begin
+			if exists (
+				select text from syscomments 
+				inner join sysObjects on sysComments.id = sysObjects.id
+				where sysObjects.name = @viewName and text like '%' + @parameter + '%')
+			begin
+				select @sqlstr = text 
+				from syscomments 
+					inner join sysObjects on sysComments.id = sysObjects.id
+				where sysObjects.name = @viewName
+
+				--exec sp_CaMODLSCRP_save null, null, @moduleGUID, @viewName, @parameter, @sqlstr, 0	--not automatic and increase version
+			end
+			else
+			begin
+				select @sqlstr = text 
+				from syscomments 
+					inner join sysObjects on sysComments.id = sysObjects.id
+				where sysObjects.name = @viewName
+
+				--exec sp_CaMODLSCRP_save null, null, @moduleGUID, @viewName, @parameter, @sqlstr, 2	--error
+			end
+		end
+	end
+
+
+
+
+
+
+
+
+
+
+
+
+
+

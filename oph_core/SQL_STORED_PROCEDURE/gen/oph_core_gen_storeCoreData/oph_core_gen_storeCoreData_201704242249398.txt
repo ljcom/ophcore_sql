@@ -1,0 +1,94 @@
+
+
+CREATE PROCEDURE [gen].[storeCoreData]
+--WITH ENCRYPTION
+as
+	declare @xml varchar(max)
+	set @xml= (select
+		(select * from acct
+		for xml path('rows'), type) acct,
+		(select * from acctdbse
+		for xml path('rows'), type) acctdbse,
+		(select * from acctinfo
+		for xml path('rows'), type) acctinfo,
+		(select * from menu
+		for xml path('rows'), type) menu,
+		(select * from menusmnu
+		for xml path('rows'), type) menusmnu,
+		(select * from modg
+		for xml path('rows'), type) modg,
+		(select * from modginfo
+		for xml path('rows'), type) modginfo,
+		(select * from modgmodl
+		for xml path('rows'), type) modgmodl,
+		(select * from modl
+		for xml path('rows'), type) modl,
+		(select * from modlappr
+		for xml path('rows'), type) modlappr,
+		(select * from modlcolm
+		for xml path('rows'), type) modlcolm,
+		(select * from modlcolminfo
+		for xml path('rows'), type) modlcolminfo,
+		(select * from modldocn
+		for xml path('rows'), type) modldocn,
+		(select * from modlinfo
+		for xml path('rows'), type) modlinfo,
+		(select * from modlqury
+		for xml path('rows'), type) modlqury,
+		(select * from msta
+		for xml path('rows'), type) msta,
+		(select * from mstastat
+		for xml path('rows'), type) mstastat,
+		(select * from qury
+		for xml path('rows'), type) qury,
+		(select * from quryinfo
+		for xml path('rows'), type) quryinfo,
+		(select * from qurypara
+		for xml path('rows'), type) qurypara,
+		(select * from thme
+		for xml path('rows'), type) thme,
+		(select * from thmepage
+		for xml path('rows'), type) thmepage,
+		(select * from ugrp
+		for xml path('rows'), type) ugrp,
+		(select * from ugrpinfo
+		for xml path('rows'), type) ugrpinfo,
+		(select * from ugrpmodg
+		for xml path('rows'), type) ugrpmodg,
+		(select * from ugrpmodl
+		for xml path('rows'), type) ugrpmodl,
+		(select * from ugrpuser
+		for xml path('rows'), type) ugrpuser,
+		(	select UserGUID, AccountGUID, UserID, UserName, Email, AutoLogin, LastLogin
+			from [user]
+		for xml path('rows'), type) [user],
+		(select * from userdele
+		for xml path('rows'), type) userdele,
+		(select * from userinfo
+		for xml path('rows'), type) userinfo
+	for xml path('tables'), root('sqroot'))
+
+	if exists(select * from tempdb.sys.objects where name='##script') drop table ##script
+
+	select @xml sqlData into ##script
+	
+	declare @folder varchar(100), @file varchar(100), @cmd nvarchar(1000)
+
+	set @folder='D:\vsOnline\OPERAHOUSE\scripts\'+DB_NAME()+'\data\core\'+DB_NAME()+'_core'
+	set @file=DB_NAME()+'_core_'+replace(convert(varchar(10), getdate(),102),'.','')+replace(convert(varchar(10), getdate(),114),':','')+'.xml'
+
+	exec gen.cmdCreateFolders @folder
+
+	if gen.fn_checkFile(@folder+'\'+@file)=0
+	begin
+		--select @cmd = 'osql -E -d'+db_name()+' -Q"select sqltext ''--script'' from ##script" -o"'+@folder+'\'+@file+'" -w500'
+		select @cmd = 'bcp "select sqldata from ##script" queryout "'+@folder+'\'+@file+'" -c -T -d'+db_name()
+		print @cmd
+		exec master..xp_cmdshell @cmd
+	end
+
+
+
+
+
+

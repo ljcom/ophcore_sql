@@ -1,0 +1,23 @@
+
+CREATE function [gen].[isRequestor](@userGUID uniqueidentifier, @moduleid varchar(6))
+returns bit
+as
+begin
+	declare @return bit=0
+
+	if exists(
+		select * from CoAPPR a
+			inner join CoAPPRLVEL b
+				on a.ApprovalGUID=b.ApprovalGUID
+				and b.lvl&lt;100
+			inner join comodl c
+				on a.ModuleGUID=c.ModuleGUid
+				and c.moduleid=@moduleid
+			inner join cougrpuser1 d
+				on b.ApprovalGroupGUID=d.UGroupGUID
+		where d.memberuserguid=@userGUID)
+		set @return=1
+
+	return @return
+end
+

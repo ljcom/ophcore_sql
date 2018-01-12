@@ -1,0 +1,31 @@
+
+
+CREATE procedure [core].[migrateData_addApproval] @accountid nvarchar(50), @coreDB nvarchar(50), @dataDB nvarchar(50), @v3db nvarchar(50), @tablename nvarchar(50)
+as
+
+	declare @fieldKey nvarchar(50)
+	declare @sqlstr nvarchar(max)='	
+		select @fieldkey=a.colkey 
+		from '+@datadb+'.dbo.modlcolm a 
+			inner join '+@datadb+'.dbo.modl b 
+				on a.moduleguid=b.moduleguid 
+				and colOrder=(select min(colorder) colorder from '+@datadb+'.dbo.modlcolm c where c.moduleguid=a.ModuleGUID)
+		where b.moduleid='''+@tablename+''''
+
+	exec sp_executesql @sqlstr, N'@fieldKey nvarchar(50) output', @fieldKey output
+	set @sqlstr='
+		insert into '+@dataDB+'.dbo.docmaprv 
+			(DocAprvGUID, DocGUID, AprvUserUID, AprvLevel, Status, DelegateUserGUID, UGroupGUID, AprvDate, Reason, createdDate, updatedDate)
+		select newid(), a.'+@fieldKey+', ApprovalUserGUID, lvl, isnull(status,0), DelegateUserGUID, UGroupGUID, createdDate, null, createdDate, updatedDate 
+		from '+@v3db+'.dbo.'+stuff(@tablename, 2, 1, 'o')+'APRV a
+			inner join (select '+@fieldKey+' from '+@v3db+'.dbo.'+stuff(@tablename, 2, 1, 'o')+') b on a.'+@fieldKey+'=b.'+@fieldKey+'		
+		'
+
+	--print @sqlstr
+	exec sp_executesql @sqlstr
+
+
+
+
+
+

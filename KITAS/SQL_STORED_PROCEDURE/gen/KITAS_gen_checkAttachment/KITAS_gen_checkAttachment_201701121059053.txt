@@ -1,0 +1,50 @@
+
+
+
+
+
+
+CREATE procedure [gen].[checkAttachment]
+as
+	--WADJ
+	update toWADJ
+	set StatusErrorNo=8
+	--select *
+	from toWADJ a
+		inner join MoWARS b
+			on a.ReasonGUID=b.ReasonGUID
+	where Status=4
+		and (wadjAttachment is null 
+			or (flatAttachment is null and b.needFlatFile=1)
+			or (flatAttachment2 is null and b.needFlatFile=1)
+			or dbo.fn_checkFile('\\idcorpidapp01\ljaccess\web\eform\document\taWADJ\'+wadjAttachment)=0
+			or (dbo.fn_checkFile('\\idcorpidapp01\ljaccess\web\eform\document\taWADJ\'+flatAttachment)=0 and b.needFlatFile=1)
+			or (dbo.fn_checkFile('\\idcorpidapp01\ljaccess\web\eform\document\taWADJ\'+flatAttachment2)=0 and b.needFlatFile=1))
+
+	--SRET
+	update toSRET
+	set StatusErrorNo=8
+	--select *
+	from toSRET a
+	where Status=4
+		and (SRETAttachment is null 
+			or dbo.fn_checkFile('\\idcorpidapp01\ljaccess\web\eform\document\taSRET\'+SRETAttachment)=0)
+			
+	--DOSA
+	update toDOSA
+	set StatusErrorNo=8
+	--select *
+	from toDOSA a
+	where Status=4
+		and (DSAttachment is null 
+			or FLATAttachment is null 
+			or dbo.fn_checkFile('\\idcorpidapp01\ljaccess\web\eform\document\taDOSA\'+DSAttachment)=0
+			or dbo.fn_checkFile('\\idcorpidapp01\ljaccess\web\eform\document\taDOSA\'+FLATAttachment)=0)
+			
+
+
+
+
+
+
+

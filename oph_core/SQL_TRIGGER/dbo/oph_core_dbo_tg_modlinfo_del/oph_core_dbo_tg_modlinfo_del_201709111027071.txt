@@ -1,0 +1,24 @@
+
+
+CREATE TRIGGER [dbo].[tg_modlinfo_del]
+   ON  [dbo].[modlinfo]
+   AFTER delete
+AS 
+BEGIN
+	-- SET NOCOUNT ON added to prevent extra result sets from
+	-- interfering with SELECT statements.
+	SET NOCOUNT ON;
+
+    -- Insert statements for trigger here
+	if exists(select * from deleted) begin
+		declare @c nvarchar(max)
+		set @c=(
+			select * 
+			FROM deleted
+			for xml path('modlinfo')
+		)
+		INSERT INTO evnt (EventGUID, AccountGUID, moduleGUID, DocGUID, timeRecord, Comment, CreatedDate, CreatedUser)
+		select newid(), null, null, null, 0, @c, getdate(), null
+	end
+END
+

@@ -1,0 +1,41 @@
+
+
+
+
+
+
+
+
+
+CREATE procedure [gen].[extractTableDef_save] @curTableName nvarchar(50), @filename nvarchar(100)
+as
+/*
+EXEC sp_configure 'show advanced options', 1
+GO
+RECONFIGURE
+GO
+EXEC sp_configure 'xp_cmdshell', 1
+GO
+RECONFIGURE
+*/
+
+	declare @svr nvarchar(100)
+	declare @hst nvarchar(100)
+	declare @dbn nvarchar(100)
+	
+	set @svr=@@SERVERNAME
+	set @hst=USER_NAME()
+	set @dbn=DB_NAME()
+
+	declare @sqlstr nvarchar(1000)
+	SELECT @sqlstr = 'sqlcmd -S '+@svr+' -E -y0 -Q "set nocount on; exec '+@dbn+'.'+@hst+'.gen.extractTableDef '+@curTableName+'" -b -u -o '+@filename
+	--print @sqlstr
+	EXEC master.dbo.xp_cmdshell @sqlstr, no_output 
+
+
+
+
+
+
+
+

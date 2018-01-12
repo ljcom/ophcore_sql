@@ -1,0 +1,9 @@
+CREATE procedure oph.TaCONFDETA_list
+@account nvarchar(20), @GUID uniqueidentifier=null, @hostGUID uniqueidentifier
+as --automatic creation by system, you have to remove this comment to customize this procedure
+ 	declare @newid uniqueidentifier
+	set @newid = newid()
+
+	select TaCONFDETA.Product, TaCONFDETA.Price, TaCONFDETA.Qty, TaCONFDETA.PRODGUIDcbId, TaCONFDETA.PRODGUIDcbNm, TaCONFDETA.NewPrice, TaCONFDETA.NewQty
+	from oph.TaCONFDETA TaCONFDETA
+	where isnull(CONFGUID, @newid)=case when @GUID is null then isnull(CONFGUID, @newid) else @GUID end

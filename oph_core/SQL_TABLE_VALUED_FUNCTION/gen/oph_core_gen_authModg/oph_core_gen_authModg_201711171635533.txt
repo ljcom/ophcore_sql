@@ -1,0 +1,23 @@
+
+
+CREATE function [gen].[authModg] (@hostGUID uniqueidentifier)
+RETURNS 
+@result TABLE 
+(moduleGroupGUID uniqueidentifier, moduleGroupId nvarchar(50))
+--WITH ENCRYPTION
+AS
+BEGIN
+	
+	insert into @result (moduleGroupGUID, moduleGroupId)
+	select distinct w.moduleGroupGUID, moduleGroupId
+	--select *
+	from modg w
+		cross join ugrp x
+		inner join gen.authugrp(@hostguid) y on x.UGroupGUID=y.ugroupGUID
+		inner join acct a on w.AccountGUID=a.AccountGUID
+	where iif(CHARINDEX(cast(w.modulegroupguid as varchar(50)), x.Tokenenv)>0,1,0)<>x.allExceptenv
+		
+	RETURN 
+END
+
+

@@ -1,0 +1,22 @@
+
+
+CREATE procedure [gen].[ugrpinfo_save] @ugroupguid uniqueidentifier, @key nvarchar(50), @value nvarchar(max)
+as
+	if exists(select * from ugrpinfo where ugroupguid=@ugroupguid and infokey=@key)
+	begin
+		--update
+		update ugrpinfo
+		set Infovalue=@value
+		where ugroupguid=@ugroupguid and infokey=@key
+	end
+	else
+	begin
+		--insert
+		insert into ugrpinfo (ugroupguid, infokey, infovalue)
+		values (@ugroupguid, @key, @value)
+	end
+
+
+
+
+

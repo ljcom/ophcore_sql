@@ -1,0 +1,59 @@
+
+
+
+
+CREATE procedure [gen].[addcolumn] @tableId int, @tableName nvarchar(50), 
+	@field nvarchar(50), @parameter nvarchar(200)
+as
+	declare @sqlstr varchar(8000)
+	if not exists (
+		select * 
+		from syscolumns 
+		where id = @tableId and name = @field) 
+	begin
+		set @sqlstr = 'alter table ' + @tableName + ' add ' + @field + ' ' + @parameter
+		print @sqlstr
+		exec (@sqlstr)
+		
+		DECLARE #cur90 CURSOR
+		READ_ONLY
+		FOR select name 
+			from sysobjects 
+			where xtype='v' 
+				and name like left(@tablename,1)+'%'+substring(@tablename,3,len(@tablename)-2)
+
+		DECLARE @name varchar(40)
+		OPEN #cur90
+
+		FETCH NEXT FROM #cur90 INTO @name
+		WHILE (@@fetch_status &lt;&gt; -1)
+		BEGIN
+			IF (@@fetch_status &lt;&gt; -2)
+			BEGIN
+				exec sp_refreshview @name
+			END
+			FETCH NEXT FROM #cur90 INTO @name
+		END
+
+		CLOSE #cur90
+		DEALLOCATE #cur90
+	end
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

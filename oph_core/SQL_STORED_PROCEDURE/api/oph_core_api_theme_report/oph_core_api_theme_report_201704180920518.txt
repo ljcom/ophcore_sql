@@ -1,0 +1,127 @@
+
+
+
+
+
+
+
+
+CREATE procedure [api].[theme_report] @accountid varchar(50), @dbcore varchar(50), 
+	@hostGUID uniqueidentifier, @code varchar(100)
+--WITH ENCRYPTION
+as	--CreatedBy eLs ON Mar, 2017
+
+	declare @theme varchar(50)
+	exec gen.getDBInfo @accountid, @dbcore, @code, @themename=@theme output
+
+	--declare @hostGUID uniqueidentifier ='87DDEA98-B636-4E18-9E15-479C3FA473AC', @code varchar(100)='YoPCSOSUM'
+
+	declare @ModuleGUID uniqueidentifier, @QueryGUID uniqueidentifier
+	select @ModuleGUID = a.ModuleGUID, @QueryGUID = QueryGUID from modl a 
+		inner join qury b ON a.ModuleGUID = b.ModuleGUID
+	where ModuleID = @code
+
+	declare @xmlInfo xml
+	set @xmlInfo = (
+		select 
+			ModuleID [code], ModuleDescription [description], QuerySQL [querySQL], case when AllowPDF = 1 and AllowXLS = 0 then PDFTitleName
+				when AllowXLS = 1 and AllowPDF = 0 then XLSTitleName else ModuleID end [reportName],
+			AllowPDF [permission/allowPDF], AllowXLS [permission/allowXLS], IIF(QueryTypeFlag='isDownload', 1, 0) [permission/allowDownload]
+		--select *
+		from modl a
+			inner join qury b ON a.ModuleGUID = b.Moduleguid
+		where ModuleID = @code
+		for xml path(''), type
+	)
+
+	declare @xmlParameter xml
+	set @xmlParameter = (
+		select 
+			OrderNo [queryRows/queryRow/@rowNo],QueryParName [queryRows/queryRow/fields/field/@fieldName], 
+			1 [queryRows/queryRow/fields/field/@isEditable], 0 [queryRows/queryRow/fields/field/@isNullable], 
+			CONVERT(xml, [field]) [queryRows/queryRow/fields/field]
+		--select *
+		from qurypara a
+			left join (
+				select 
+					QueryParameterGUID, case QueryParTypeFlag 
+						when'isDate' then '&lt;dateBox&gt;' else '' 	
+					end + '&lt;titlecaption&gt;'+QueryParCaption+'&lt;/titlecaption&gt;' + '&lt;value&gt;' + 
+					case QueryParTypeFlag 
+						--when'isDate' then REPLACE(CONVERT(varchar(50), GETDATE(), 102), '.', '-')+'T'+CONVERT(varchar(50), GETDATE(), 108)
+						when'isDate' then CONVERT(varchar(50), GETDATE(), 101)
+					else '' end + '&lt;/value&gt;' + IIF(QueryParTypeFlag='isDate', '&lt;dateType&gt;40&lt;/dateType&gt;', '') +
+					case QueryParTypeFlag 
+						when'isDate' then '&lt;/dateBox&gt;' else '' 	
+					end [field]
+				from qurypara 
+			) b ON a.QueryParameterGUID = b.QueryParameterGUID
+		where QueryGUID = @QueryGUID
+		order by OrderNo
+		for xml path('')
+	)
+
+	set @xmlParameter = (select 1 [queryCols/queryCol/@colNo], @xmlParameter [queryCols/queryCol] for xml path (''))
+	set @xmlParameter = (
+		select 
+			1 [querySections/querySection/@sectionNo], 'Report Parameters' [querySections/querySection/@rowTitle], 
+			@xmlParameter [querySections/querySection]
+		for xml path('')
+	)
+	select (
+		select (
+			--info
+			select 
+				--account
+				@accountid account, 
+				--themeFolder
+				@theme 'themeFolder',
+				--title
+				(select ModuleDescription from modl where moduleid=@code) title, 
+				--code
+				(select moduleid id, ModuleDescription name from modl where moduleid=@code for xml path(''), elements, type) code, 
+				--user
+				(select userId, userName, '' userURL, hostGUID 
+				from userhost a
+					inner join [user] b
+						on a.userguid=b.userguid
+				where hostguid=@hostGUID
+				for xml path(''), elements, type) [user]	 
+			for xml path(''), elements, type
+			) info, 
+			--menus
+			(select menucode '@code', 
+				--submenus
+				(select [type] '@type', caption, url pageURL, icon_fa fa,
+					--submenus
+					(select [type] '@type', caption, url pageURL, icon_fa fa
+					from menusmnu c
+					where c.uppersubmenuGUID=b.MenudetailGUID
+					order by c.OrderNo, c.caption
+					for xml path('submenu'), elements, type) submenus
+				from menusmnu b
+				where b.menuGUID=a.MenuGUID and b.upperSubmenuGUID is null
+				order by b.OrderNo, b.caption
+				for xml path('submenu'), elements, type) submenus
+			from menu a
+				inner join modl b
+					on a.AccountGUID=b.AccountGUID
+			where moduleid=@code
+			for xml path('menu'), elements, type) menus
+		for xml path(''), elements, type
+		) header,
+		@xmlInfo [body/bodyContent/query/info], 
+		@xmlParameter [body/bodyContent/query/queryPages/queryPage] 
+	for xml path('sqroot'), type
+
+
+
+
+
+
+
+
+
+
+
+

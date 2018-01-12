@@ -1,0 +1,35 @@
+
+
+CREATE procedure [core].[createDB_createfile] @servername nvarchar(50), @dbname nvarchar(50), @isMaster bit=0, @accountid nvarchar(50)=null
+as
+	declare @sqlstr nvarchar(max), @db nvarchar(50)=db_name()	
+	set @sqlstr='
+		declare @sqlstr nvarchar(max)= ''
+			if not exists(select * from '+@servername+'.master.sys.databases where name='''''+@dbname+''''')
+				create database '+@dbname+'
+			''
+
+		exec '+@servername+'.master.dbo.sp_executesql @sqlstr
+		
+		--set @sqlstr=''
+		--		alter database 
+		--		ALTER DATABASE testsize 
+		--		MODIFY FILE
+		--		(NAME = '+@dbname+'_log,
+		--		MAXSIZE=1000MB);	
+		--	''
+
+		--exec '+@servername+'.master.dbo.sp_executesql @sqlstr
+		'
+
+	exec sp_executesql @sqlstr
+
+	if @isMaster=1 begin
+		exec core.createdb_insertdata @accountid, @ismigrate=1
+
+		declare @cmdstr varchar(4000)='call D:\vsonline\regoph.bat '+@accountid
+		exec [gen].[onetimejob] @cmdstr, @subsystem='CmdExec', @isdebug=0
+
+	end
+
+

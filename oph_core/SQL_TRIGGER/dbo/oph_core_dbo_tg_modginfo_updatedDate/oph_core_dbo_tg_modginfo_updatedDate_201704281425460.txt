@@ -1,0 +1,13 @@
+
+create TRIGGER [dbo].[tg_modginfo_updatedDate] 
+   ON  [dbo].[modginfo]
+   AFTER INSERT, UPDATE
+AS 
+BEGIN
+	update modginfo
+	set updatedDate=getdate()
+	from modginfo a
+		inner join inserted b on a.EnvInfoGUID=b.EnvInfoGUID
+
+END
+

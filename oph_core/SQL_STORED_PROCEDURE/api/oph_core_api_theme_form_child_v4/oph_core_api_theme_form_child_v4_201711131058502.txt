@@ -1,0 +1,81 @@
+
+CREATE procedure [api].[theme_form_child_v4] 
+	@hostGUID uniqueidentifier, @code nvarchar(max), @GUID uniqueidentifier, @typecode nvarchar(1), @childxml xml output, @isdebug bit=0
+--WITH ENCRYPTION
+as
+
+--declare @hostGUID uniqueidentifier = gen.gethost('ap\iman.satyagraha'), @code nvarchar(max) = 'tadedu', 
+--	@GUID uniqueidentifier = '6424CC3F-F3B7-4B8A-9E71-000533A7841F', 
+--	@db nvarchar(max), @typecode nvarchar(1) = 't', @childxml xml, @isdebug bit=0
+
+	declare @sqlstr nvarchar(max), @cf nvarchar(max)
+
+	--childrenFilter
+	select @sqlstr = InfoValue from modl a
+		inner join modlinfo b ON a.ModuleGUID = b.ModuleGUID
+	where ModuleID = @code AND InfoKey = 'childrenFilter'
+
+	set @sqlstr = 'declare @GUID uniqueidentifier = ''' + cast(@GUID as varchar(50)) + '''' + char(10) +
+		'declare @HostGUID uniqueidentifier = ''' + cast(@hostGUID as varchar(50)) + '''' + char(10) +
+		'declare @UserGUID uniqueidentifier = gen.getUserHost(''' + cast(@hostGUID as varchar(50)) + ''')' + char(10) +
+		+ @sqlstr
+
+	if isNULL(@sqlstr, '') != '' begin 
+		if object_id('tempdb..#cfTbl') is not null drop table #cfTbl
+		create table #cfTbl(filter varchar(MAX))
+		insert into #cfTbl exec(@sqlstr)
+		if exists(select * from #cfTbl) select @cf = filter from #cfTbl
+		if object_id('tempdb..#cfTbl') is not null drop table #cfTbl
+	end 
+
+	if @typecode='c' begin
+		set @sqlstr ='select @xml = (
+			select lower(c.moduleid) as code, c.ModuleDescription as childTitle, b2.colkey as parentkey, (
+				select (
+					select lower(aum.ModuleID) [@module], allowAccess [allowBrowse], AllowAdd, allowEdit, allowDelete
+					from [gen].[authModl] ('''+cast(@hostGUID as varchar(50))+''', NULL) aum
+					where aum.moduleGUID = c.ModuleGUID for xml path(''permission''),type
+					)
+				) as info
+			from modl p
+				inner join modl c on c.ParentModuleGUID=p.ModuleGUID
+				inner join modlcolm b2 on p.ModuleGUID=b2.ModuleGUID 
+				inner join modlcolm b on c.ModuleGUID=b.ModuleGUID and b.colkey=b2.colkey
+			where p.moduleid = '''+@code+'''' + IIF(@cf is NOT Null, ' and c.ModuleGUID in ('+@cf+')', '') + '
+				and b2.colorder=(
+					select min(colorder)
+					from modl a
+						inner join modlcolm b on a.moduleguid=b.moduleguid
+					where a.moduleid='''+@code+''' 
+				)
+			order by c.OrderNo, c.ModuleDescription, c.ModuleID
+			for xml path(''child''),type,root(''children'')
+		)'
+	end
+	else begin
+		set @sqlstr ='select @xml = (
+			select lower(c.moduleid) as code, c.ModuleDescription as childTitle, isnull(childKey.infovalue, ''parentDocGUID'') parentkey, (
+				select (
+						select b1.infovalue allowBrowse, b2.infovalue allowAdd, b3.infovalue allowEdit, 
+							b4.infoValue [allowAddSave], b5.infovalue allowDelete
+						from modl a
+							left join modlinfo b1 on a.moduleguid=b1.moduleguid and (b1.infokey=''AllowBrowse'' or b1.infokey=''AllowAccess'')
+							left join modlinfo b2 on a.moduleguid=b2.moduleguid and b2.infokey=''allowAdd''
+							left join modlinfo b3 on a.moduleguid=b3.moduleguid and b3.infokey=''allowEdit''
+							left join modlinfo b4 on a.moduleguid=b4.moduleguid and b4.infokey=''allowAddSave''
+							left join modlinfo b5 on a.moduleguid=b5.moduleguid and b5.infokey=''allowDelete''
+						where a.ModuleGUID = c.ModuleGUID for xml path(''permission''),type)
+						--where moduleid='''+@code+''' for xml path(''permission''),type)
+				) as info
+			from modl p
+				inner join modl c on c.ParentModuleGUID=p.ModuleGUID
+				left join modlinfo childKey on c.moduleguid=childKey.moduleguid and childKey.infokey=''childKey''
+			where p.moduleid = '''+@code+'''' + IIF(@cf is NOT Null, ' and c.ModuleGUID in ('+@cf+')', '') + ' 
+			order by c.OrderNo, c.ModuleDescription, c.ModuleID
+			for xml path(''child''),type,root(''children'')
+		)'
+	end
+
+	print @sqlstr
+	EXECUTE sp_executesql @sqlstr, N'@xml xml output', @xml = @childxml output
+	--select @childxml

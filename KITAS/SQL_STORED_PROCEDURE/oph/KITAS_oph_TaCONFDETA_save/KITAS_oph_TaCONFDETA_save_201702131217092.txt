@@ -1,0 +1,71 @@
+CREATE procedure oph.TaCONFDETA_save
+	@GUID uniqueidentifier, @hostGUID uniqueidentifier, @CONFGUID uniqueidentifier, @PRODGUID uniqueidentifier, @NewPrice money, @NewQty int, @preview int = 0
+as --automatic creation by system, you have to remove this comment to customize this procedure
+ 
+	if @preview &gt; 0 begin
+		if dbo.fn_checkObject('dbo','TaCONFDETA_save_preview')=1 exec dbo.TaCONFDETA_save_preview @GUID, @hostGUID,@CONFGUID, @PRODGUID, @NewPrice, @NewQty, @preview
+	end
+
+	else if dbo.fn_checkObject('dbo','TaCONFDETA_save_custom')=1 exec dbo.TaCONFDETA_save_custom @GUID, @hostGUID, @CONFGUID, @PRODGUID, @NewPrice, @NewQty
+
+	else begin
+		declare @userGUID1 uniqueidentifier, @site uniqueidentifier, @msg nvarchar(max), @iscancel bit=0
+		
+		select @userGUID1=userguid, @site=siteguid
+		from coUSERHOST
+		where hostGUID=@hostGUID
+		
+		set @msg=''
+		
+		
+		if 1=1 begin
+		
+			if 1=1			begin
+				if exists(select * from ToCONFDETA
+					where CONFDETAGUID = @GUID) begin
+
+					if dbo.fn_checkObject('dbo','TaCONFDETA_save_update_before')=1 exec dbo.TaCONFDETA_save_update_before @GUID, @hostGUID, @CONFGUID OUTPUT, @PRODGUID OUTPUT, @NewPrice OUTPUT, @NewQty OUTPUT, @isCancel OUTPUT, @msg OUTPUT
+					if @iscancel=0 begin
+						begin try
+
+							update ToCONFDETA
+							set CONFGUID = @CONFGUID, PRODGUID = @PRODGUID, NewPrice = dbo.fn_round(@NewPrice), NewQty = @NewQty, 
+								UpdatedDate = getdate(), UpdatedUser = @userGUID1 
+							where CONFDETAGUID = @GUID
+
+
+							if dbo.fn_checkObject('dbo','TaCONFDETA_save_update_after')=1 exec dbo.TaCONFDETA_save_update_after @GUID, @hostGUID, 1
+
+						end try
+						begin catch
+							set @msg=error_message()
+						end catch
+
+					end
+				end
+				else begin
+					if dbo.fn_checkObject('dbo','TaCONFDETA_save_update_before')=1 exec dbo.TaCONFDETA_save_update_before @GUID, @hostGUID, @CONFGUID OUTPUT, @PRODGUID OUTPUT, @NewPrice OUTPUT, @NewQty OUTPUT, @isCancel OUTPUT, @msg OUTPUT
+					if @iscancel=0 begin
+						if @GUID is null set @GUID = newid()
+
+						begin try
+			
+			
+							insert into ToCONFDETA
+								(CONFDETAGUID, CONFGUID, PRODGUID, NewPrice, NewQty, createdUser)
+								values
+									(@GUID, @CONFGUID, @PRODGUID, dbo.fn_round(@NewPrice), @NewQty, @userGUID1)
+
+			
+							if dbo.fn_checkObject('dbo','TaCONFDETA_save_update_after')=1 exec dbo.TaCONFDETA_save_update_after @GUID, @hostGUID, 0
+			
+						end try
+						begin catch
+							set @msg=error_message()
+						end catch
+					end
+				end
+			end
+		end
+		select @msg saved
+	end

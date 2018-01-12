@@ -1,0 +1,8 @@
+
+CREATE VIEW [dbo].[coMOD1]
+as
+	select * from coMODL
+	where len(moduleid)=6 and isDeleted = 0
+
+
+

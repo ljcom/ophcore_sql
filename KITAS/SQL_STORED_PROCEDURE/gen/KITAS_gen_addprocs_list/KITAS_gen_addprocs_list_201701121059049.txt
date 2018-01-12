@@ -1,0 +1,47 @@
+
+
+
+
+
+
+
+
+CREATE procedure [gen].[addprocs_list] @tablename varchar(50), @colname varchar(100), @liststr varchar(8000), @isEnc bit=1, @isdebug bit=0
+as
+--build 20131219
+
+	declare @parentField varchar(100)
+	declare @sp varchar(8000), @parameter varchar(8000)
+	declare @content varchar(8000)
+	declare @content1 varchar(8000)
+	declare @content2 varchar(8000)
+		
+				set @parentField=''
+				
+				select @parentField=colName 
+				from gen.cotablfiel a
+					inner join gen.cotabl b
+						on a.tableguid=b.tableguid	
+				where Tablename=@tablename and isEditable=3
+				
+				if isnull(@parentField,'')='' set @parentField=@colName
+				set @sp = '' + @tableName + '_list'
+				set @parameter = '@account nvarchar(20), @GUID uniqueidentifier=null, @hostGUID uniqueidentifier'
+				set @content =  char(9) + 'declare @newid uniqueidentifier'+CHAR(13)+CHAR(10)+ 
+								char(9) + 'set @newid = newid()'+CHAR(13)+CHAR(10)++CHAR(13)+CHAR(10)+  
+								char(9) + 'select '+@liststr+CHAR(13)+CHAR(10)+ 
+								char(9) + 'from oph.'+@tablename+' '+@tablename+CHAR(13)+CHAR(10)+ 
+								char(9) + 'where isnull('+@parentField+', @newid)=case when @GUID is null then isnull('+@parentField+', @newid) else @GUID end'
+				set @content1='' 
+				set @content2='' 
+				exec gen.addproc @sp, @parameter, @content, @content1, @content2, @isEnc=@isenc  
+
+
+
+
+
+
+
+
+
+

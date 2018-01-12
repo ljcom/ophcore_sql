@@ -1,0 +1,35 @@
+
+
+CREATE proc [api].[theme_form_child_v3] @code nvarchar(max), @database nvarchar(max), @settingmode nvarchar(1), @childxml xml output
+as
+	declare @sqlstr nvarchar(max) = 'use '+@database
+
+	select @sqlstr = @sqlstr + '
+
+	declare @parentkey nvarchar(max)
+
+	select @parentkey=colname From gen.cotablfiel a join gen.cotabl b on a.tableguid = b.tableguid
+	where iseditable=3
+		and tablename like '''+@code+'''
+
+	select @xml = (
+		select lower(a.moduleid) as code, ModuleDescription as childTitle,d.colname as parentkey,
+			(
+				select (select allowbrowse,allowadd,allowedit,allowhold,allowdelete,allowwipe,allowbatch from comodl where moduleguid = a.moduleguid for xml path(''permission''),type)
+	
+			) as info
+		from comodl a 
+			join (
+				select submoduleguid from comodl a join comodlsmod b on a.moduleguid = b.moduleguid
+				where moduleid like '''+@code+''') b 
+				
+				on a.ModuleGUID = b.submoduleguid
+			join gen.cotabl c 
+				on a.moduleid = c.tablename
+			join (select tableguid,colname from gen.cotablfiel where iseditable = 3) d 
+				on c.tableguid = d.tableguid
+		for xml path(''child''),type,root(''children'')) '
+
+	EXECUTE sp_executesql @sqlstr,N'@xml xml output', @xml = @childxml output
+
+

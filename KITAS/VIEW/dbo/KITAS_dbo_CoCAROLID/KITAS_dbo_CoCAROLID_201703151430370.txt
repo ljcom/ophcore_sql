@@ -1,0 +1,16 @@
+
+
+
+CREATE VIEW [dbo].[CoCAROLID]
+as	--CreatedBy eLs ON Jan, 2017
+
+	select 
+		UserGUID [CarolGUID], CarolId, UserId, UserName, SignInitial, Password, ConfirmPassword, Position, DIVNGUID,
+		HomeAddress, HomePhone, MobilePhone, PersonalEmail, WorkAddress, FirstPage, skinGUID, AutoLogin, 
+		isDeleted, CreatedDate, CreatedUser, UpdatedDate, UpdatedUser, DeletedDate, DeletedUser, ExpiryPwd
+	from oph.CaUSER	
+	where len(CarolId) &gt; 0 or CarolId is NOT NULL
+
+
+
+

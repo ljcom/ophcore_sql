@@ -1,0 +1,38 @@
+
+CREATE procedure [gen].[createType] @tablename varchar(max)
+as
+	declare @x xml
+	declare @typeName varchar(20)
+
+	set @tablename = left(@tablename,1)+'a'+substring(@tablename,3,len(@tablename)-2)
+
+	set @typeName = left(@tablename,1)+'t'+substring(@tablename,3,len(@tablename)-2)
+	print @typeName
+
+	set @x= (
+		select 
+			case when xtype=36 and combotype in (10,12) then colname+'cbId varchar(max) null, '+colname+'cbNm varchar(max) null, '
+				when xtype=36 and combotype in (11) then colname+'parId varchar(max) null, '+colname+'parNm varchar(max) null, '
+				else colname+' varchar(max)'+' null, ' end
+		--select *
+		from gen.cotabl a
+			inner join gen.cotablfiel b
+				on a.TableGUID=b.tableguid
+		where tablename=@tablename and ((isEditable in (1,2,4) and isviewable=1))-- or colorder=10 or isEditable=3)
+		order by viewpageno, viewrowno, viewcolno, vieworderno,viewrowtype,viewrowtypeorder
+		for xml path(''), type)
+
+		declare @x1 varchar(max)
+		set @x1=cast(@x as varchar(max))
+		set @x1=left(@x1, len(@x1)-1)
+		set @x1='create type dbo.'+@typename+' as table ('+@x1+')'
+
+		print @x1
+
+		if exists(select * from sys.types where name=@typename) exec ('drop type dbo.'+@typename+'')
+		exec (@x1)
+
+
+
+
+

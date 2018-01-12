@@ -1,0 +1,22 @@
+
+CREATE procedure [gen].[createSynonym] @code nvarchar(50), @schema nvarchar(50), @dbname nvarchar(50), @isdebug bit=0
+as
+	declare @sqlstr nvarchar(max)
+
+	set @sqlstr='
+		if exists(
+			select * from sys.objects a
+				inner join sys.schemas b
+					on a.schema_id=b.schema_id
+			where b.name='''+@schema+''' and a.name='''+@code+''' and type=''SN'') 
+			DROP SYNONYM ['+@schema+'].['+@code+'];
+
+		CREATE SYNONYM ['+@schema+'].['+@code+'] FOR '+@dbname+'.['+@schema+'].'+@code+';'
+
+	if @isdebug=1 print @sqlstr
+	exec sp_executesql @sqlstr
+
+
+
+
+

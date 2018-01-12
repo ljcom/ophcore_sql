@@ -1,0 +1,25 @@
+CREATE VIEW [dbo].[MoBRANFRON]
+as
+
+	select 
+		BRANGUID, ID, Name, PARNBRANGUID, isParent, Link, CreatedDate, CreatedUser, UpdatedDate, UpdatedUser
+	from MoBRAN 
+	where BRANGUID not in (
+		select BRANGUID from MoBRAN 
+		where Name in ('kerastase', 'matrix', 'loreal professionnel') AND PARNBRANGUID is NULL AND isDeleted = 0
+	) AND isDeleted = 0
+	union 
+	select 
+		BRANGUID, ID, Name, REPLACE(dbo.ZeroGUID(), '0', '1'), isParent, Link, CreatedDate, CreatedUser, UpdatedDate, UpdatedUser
+	from MoBRAN 
+	where Name in ('kerastase', 'matrix', 'loreal professionnel') AND PARNBRANGUID is NULL AND isDeleted = 0
+	union
+	select REPLACE(dbo.ZeroGUID(), '0', '1'), 0, 'PPD', NULL, 1, NULL, GETDATE(), NULL, NULL, NULL
+
+	--select 
+	--	BRANGUID, ID, Name, PARNBRANGUID, isParent, Link, 
+	--	CreatedDate, CreatedUser, UpdatedDate, UpdatedUser
+	--from MoBRAN
+	--where isDeleted = 0
+
+

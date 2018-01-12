@@ -1,0 +1,33 @@
+
+
+CREATE TRIGGER [dbo].[acct_generate]
+   ON  [dbo].[acct] 
+   AFTER insert
+AS 
+BEGIN
+	SET NOCOUNT ON;
+	declare @acct as nvarchar(50), @acctGUID uniqueidentifier, @sqlstr nvarchar(max), @mdb nvarchar(50), @v4db nvarchar(50),
+		@coredb nvarchar(max)=db_name()
+	select @acct=AccountId, @acctGUID=accountguid 
+	from inserted 
+
+	set @mdb=@acct+'_data'
+	set @v4db=@acct+'_v4'
+
+	set @sqlstr = '
+		declare @accountGUID uniqueidentifier
+		select @accountGUID=accountguid 
+		from acct where accountid='''+@acct+'''
+
+		if not exists(select * from master.sys.databases where name='''+@mdb+''') BEGIN
+			insert into acctdbse (AccountDBGUID, AccountGUID, DatabaseName, ODBC, isMaster, version)	
+			values (newid(), @accountGUID, '''+@mdb+''', null, 1, ''4.0'')
+
+			insert into acctdbse (AccountDBGUID, AccountGUID, DatabaseName, ODBC, isMaster, version)	
+			values (newid(), @accountGUID, '''+@v4db+''', null, 0, ''4.0'')
+		end	
+		'
+	exec gen.onetimejob @sqlstr, @coredb, @isdebug=0
+	return
+END
+

@@ -1,0 +1,258 @@
+
+
+
+
+CREATE procedure [gen].[updateALLT]
+as
+	--build 20120409
+
+	--toALLTAPRV	
+	DECLARE #cur_allt CURSOR
+	READ_ONLY
+	FOR select moduleid, b.ColName, moduleGUID
+ 		--select *
+		from coMODL a
+			inner join dbo.coTBLE b1
+				on --(a.ModuleId+'APRV'=left(b1.Tablename,1)+'a'+substring(b1.Tablename,3,8)
+				a.ModuleId=left(b1.Tablename,1)+'a'+substring(b1.Tablename,3,4)
+				and len(b1.tablename)=6
+			inner join dbo.coTBLEfiel b
+				on b.tableguid=b1.tableGUID
+		WHERE b.colorder=1 
+			AND (LEFT(a.ModuleId, 2) = 'ta') AND (LEN(a.ModuleId) = 6) 
+			and (a.isDeleted = 0) AND (a.AutoNumberPrefix1 IS NOT NULL)
+			and moduleid&lt;&gt;'taALLT'
+		order by b1.tablename, BrowseOrder
+		
+	DECLARE @sqlcontent varchar(max)
+	DECLARE @sqlcontent2 varchar(8000)
+	DECLARE @sqlcontent3 varchar(8000)
+	DECLARE @sqlcontent4 varchar(8000)
+	DECLARE @sqlcontent5 varchar(8000)
+	DECLARE @sqlcontent6 varchar(8000)
+	DECLARE @sqlcontent7 varchar(8000)
+
+	DECLARE @sqlheader varchar(max)
+
+	declare @t varchar(50), @c varchar(50), @tc varchar(50), @ts varchar(50), @m varchar(50),
+		@pc int, @md varchar(100), @ib int, @vpn int, @ct int, @cfi varchar(50), @cfn varchar(50)
+	declare @oldt varchar(50)
+	set @sqlcontent=''
+	set @sqlcontent2=''
+	set @sqlcontent3=''
+	set @sqlcontent4=''
+	set @sqlcontent5=''
+	set @sqlcontent6=''
+	set @sqlcontent7=''
+	set @oldt=''
+	OPEN #cur_allt
+
+	set @sqlcontent=char(9)+'select null DocGUID, null toALLTAPRVGUID, null ApprovalUserGUID, null CurLvl, null Lvl, null Status, null CreatedDate, null UpdatedDate, null CreatedUser, null UpdatedUser, null DelegateUserGUID, null uGroupGUID, null ReapprovalDate, null rejectReason, null moduleGUID'+char(13)+char(10)+
+		char(9)+'union'+char(13)+char(10)+
+		char(13)+char(10)
+		
+	FETCH NEXT FROM #cur_allt INTO @t, @c, @m--, @tc, @ts
+	WHILE (@@fetch_status &lt;&gt; -1)
+	BEGIN
+		IF (@@fetch_status &lt;&gt; -2)
+		BEGIN
+			if @oldt&lt;&gt;@t begin
+				set @sqlcontent=replace(@sqlcontent,'###', char(13)+char(10)+char(9)+''+CHAR(13)+char(10))
+				set @sqlcontent=replace(@sqlcontent,', ***', '')
+				
+				set @sqlcontent=@sqlcontent+char(9)+'--'+@t+'APRV'+char(13)+CHAR(10)
+				set @sqlcontent=@sqlcontent+char(9)+'select ***, ApprovalUserGUID, CurLvl, Lvl, Status, CreatedDate, UpdatedDate, CreatedUser, UpdatedUser, DelegateUserGUID, uGroupGUID, ReapprovalDate, rejectReason, '''+@m+''' moduleGUID'+CHAR(13)+CHAR(10)
+				set @sqlcontent=@sqlcontent+CHAR(9)+'from '+@t+'APRV'+CHAR(13)+CHAR(10)
+				set @sqlcontent=@sqlcontent+CHAR(9)+'union###'
+				set @oldt=@t
+			end
+			set @sqlcontent=replace(@sqlcontent,'***', @c+', ***')
+		END
+		FETCH NEXT FROM #cur_allt INTO @t, @c, @m--, @tc, @ts
+	END
+	
+	set @sqlcontent=replace(@sqlcontent,'union###', '')
+	set @sqlcontent=replace(@sqlcontent,', ***', '')
+
+
+	CLOSE #cur_allt
+	DEALLOCATE #cur_allt
+
+			
+	--print @sqlheader
+	--print @sqlcontent
+	exec gen.[addview] 'toALLTAPRV', '', @sqlcontent
+
+	--oph.taALLT_execute_auto
+	DECLARE #cur_allt CURSOR
+	READ_ONLY
+	FOR select moduleid, b.Name, moduleGUID
+ 		from coMODL a
+			inner join sysobjects b
+				on (''+a.ModuleId+'_execute_auto'=b.name)
+		WHERE (LEFT(a.ModuleId, 2) = 'ta') AND (LEN(a.ModuleId) = 6) 
+			and (a.isDeleted = 0) AND (a.AutoNumberPrefix1 IS NOT NULL)
+		order by b.name
+		
+
+	set @oldt=''
+	OPEN #cur_allt
+
+	set @sqlcontent=''
+	set @sqlcontent2=''
+	set @sqlcontent3=''
+	set @sqlcontent4=''
+	set @sqlcontent5=''
+	set @sqlcontent6=''
+	set @sqlcontent7=''
+		
+	FETCH NEXT FROM #cur_allt INTO @t, @c, @m--, @tc, @ts
+	WHILE (@@fetch_status &lt;&gt; -1)
+	BEGIN
+		IF (@@fetch_status &lt;&gt; -2)
+		BEGIN
+			set @sqlcontent=@sqlcontent+char(9)+'exec '+@c+CHAR(13)+char(10)
+		END
+		FETCH NEXT FROM #cur_allt INTO @t, @c, @m--, @tc, @ts
+	END
+	
+	CLOSE #cur_allt
+	DEALLOCATE #cur_allt
+
+			
+	--print @sqlheader
+	
+	print @sqlcontent
+	print 'here'
+	exec gen.[addproc] 'taALLT_execute_auto', '', @sqlcontent
+
+
+	
+	--taALLT	
+	DECLARE #cur_allt CURSOR
+	READ_ONLY
+	FOR select Tablename, b.ColName, b.titlecaption, b.TitleShort, PrimaryCol, moduleDescription,
+		isBrowsable, viewpageno, combotype, comboFieldId, comboFieldName
+		from coMODL a
+			inner join dbo.coTBLE b1
+				on a.ModuleId=b1.Tablename
+			inner join dbo.coTBLEfiel b
+				on b1.tableguid=b.tableguid	
+		WHERE (LEFT(a.ModuleId, 2) = 'ta') AND (LEN(a.ModuleId) = 6) 
+			and (a.isDeleted = 0) AND (a.AutoNumberPrefix1 IS NOT NULL)
+			and (b.isBrowsable=1 or b.primarycol&gt;0)
+			and tablename&lt;&gt;'taALLT'
+		order by b1.tablename, BrowseOrder
+
+				
+	DECLARE @docGUID varchar(50)
+
+	set @sqlcontent=''
+	set @sqlcontent2=''
+	set @sqlcontent3=''
+	set @sqlcontent4=''
+	set @sqlcontent5=''
+	set @sqlcontent6=''
+	set @sqlcontent7=''
+	
+	set @oldt=''
+	OPEN #cur_allt
+
+	FETCH NEXT FROM #cur_allt INTO @t, @c, @tc, @ts, @pc, @md, @ib, @vpn, @ct, @cfi, @cfn
+	WHILE (@@fetch_status &lt;&gt; -1)
+	BEGIN
+		IF (@@fetch_status &lt;&gt; -2)
+		BEGIN
+			if @oldt&lt;&gt;@t begin
+				set @sqlcontent=replace(@sqlcontent,'###', char(13)+char(10)+char(9)+''+CHAR(13)+char(10))
+				set @sqlcontent=replace(@sqlcontent,' + '+CHAR(13)+char(10)+char(9)+char(9)+'***', '')
+
+				if len(@sqlcontent2)+len(@sqlcontent)&lt;800000 begin
+					set @sqlcontent2=@sqlcontent2+@sqlcontent
+					set @sqlcontent=''
+				end
+				if len(@sqlcontent3)+len(@sqlcontent2)&lt;800000 begin
+					set @sqlcontent3=@sqlcontent3+@sqlcontent2
+					set @sqlcontent2=''
+				end
+				if len(@sqlcontent4)+len(@sqlcontent3)&lt;800000 begin
+					set @sqlcontent4=@sqlcontent4+@sqlcontent3
+					set @sqlcontent3=''
+				end
+				if len(@sqlcontent5)+len(@sqlcontent4)&lt;800000 begin
+					set @sqlcontent5=@sqlcontent5+@sqlcontent4
+					set @sqlcontent4=''
+				end
+				if len(@sqlcontent6)+len(@sqlcontent5)&lt;800000 begin
+					set @sqlcontent6=@sqlcontent6+@sqlcontent5
+					set @sqlcontent5=''
+				end
+				if len(@sqlcontent7)+len(@sqlcontent6)&lt;800000 begin
+					set @sqlcontent7=@sqlcontent7+@sqlcontent6
+					set @sqlcontent6=''
+				end
+				
+				set @sqlcontent=@sqlcontent+char(9)+'--'+@t+char(13)+CHAR(10)
+				set @sqlcontent=@sqlcontent+char(9)+'select ##docGUID## docGUID, ##docno## docNo, '+CHAR(13)+CHAR(10)+
+					char(9)+char(9)+'##docRefNo## docRefNo, ##docDate## docDate, null docCust, '+CHAR(13)+CHAR(10)+
+					char(9)+char(9)+'*** DocDescription, '+CHAR(13)+CHAR(10)+
+					char(9)+char(9)+'0 DocValue, StatusComment, status, '+CHAR(13)+CHAR(10)+
+					char(9)+char(9)+''''+@t+''' docType, '''+@md+''' docName, '+CHAR(13)+CHAR(10)+
+					char(9)+char(9)+'CreatedUser, createdDate, UpdatedDate, UpdatedUser, isDeleted, '+CHAR(13)+CHAR(10)+
+					char(9)+char(9)+'DeletedDate, DeletedUser, closedDate '+CHAR(13)+CHAR(10)
+				set @sqlcontent=@sqlcontent+CHAR(9)+'from '+@t+CHAR(13)+CHAR(10)
+				set @sqlcontent=@sqlcontent+CHAR(9)+'union###'
+				set @oldt=@t
+				
+			end
+			
+			if @ib=1 and @vpn=1 and isnull(@pc,0)=0 and isnull(@ct,0) not in (1,2,3)
+				set @sqlcontent=replace(@sqlcontent,'***', '''&lt;small&gt;'+isnull(@tc,'')+'&lt;/small&gt; &lt;b&gt;'' + isnull(convert(varchar(100),'+@c+'), '''''''') + ''&lt;/b&gt;&amp;nbsp;'' + '+CHAR(13)+char(10)+char(9)+char(9)+'***')
+			if @ib=1 and @vpn=1 and isnull(@pc,0)=0 and @ct in (1,3)
+				set @sqlcontent=replace(@sqlcontent,'***', '''&lt;small&gt;'+isnull(@tc,'')+'&lt;/small&gt; &lt;b&gt;'' + isnull('+@cfi+','''') + '' - '' + isnull('+@cfn+','''') + ''&lt;/b&gt;&amp;nbsp;'' + '+CHAR(13)+char(10)+char(9)+char(9)+'***')
+			
+			if isnull(@pc,0)='1' set @sqlcontent=replace(@sqlcontent,'##docGUID##', @c)
+			if isnull(@pc,0)='2' set @sqlcontent=replace(@sqlcontent,'##docDate##', @c)
+			if isnull(@pc,0)='3' set @sqlcontent=replace(@sqlcontent,'##docNo##', @c)
+			if isnull(@pc,0)='4' set @sqlcontent=replace(@sqlcontent,'##docRefNo##', @c)
+			
+		END
+		
+		FETCH NEXT FROM #cur_allt INTO @t, @c, @tc, @ts, @pc, @md, @ib, @vpn, @ct, @cfi, @cfn
+	END
+
+
+	CLOSE #cur_allt
+	DEALLOCATE #cur_allt
+
+	set @sqlcontent=replace(@sqlcontent,' + '+CHAR(13)+char(10)+char(9)+char(9)+'***', '')
+	set @sqlcontent=REPLACE(@sqlcontent,'union###','')
+	
+	--set @sqlheader='ALTER view [dbo].[taALLT]'+CHAR(13)+CHAR(10)+
+	--	'AS'+CHAR(13)+CHAR(10)
+		--@sqlcontent
+
+	print @sqlcontent7
+	print @sqlcontent6
+	print @sqlcontent5
+	print @sqlcontent4
+	print @sqlcontent3
+	print @sqlcontent2
+	print @sqlcontent	--+@sqlcontent3+@sqlcontent2+@sqlcontent
+	--print len(@sqlheader)+len(@sqlcontent)+len(@sqlcontent2)+len(@sqlcontent3)+len(@sqlcontent4)
+	--	+len(@sqlcontent5)+len(@sqlcontent6)+len(@sqlcontent7)
+	print 'here'
+	if @sqlcontent7&lt;&gt;''
+		exec gen.[addview] 'toALLT', '', @sqlcontent7, @sqlcontent6, @sqlcontent5, @sqlcontent4, @sqlcontent3, @sqlcontent2, @sqlcontent
+--*/
+
+
+
+
+
+
+
+
+
+
+

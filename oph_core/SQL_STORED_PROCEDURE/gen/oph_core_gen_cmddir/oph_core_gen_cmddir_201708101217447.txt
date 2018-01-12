@@ -1,0 +1,41 @@
+
+CREATE procedure [gen].[cmddir] @folder nvarchar(4000), @folderXML xml output
+as
+	--DECLARE @folder nvarchar(4000)='d:\vsonline\OPERAHOUSE\core'
+
+	--if exists(select 1 from tempdb..sysobjects where name='##dir') drop table ##dir
+	--if exists(select 1 from tempdb..sysobjects where name='##folder') drop table ##folder
+	declare @dir table(pathName nvarchar(500), depth int, isFile bit, fileDate nvarchar(100), orderNo int)
+	--create table ##dir(pathName nvarchar(500), depth int, isFile bit, fileDate nvarchar(100), orderNo int)
+
+	declare @folderstr nvarchar(4000)='dir '+@folder+'\*.* /S'
+	--if exists(select 1 from tempdb..sysobjects where name='##tmp')
+	--drop table ##tmp
+	--create table ##tmp(mdate varchar(8000), orderNo int IDENTITY (1,1))
+	declare @tmp table(mdate varchar(8000), orderNo int IDENTITY (1,1))
+
+	insert @tmp(mdate)
+	exec master.dbo.xp_cmdshell @folderstr  -- Provide the correct filename with path
+
+	insert into @dir(pathName, depth, fileDate, orderNo, isFile)
+	select * 
+	from (
+		select rtrim(ltrim(substring(mdate, 40, len(mdate)-40+1))) pathName, 2 depth, cast(ltrim(left(mdate,24)) as datetime) fileDate, orderNo, 1 isFile 
+		from @tmp where mdate not like '%<DIR>%' and try_cast(ltrim(left(mdate,24)) as datetime) is not null
+		union 
+			select rtrim(substring(mdate, 15, len(mdate)-15+1)) pathName, 1, null,  orderNo, 0 
+		from @tmp 
+		where mdate like '%Directory of%'
+		) x
+	order by orderNo
+	
+
+	set @folderxML=(
+		select iif(d1.pathname is not null, d1.pathname+'\', '') folder, f.pathName, f.fileDate --f.*
+		from (select * from @dir where isfile=1) f
+			left join @dir d1 on d1.orderno=(select max(orderno) from @dir d1 where isFile=0 and f.depth-1=d1.depth and f.orderNo>d1.orderNo)
+		order by f.orderNo
+		for xml path('file'), root('files')) 
+		
+
+

@@ -1,0 +1,45 @@
+
+
+
+
+CREATE VIEW [dbo].[CoUSERSELE]
+        
+as
+ 	select UserGUID SelectedUserGUID, UserId SelectedUserId, UserName SelectedUserName, isDeleted, DeletedDate, CreatedDate, UpdatedDate, DeletedUser, CreatedUser, UpdatedUser
+	from CoUSER 
+	where isnull(CoUSER.isDeleted,0) = 0
+
+	union
+
+	select ugroupguid, groupid, groupdescription, isDeleted, DeletedDate, CreatedDate, UpdatedDate, DeletedUser, CreatedUser, UpdatedUser
+	from coUGRP
+	where isnull(CoUGRP.isDeleted,0) = 0
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

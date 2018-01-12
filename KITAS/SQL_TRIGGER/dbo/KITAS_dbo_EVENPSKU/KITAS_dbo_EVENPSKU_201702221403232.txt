@@ -1,0 +1,12 @@
+CREATE TRIGGER EVENPSKU ON dbo.MoEVENPSKU
+   AFTER INSERT, UPDATE
+AS 
+BEGIN
+	SET NOCOUNT ON;
+
+    update MoEVENPSKU set
+		Used = ISNULL(Used, 0),
+		Availaible = Qty - ISNULL(Used, 0)
+		
+END
+

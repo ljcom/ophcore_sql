@@ -1,0 +1,117 @@
+CREATE procedure [gen].[downloadChild] @hostGUID uniqueidentifier, @code nvarchar(50), @ParentGUID uniqueidentifier, @isdebug bit=0
+--WITH ENCRYPTION
+as	--CreatedBy eLs ON Nov, 2017
+
+	--declare @hostGUID uniqueidentifier = gen.gethost('ap\iman.satyagraha'), @code nvarchar(50) = 'TaENTRDETL', 
+	--	@ParentGUID uniqueidentifier = '68F3B213-9BC6-48C2-BCE9-54427B9BA99B', @isdebug bit=0
+
+	declare @schema varchar(50), @sqlstr nvarchar(MAX)
+	select @schema = b.name from sys.views a
+		inner join sys.schemas b ON a.schema_id = b.schema_id
+	where a.name = @code
+	set @schema = IIF(LEN(@schema) < 1, 'dbo', @schema)
+
+	declare @primaryKey nvarchar(50)
+	if @schema = 'doc' 
+		set @primaryKey = 'DocGUID'
+
+	declare @rowTitle nvarchar(MAX) = STUFF((
+		select ', ' + quotename(b.colKey)  from modl a
+			inner join modlcolm b ON a.ModuleGUID = b.ModuleGUID
+			inner join modlcolminfo c ON b.ColumnGUID = c.ColumnGUID AND c.InfoKey = 'isEditable' AND c.InfoValue = '1'
+			inner join modlcolminfo d ON b.ColumnGUID = d.ColumnGUID AND d.InfoKey = 'isViewable' AND d.InfoValue = '1'
+		where ModuleId = @code
+		order by colOrder
+		for xml path('')
+	), 1, 2, '') --print @rowTitle
+
+	declare @rowTitle2 nvarchar(MAX) = (
+		select ', ' +
+			case 
+				when d.InfoValue is Not NULL then 
+					quotename(
+						replace(replace(replace(d.InfoValue, 'par(', ''), 'view(', ''), ')', '') + 
+						cast(b.colorder as varchar(10))
+					) + '.value'
+				else 
+					'CAST(a.' + b.colKey + ' as nvarchar(MAX))' 
+			end + space(1) + quotename(b.colKey) 
+		from modl a
+			inner join modlcolm b ON a.ModuleGUID = b.ModuleGUID
+			inner join modlcolminfo c ON b.ColumnGUID = c.ColumnGUID AND c.InfoKey = 'isEditable' AND c.InfoValue = '1'
+			left join modlcolminfo d ON b.ColumnGUID = d.ColumnGUID AND d.InfoKey = 'comboTable' AND d.InfoValue != ''
+		where ModuleId = @code
+		order by colOrder
+		for xml path('')
+	) --print @rowTitle2
+
+	declare @rowCaption nvarchar(MAX) = (
+		select ', ''' + quotename(b.titleCaption) + '''' from modl a
+			inner join modlcolm b ON a.ModuleGUID = b.ModuleGUID
+			inner join modlcolminfo c ON b.ColumnGUID = c.ColumnGUID AND c.InfoKey = 'isEditable' AND c.InfoValue = '1'
+			inner join modlcolminfo d ON b.ColumnGUID = d.ColumnGUID AND d.InfoKey = 'isViewable' AND d.InfoValue = '1'
+		where ModuleId = @code
+		order by colOrder
+		for xml path('')
+	) --print @rowCaption
+
+	declare @cbColKey nvarchar(50), @cbTable nvarchar(50), @cbSchema nvarchar(5), @cbQuery nvarchar(MAX), @cbsql nvarchar(MAX),
+		@colorder int, @cbFieldKey nvarchar(50), @cbFieldId nvarchar(50), @cbFieldName nvarchar(50)
+		
+	declare curcb cursor for
+		select b.colorder, b.colKey, e.InfoValue, f.InfoValue, g.InfoValue, h.InfoValue from modl a
+			inner join modlcolm b ON a.ModuleGUID = b.ModuleGUID
+			inner join modlcolminfo c ON b.ColumnGUID = c.ColumnGUID AND c.InfoKey = 'isEditable' AND c.InfoValue = '1'
+			inner join modlcolminfo d ON b.ColumnGUID = d.ColumnGUID AND d.InfoKey = 'isViewable' AND d.InfoValue = '1'
+			inner join modlcolminfo e ON b.ColumnGUID = e.ColumnGUID AND e.InfoKey = 'comboTable' AND e.InfoValue != ''
+			left join modlcolminfo f ON b.ColumnGUID = f.ColumnGUID AND f.InfoKey = 'comboFieldKey' AND f.InfoValue != ''
+			left join modlcolminfo g ON b.ColumnGUID = g.ColumnGUID AND g.InfoKey = 'comboFieldId' AND g.InfoValue != ''
+			left join modlcolminfo h ON b.ColumnGUID = h.ColumnGUID AND h.InfoKey = 'comboFieldName' AND h.InfoValue != ''
+		where ModuleId = @code
+		order by colOrder
+	open curcb fetch next from curcb into @colorder, @cbColKey, @cbTable, @cbFieldKey, @cbFieldId, @cbFieldName
+	while @@FETCH_STATUS = 0 begin		
+		select @cbSchema = b.name from sys.views a
+			inner join sys.schemas b ON a.schema_id = b.schema_id
+		where a.name = @cbTable
+
+		if @cbTable like 'par(%' begin
+			set @cbFieldKey = 'ParameterValueGUID'
+			set @cbTable = replace(replace(@cbTable, 'par(', ''), ')', '')
+			set @cbQuery = '(select ParameterValueGUID, isNULL(ParameterValue + isNULL('' - ''+ p2.ParameterDescription, ''''), isNULL(p2.ParameterDescription, '''')) [value]  from para p1
+				inner join paravalu p2 ON p1.ParameterGUID = p2.ParameterGUID
+			where ParameterId = '''+@cbTable+''') ' + quotename(@cbTable+cast(@colorder as nvarchar(10)))
+		end
+		else if @cbTable like 'view(%' begin
+			set @cbTable = replace(replace(@cbTable, 'view(', ''), ')', '')
+			set @cbQuery = '(select '+@cbFieldKey+', ' + isNULL(@cbFieldId + isNULL('+'' - ''+'+ @cbFieldName, ''), isNULL(@cbFieldName, '')) + ' [value] from doc.'+@code+'_'+@cbTable+
+				') ' + quotename(@cbTable+cast(@colorder as nvarchar(10)))
+		end
+		else begin 
+			set @cbQuery = '(select '+@cbFieldKey+', ' + isNULL(@cbFieldId + isNULL('+'' - ''+'+ @cbFieldName, ''), isNULL(@cbFieldName, '')) + ' [value] from '+isNULL(@cbSchema, 'dbo') + '.' + quotename(@cbTable)+
+				')' + quotename(@cbTable+cast(@colorder as nvarchar(10)))
+		end
+		
+		set @cbsql = isNULL(@cbsql, '') + char(9) + 'left join ' + @cbQuery + ' ON a.' + @cbColKey + '=' + 
+			quotename(@cbTable+cast(@colorder as nvarchar(10)))+'.'+@cbFieldKey + char(10)
+
+		fetch next from curcb into @colorder, @cbColKey, @cbTable, @cbFieldKey, @cbFieldId, @cbFieldName
+	end
+	close curcb deallocate curcb
+
+	set @sqlstr = 'select 
+	' + @primaryKey + ', ' + @rowTitle + ' 
+	from (
+		select a.UpdatedDate, a.CreatedDate,
+			a.' + @primaryKey + @rowTitle2 + '
+		from ' + @schema + '.' + QUOTENAME(@code) + ' [a]' + CHAR(10) + @cbsql + '
+		where a.ParentDocGUID = ''' + CAST(@ParentGUID as nvarchar(50)) + '''		
+		UNION
+		select getdate(), getdate(), gen.ZeroGUID()' + @rowCaption + '
+	) ' + quotename(@code) + '
+	order by UpdatedDate desc, CreatedDate desc
+	'
+
+	exec(@sqlstr)
+	print @sqlstr
+

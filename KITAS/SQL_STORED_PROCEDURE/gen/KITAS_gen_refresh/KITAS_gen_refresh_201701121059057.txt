@@ -1,0 +1,163 @@
+
+CREATE procedure [gen].[refresh] @tableName nvarchar(20)=null, @all bit=0
+as
+--modified 20141031
+
+	declare @oTableName nvarchar(50)
+	declare @aTableName nvarchar(50)
+	
+	set @oTableName=LEFT(@tableName,1)+'o'+RIGHT(@tablename,len(@tablename)-2)
+	set @aTableName=LEFT(@tableName,1)+'a'+RIGHT(@tablename,len(@tablename)-2)
+
+	if exists(select * from sysobjects where name=@oTableName and xtype='V') exec sp_refreshview @otablename
+				
+	if isnull(@tableName,'') &lt;&gt; '' begin
+		exec gen.clearsyscolumns_ex
+		exec gen.setsyscolumns_ex
+		exec gen.addviews_parameter
+		exec gen.addviews_parameter_DSTA
+		exec gen.addviews @otablename
+		--exec gen.refreshViews @otablename
+		--exec gen.refreshViews @atableName
+		--exec gen.setsyscolumns_ex
+		--exec gen.addfunctions @otablename
+		exec gen.addprocs @atablename
+
+	end
+	else begin
+		exec gen.createatab
+		exec gen.clearsyscolumns_ex
+		exec gen.setsyscolumns_ex
+		exec gen.addviews_parameter
+		exec gen.addviews
+		--exec gen.refreshViews 
+		--exec gen.setsyscolumns_ex
+		--exec gen.addfunctions
+		exec gen.addprocs
+
+	end
+
+	declare @accountid nvarchar(20)
+	select @accountid=AccountID
+	from CoACCT
+
+	--ModifiedBy eLs
+	insert into coMODL (ModuleGUID, ModuleId, ModuleDescription, 
+		AutoNumberPrefix1, AutoNumberPrefix2, 
+		AllowBrowse, AllowAdd, AllowEdit, AllowHold, AllowDelete, AllowWipe, 
+		isDeleted, DeletedDate, CreatedDate, UpdatedDate, DeletedUser, CreatedUser, UpdatedUser)
+	select newid(), left(name,1)+'a'+substring(name,3,len(name)-2), '', null, null, 
+		0,0,0,0,0,0,0,null, getdate(), getdate(), null, dbo.OPHGUID(), null
+	from sysobjects
+		left join coMODL
+			on left(sysobjects.name,1)+'a'+substring(sysobjects.name,3,len(sysobjects.name)-2)=coMODL.moduleId
+	where name like '[CMDT]o%' and len(name)&lt;20 and sysobjects.xtype like '[UV]'
+		and coMODL.moduleid is null
+
+	declare @odbc varchar(max)
+	select @odbc=odbc from coacctdbse
+	where databasename=db_name()
+			
+	select odbc, moduleguid 
+	into #m
+	from coMODL a
+		left join (
+			select x.* from sys.objects x		
+				inner join sys.schemas y	
+					on x.schema_id=y.schema_id
+			where y.name='dbo') b
+			on left(b.name,1)+'a'+substring(b.name,3,len(b.name)-2)=a.moduleId
+			and b.name like '[CMDT]o%' and len(name)&lt;20 and b.type like '[UV]'
+	where b.name is null
+		and a.odbc=@odbc
+
+	update comodl
+	set odbc=null
+	from #m a
+		inner join comodl b
+			on a.moduleguid=b.moduleguid
+
+	update b
+	set accountdbguid=c.accountdbguid
+	--select c.accountdbguid, * 
+	from comodl b
+		inner join coatab a
+			on a.tablename=b.moduleid
+		inner join coacctdbse c
+			on c.databasename=a.dbname
+	where b.accountdbguid is null and left(moduleid,1) in ('m', 'c', 't')
+		and substring(moduleid,2,1)='a'
+	--order by moduleid
+
+	delete from coUGRPMODL
+	where cast(isnull(AllowBrowse,0) as int)+cast(isnull(AllowAdd,0) as int)+
+			cast(isnull(AllowEdit,0) as int)+cast(isnull(AllowHold,0) as int)+
+			cast(isnull(AllowDelete,0) as int)+cast(isnull(AllowWipe,0) as int)=0
+
+	exec gen.deleteUnusedView
+	--if left(@tableName,1)='t' or @tableName is null exec gen.updateALLT
+	
+	--remove unnecessary allowbrowse 
+	--update coUGRPMODL set AllowBrowse=0
+	--from coUGRPMODL a
+	--	inner join caUGRP b
+	--		on a.UGroupGUID=b.UGroupGUID
+	--	inner join coMODL c
+	--		on c.ModuleGUID=a.ModuleGUID
+	--where c.ModuleId not like b.ModuleId+'%' and a.AllowBrowse=1
+		
+	--remove unused user
+	/*
+	update coUSER
+	set isDeleted=1, deletedDate=GETDATE()
+	from coUSER
+		left join coUGRPUSER
+			on coUSER.UserGUID=coUGRPUSER.userGUID
+	where CoUGRPUSER.UserGUID is null
+		and dateadd(dd, -30, coUSER.CreatedDate)&lt;GETDATE()
+	*/
+
+	--remove coMODL that not exist in sysobjects
+
+	--samuel 20140531
+	/*delete from coMODL 
+	--select *
+	from coMODL a
+		left join sysobjects b
+			on left(a.ModuleId,1)+'o'+substring(a.ModuleId,3,len(a.ModuleId)-2)=b.name
+	where b.name is null and odbc is null
+	*/
+
+	if @all=1 begin
+		if exists(select * from coacctdbse where ismaster=1 and databasename=db_name()) begin
+			DECLARE #cur005 CURSOR
+			READ_ONLY
+			FOR select databasename from coacctdbse where ismaster=0
+
+			DECLARE @name varchar(40), @sqlstr varchar(1000)
+			OPEN #cur005
+
+			FETCH NEXT FROM #cur005 INTO @name
+			WHILE (@@fetch_status &lt;&gt; -1)
+			BEGIN
+				IF (@@fetch_status &lt;&gt; -2)
+				BEGIN
+					set @sqlstr=@name+'.gen.refresh'
+					exec(@sqlstr)
+				END
+				FETCH NEXT FROM #cur005 INTO @name
+			END
+
+			CLOSE #cur005
+			DEALLOCATE #cur005
+
+		end
+	end
+
+
+
+
+
+
+
+

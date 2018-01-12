@@ -1,0 +1,36 @@
+
+CREATE procedure [gen].[createIndex] @indexName varchar(50), @code nvarchar(50), @content nvarchar(max), 
+	@schema nvarchar(10)='doc', @isUnique bit=1, @v4db nvarchar(50), @resultText nvarchar(max) output, @isdebug bit=0
+--WITH ENCRYPTION
+as
+-- ver 20170720
+	declare @sqlstr nvarchar(max)=''
+	
+	
+	set @sqlstr = '
+		use '+@v4db+'
+		if exists (
+			select * from sys.indexes a
+			where a.name = '''+@indexName+''') begin
+
+			drop index [' + @indexname +'] on ' + @schema + '.' + @code+'
+		end
+
+		create '+iif(@isunique=1,'unique ', '')+'nonclustered index [' + @indexname +'] on '+ @schema + '.[' + @code +']' + char(13) + char(10) + '	
+			('+@content+')
+			WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]'
+
+	if @isdebug=1 print @sqlstr
+
+	BEGIN TRY
+		begin transaction
+		exec sp_executesql @sqlstr
+		commit
+	END TRY
+	BEGIN CATCH
+		SET @resulttext=ERROR_MESSAGE()+@sqlstr
+		rollback 
+	END CATCH;
+
+
+

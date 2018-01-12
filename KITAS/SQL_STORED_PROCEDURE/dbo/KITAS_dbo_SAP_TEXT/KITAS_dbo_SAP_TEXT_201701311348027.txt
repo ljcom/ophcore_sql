@@ -1,0 +1,29 @@
+CREATE PROCEDURE SAP_TEXT
+as
+	
+	declare @x varchar(2) = '^'
+
+	select 
+		'H'+ @x + isNULL(a.DocNo, '') + @x + cast(c.ID as varchar(10)) + @x + convert(varchar(50), DocDate, 112) + @x + 'I001' + @x + 'YOR' + @x +
+		c.SalesID + @x + '02' + @x + 'ID' + isNULL(b.CarolId, '') + @x + isNULL(UserName, 'unknown') + @x + 'DBS Bank Tower, Ciputra World 1 level 29' 
+		[SAP_text]
+	from ToPCSO a
+		inner join CoCAROLID b ON a.CarolGUID = b.CarolGUID
+		inner join MoDIVN c ON b.DIVNGUID = c.DIVNGUID
+	UNION
+	select 
+		'L'+ @x + isNULL(a.DocNo, '') + @x + cast(c.ID as varchar(10)) + @x + cast(Qty as varchar(5)) + @x + PRODGUIDcbId
+		[SAP_text]
+	from ToPCSO a
+		inner join CoCAROLID b ON a.CarolGUID = b.CarolGUID
+		inner join MoDIVN c ON b.DIVNGUID = c.DIVNGUID
+		left join oph.TaPCSODETA d ON a.PCSOGUID = d.PCSOGUID
+
+
+
+/*
+L^AF17A20018-20^10^G1416300^^1^^^^^
+sqldetail = "select 'L' as Detail,'" &amp; Division &amp; "' as productdivision,A.sProductId,A.iUnit from TTD_Sales A INNER JOIN " &amp; _
+                        "TR_PRODUCT B ON A.SPRODUCTID=B.SPRODUCTID  " &amp; _
+                        "where A.sTransId = '" &amp; stransid &amp; "' AND B.SBRAND='" &amp; Division &amp; "' AND (" &amp; criteriaclearance &amp; ")"
+*/

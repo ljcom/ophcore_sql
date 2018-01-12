@@ -1,0 +1,658 @@
+
+CREATE procedure [xml].[view_header_new1] @hostGUID uniqueidentifier, @tablename varchar(100), 
+	@GUID uniqueidentifier, @editMode int=0, @isChild bit=0
+as
+	--children view
+
+	declare @xhead varchar(max), @xcontent varchar(max), @xfilter varchar(max), @xinfo varchar(max), @GUID2 uniqueidentifier =null,
+			@xapproval varchar(max), @xtalk varchar(max), @x2 varchar(max), @skinFolder varchar(100),@UGroupGUID uniqueidentifier,
+			@UserGUID uniqueidentifier, @UGroup int, @UGroupName varchar(100), @xinfo1  varchar(max), @isNew bit,
+			@fieldKey1 varchar(100),@tablename1 varchar(100),@status1 varchar(100), @tablename2 varchar(100), @initial varchar(100)
+	declare @allowAdd bit=0,
+			@allowBrowse bit=0, 
+			@allowEdit bit=0, 
+			@allowDelete bit=0,
+			@allowWipe bit=0,
+			@allowForce bit=0, 
+			@allowShowAttach bit=0, 
+			@isDeletedTable bit=0,@xstatus nvarchar(20)
+
+	if @GUID is null set @GUID=NEWID()
+	set @tablename1=substring(@tablename,1,6)
+	set @initial=substring(@tablename,1,1)
+ 	set @tablename2=left(@tablename1,1)+ 'a' +right(@tablename1,len(@tablename1)-2 )
+	if substring(@tablename,2,1)='d' set @isDeletedTable=1	
+	--fieldkey
+	declare @fieldKey varchar(100),@status varchar(100)
+	declare @mincol int
+
+	select @mincol=min(b.colorder)
+		from gen.coTABL a
+			inner join gen.coTABLFIEL b
+				on a.TableGUID=b.tableGUID
+		where tablename=@tablename
+
+	select @fieldKey=ColName
+		from gen.coTABL a
+			inner join gen.coTABLFIEL b
+				on a.TableGUID=b.tableGUID
+		where tablename=@tablename and b.colorder=@mincol
+	
+	--fieldkey parent table
+	select @mincol=min(b.colorder)
+		from gen.coTABL a
+			inner join gen.coTABLFIEL b
+				on a.TableGUID=b.tableGUID
+		where tablename=@tablename1 --and b.colorder=@mincol
+
+	select @fieldKey1=ColName
+		from gen.coTABL a
+			inner join gen.coTABLFIEL b
+				on a.TableGUID=b.tableGUID
+		where tablename=@tablename1 and b.colorder=@mincol
+
+	--status
+	select @status=colname
+		from gen.coTABL a
+			inner join gen.coTABLFIEL b
+				on a.TableGUID=b.tableGUID
+		where tablename=@tablename1 and b.colname='status'
+
+	--status parent table
+		select @status1=colname
+		from gen.coTABL a
+			inner join gen.coTABLFIEL b
+				on a.TableGUID=b.tableGUID
+		where tablename=@tablename1 and b.colname='status'
+	--set @select @xstatus=@status from @tablename where @fieldKey=@GUID
+	--select @fieldKey, @fieldKey1
+	
+	--skin
+	select @skinFolder=c.skinFolder, @userGUID=a.userGUID
+	from CoUSER a
+		inner join CoUSERHOST b
+			on a.userguid=b.userguid
+		inner join coskin c
+			on a.skinguid=c.skinguid
+		inner join CoUGRPUSER d
+			on d.MemberUserGUID=a.UserGUID
+	where b.hostguid=@hostguid 
+	--select @skinFolder
+
+	--check permission
+	exec gen.verifyAuth @tablename, @hostGUID ,'',
+		@allowadd output , 
+		@allowBrowse output , 
+		@allowEdit output , 
+		@allowDelete output , 
+		@allowWipe output , 
+		@allowForce output , 
+		@allowShowAttach output , 
+		@UGroupGUID output
+	--select @allowAdd , @allowBrowse, @allowEdit, @allowDelete , @allowWipe, @allowForce, @UGroupGUID, @UserGUID
+	--check permission
+
+	--set @UGroup=case when @UGroupGUID='4F067814-B473-445C-8911-DC742CEA8758' or @UGroupGUID='E9173D1A-29E1-4655-A73E-7636C196DC52' then 8 else 9 end
+	
+	--xinfo
+	if @isChild=1 
+	begin
+		if @initial&lt;&gt;'t' begin
+			set @xinfo= '
+				select
+					case when isnull(moduleid,'''')='''' then null else moduleid end ''tableName'',
+					case when isnull(moduleDescription,'''')='''' then null else moduleDescription end ''description'',
+					'''+case when @isChild=1 then '1' else '' end +''' parentKey,
+					isnull((	select '+@fieldKey+' 
+								from oph.fn_'+@tablename+'('''+convert(nvarchar(100), @hostguid)+''')
+								where '+@fieldKey+'='''+convert(varchar(50),@GUID)+'''),'''+case when @editMode=2 then convert(varchar(50),newid()) else '00000000-0000-0000-0000-000000000000' end+''') ''GUID'',
+					'''+@skinfolder+''' ''skinFolder'','+
+					cast(isnull(@status,0) as varchar(1))+' ''statusApprove'','+
+					cast(isnull(@editMode,0) as varchar(1))+' ''editMode'','+
+					cast(isnull(@allowAdd,0) as varchar(1))+' ''permission/allowAdd'','+
+					cast(isnull(@allowEdit,0) as varchar(1))+' ''permission/allowEdit'','+
+					cast(isnull(@allowDelete,0) as varchar(1))+' ''permission/allowDelete'','+
+					cast(isnull(@allowWipe,0) as varchar(1))+' ''permission/allowWipe''
+				from coMODL a
+				where moduleid='''+@tablename+'''
+				for xml path(''''), type'
+		end 
+		else begin
+			set @xinfo= '	
+				select
+					case when isnull(a.moduleid,'''')='''' then null else a.moduleid end ''tableName'',
+					case when isnull(a.moduleDescription,'''')='''' then null else a.moduleDescription end ''description'',
+					'''+case when @isChild=1 then '1' else '' end +''' parentKey,
+					isnull((	select '+@fieldKey+'
+								from oph.fn_'+@tablename+'('''+convert(nvarchar(100), @hostguid)+''')
+								where '+@fieldKey+'='''+convert(varchar(50),@GUID)+'''),'''+case when @editMode=2 then convert(varchar(50),newid()) else '00000000-0000-0000-0000-000000000000' end+''') ''GUID'',
+					isnull((	select g.'+@status+'
+								from oph.fn_'+@tablename1+'APRV('''+convert(nvarchar(100), @hostguid)+''') g
+								left join oph.fn_'+@tablename1+'('''+convert(nvarchar(100), @hostguid)+''') c
+									on g.'+@fieldKey1+'= c.'+@fieldKey1+'
+								left join oph.fn_'+@tablename+'('''+convert(nvarchar(100), @hostguid)+''') b
+									on c.'+@fieldKey1+'=  b.'+@fieldKey1+'
+								where g.approvaluserGUID='''+convert(varchar(50),@UserGUID)+''' and b.'+@fieldKey+'='''+convert(varchar(50),@GUID)+'''),''0'') ''statusApprove'',
+					'''+@skinfolder+''' ''skinFolder'','+
+					cast(isnull(@editMode,0) as varchar(1))+' ''editMode'','+
+					cast(isnull(@allowAdd,0) as varchar(1))+' ''permission/allowAdd'','+
+					cast(isnull(@allowEdit,0) as varchar(1))+' ''permission/allowEdit'','+
+					cast(isnull(@allowDelete,0) as varchar(1))+' ''permission/allowDelete'','+
+					cast(isnull(@allowWipe,0) as varchar(1))+' ''permission/allowWipe''
+				from coMODL a
+				where moduleid='''+@tablename+'''
+				for xml path(''''), type'
+			--select @xinfo
+		end
+	end
+	else 
+	begin
+	
+		set @xinfo= '		
+			select
+			case when isnull(moduleid,'''')='''' then null else moduleid end ''tableName'',
+			case when isnull(moduleDescription,'''')='''' then null else moduleDescription end ''description'',
+			'''+case when @isChild=1 then '1' else '' end +''' parentKey,
+			isnull((	select '+@fieldKey+'
+						from oph.fn_'+@tablename+'('''+convert(nvarchar(100), @hostguid)+''')
+						where '+@fieldKey+'='''+convert(varchar(50),@GUID)+'''),'''+case when @editMode=2 then convert(varchar(50),newid()) else '00000000-0000-0000-0000-000000000000' end+''') ''GUID'',
+			isnull((	select '+@status+'
+						from oph.fn_'+@tablename+'('''+convert(nvarchar(100), @hostguid)+''')
+						where '+@fieldKey+'='''+convert(varchar(50),@GUID)+'''),'''') ''status'',	
+			isnull((@status2),'''') ''statusApprove'',
+			'''+@skinfolder+''' ''skinFolder'','+	
+			cast(isnull(@editMode,0) as varchar(1))+' ''editMode'','+
+			cast(isnull(@allowAdd,0) as varchar(1))+' ''permission/allowAdd'','+
+			cast(isnull(@allowEdit,0) as varchar(1))+' ''permission/allowEdit'','+
+			cast(isnull(@allowDelete,0) as varchar(1))+' ''permission/allowDelete'','+
+			cast(isnull(@allowWipe,0) as varchar(1))+' ''permission/allowWipe'','+
+			cast(isnull(@allowForce,0) as varchar(1))+' ''permission/allowArchieve'','+
+			cast(isnull(@UGroup,'') as varchar(1))+' ''permission/Group''
+		from coMODL a
+		where moduleid='''+@tablename+'''
+		for xml path(''''), type'
+	end
+	--select @editMode
+	--select @xinfo, @fieldKey, @fieldKey1, @editMode, @status, @skinfolder, @tablename, @UGroup, @GUID, @editMode, @hostguid, @skinfolder, @isChild
+
+	declare @xViewPage xml
+	set @xViewPage=
+			(
+			select ViewPageNo '@pageNo', 
+				(
+				select b1.ViewRowNo 'viewRow/@rowNo',
+					max(b1.viewrowtitle) 'viewRow/@rowTitle',
+					--radio
+					(
+					select b2.viewrowtype 'radio/@radioNo',
+						--b2.viewrowtitle 'radio/@radioTitle',
+						isnull(b2.viewrowtitle,'') 'radio/@radioTitle',
+						b2.colname 'radio/@fieldName',
+						'#!'+b2.colname+'!#' 'radio/@value',
+						case when @editmode=0 then 0 else b2.iseditable end  'radio/@isEditable',
+						case when @editmode=0 then 1 else b2.isnullable end  'radio/@isNullable',
+						viewColWidth 'radio/@width',
+						(
+						select b3.ViewRowTypeOrder 'radioRow/@radioRowNo',
+							b3.viewrowtitle 'radioRow/@radioRowTitle',
+							b3.colname 'radioRow/@fieldName',
+							(
+							select b4.viewcolNo 'viewCol/@colNo',
+								(
+								select b5.ViewOrderNo 'viewOrder/@orderNo',
+									(
+									select 
+										b6.colname 'field/@fieldName',
+										case when @editmode=0 then 0 else b6.iseditable end 'field/@isEditable',
+										case when @editmode=0 then 1 else b6.isnullable end 'field/@isNullable',
+										--hidden
+										case when isnull(b6.ViewColWidth,40)=0
+											then '#!'+b6.colname+'!#' end 'field/hiddenBox/value',
+										--textbox
+										case when isnull(b6.comboType,0) not in (1,2,3,10,11,12,13,4,40,41,42,43,44,45,5,6) and b6.xtype in(36) and isnull(b6.ViewColWidth,40)&gt;0
+												then '#*'+b6.colname+'*#'
+											when isnull(b6.comboType,0) not in (1,2,3,10,11,12,13,4,40,41,42,43,44,45,5,6) and b6.xtype not in(36, 104) and isnull(b6.ViewColWidth,40)&gt;0
+												then case when @isnew=1 then b6.defaultvalue else '#!'+b6.colname+'!#' end end 'field/textBox/value',
+										case when isnull(b6.comboType,0) not in (1,2,3,10,11,12,13,4,40,41,42,43,44,45,5,6) and b6.xtype not in(104) and isnull(b6.ViewColWidth,40)&gt;0
+												then b6.TitleCaption else null end 'field/textBox/titleCaption',
+										case when isnull(b6.comboType,0) not in (1,2,3,10,11,12,13,4,40,41,42,43,44,45,5,6) and b6.xtype not in(104) and isnull(b6.ViewColWidth,40)&gt;0
+												then b6.PrefixCaption else null end 'field/textBox/prefixCaption',
+										case when isnull(b6.comboType,0) not in (1,2,3,10,11,12,13,4,40,41,42,43,44,45,5,6) and b6.xtype not in(104) and isnull(b6.ViewColWidth,40)&gt;0
+												then b6.SuffixCaption else null end 'field/textBox/suffixCaption',
+										case when isnull(b6.comboType,0) not in (1,2,3,10,11,12,13,4,40,41,42,43,44,45,5,6) and b6.xtype not in(104) and isnull(b6.ViewColWidth,40)&gt;0
+											then case when isnull(b6.ViewColWidth,0)&lt;50 then isnull(b6.ViewColWidth,0) else 50 end else null end 'field/textBox/width/cols',
+										case when isnull(b6.comboType,0) not in (1,2,3,10,11,12,13,4,40,41,42,43,44,45,5,6) and b6.xtype not in(104) and isnull(b6.ViewColWidth,40)&gt;0
+											then case when isnull(b6.ViewColWidth,0)&lt;50 then 1 else isnull(b6.ViewColWidth,0)/50 end else null end 'field/textBox/width/rows',
+										case when isnull(b6.comboType,0) not in (1,2,3,10,11,12,13,4,40,41,42,43,44,45,5,6) and b6.xtype not in(104) and isnull(b6.ViewColWidth,40)&gt;0
+											then isnull(b6.ViewColWidth,0) else null end 'field/textBox/width/length',
+										case when isnull(b6.comboType,0) not in (1,2,3,10,11,12,13,4,40,41,42,43,44,45,5,6) and b6.xtype not in(104) and isnull(b6.ViewColWidth,40)&gt;0
+												then isnull(b6.ViewColAlign,0) else null end 'field/textBox/align',
+										case when isnull(b6.comboType,0) not in (1,2,3,10,11,12,13,4,40,41,42,43,44,45,5,6) and b6.xtype not in(104) and isnull(b6.ViewColWidth,40)&gt;0
+												then b6.ViewColDigit else null end 'field/textBox/digit',
+										case when isnull(b6.comboType,0) not in (1,2,3,10,11,12,13,4,40,41,42,43,44,45,5,6) and b6.xtype not in(104) and isnull(b6.ViewColWidth,40)&gt;0
+												then isnull(b6.defaultvalue,'') else null end 'field/textBox/defaultValue',
+
+										--datebox
+										case when isnull(b6.comboType,0) in (4,40,41,42,43,44,45) and isnull(b6.ViewColWidth,40)&gt;0
+											then '#@'+b6.colname+'@#' end 'field/dateBox/value',
+										case when isnull(b6.comboType,0) in (4,40,41,42,43,44,45) and isnull(b6.ViewColWidth,40)&gt;0
+												then b6.TitleCaption end 'field/dateBox/titleCaption',
+										case when isnull(b6.comboType,0) in (4,40,41,42,43,44,45) and isnull(b6.ViewColWidth,40)&gt;0
+												then isnull(b6.defaultvalue,'') else null end 'field/dateBox/defaultValue',
+										--checkbox
+										case when b6.xType=104 and isnull(b6.ViewColWidth,40)&gt;0 
+											then '#!isnull('+b6.colname+',0)!#' else null end 'field/checkBox/value',
+										case when b6.xType=104 and isnull(b6.ViewColWidth,40)&gt;0
+											then b6.TitleCaption end 'field/checkBox/titleCaption',
+										case when b6.xType=104 and isnull(b6.ViewColWidth,40)&gt;0
+												then isnull(b6.defaultvalue,'') else null end 'field/checkBox/defaultValue',
+
+										--autosuggestbox
+										case when isnull(b6.comboType,0) in (1,2,3,10,12) and b6.xtype in(36) and isnull(b6.ViewColWidth,40)&gt;0 
+												then b6.TitleCaption else null end 'field/autoSuggestBox/titleCaption',										
+										case when isnull(b6.comboType,0) in (1,2,3) and b6.xtype in(36) and isnull(b6.ViewColWidth,40)&gt;0 
+											then '#!'+b6.ComboFieldId+'!#' else null end 'field/autoSuggestBox/id',
+										case when isnull(b6.comboType,0) in (1,2,3) and b6.xtype in(36) and isnull(b6.ViewColWidth,40)&gt;0
+											then '#!'+b6.ComboFieldName+'!#' else null end 'field/autoSuggestBox/name',
+										case when isnull(b6.comboType,0) in (10,12) and b6.xtype in(36) and isnull(b6.ViewColWidth,40)&gt;0 
+											then '#!'+b6.ComboFieldId+'cbId!#' else null end 'field/autoSuggestBox/id',
+										case when isnull(b6.comboType,0) in (10,12) and b6.xtype in(36) and isnull(b6.ViewColWidth,40)&gt;0
+											then '#!'+b6.colName+'cbNm!#' else null end 'field/autoSuggestBox/name',										
+										case when isnull(b6.comboType,0) in (1,2,3,10,12) and b6.xtype in(36) and isnull(b6.ViewColWidth,40)&gt;0
+											then b6.ComboTable else null end 'field/autoSuggestBox/tableName',
+										case when isnull(b6.comboType,0) in (1,2,3,10,12) and b6.xtype in(36) and isnull(b6.ViewColWidth,40)&gt;0
+											then isnull(b6.ComboFieldNameColWidth,0) else null end 'field/autoSuggestBox/width',
+										case when isnull(b6.comboType,0) in (1,2,3,10,12) and b6.xtype in(36) and isnull(b6.ViewColWidth,40)&gt;0
+											then isnull(b6.defaultValue,'') else null end 'field/autoSuggestBox/defaultValue',
+										case when isnull(b6.comboType,'') in (1,2,3,10,12) and b6.xtype in(36) and isnull(b6.ViewColWidth,40)&gt;0
+											then isnull(b6.ComboWhereField1,'') else null end 'field/autoSuggestBox/filter',
+										
+										--attachment
+										case when isnull(b6.comboType,0) in (5) and isnull(b6.ViewColWidth,40)&gt;0
+											then '#!'+b6.colname+'!#' end 'field/fileAttachment/value',
+										case when isnull(b6.comboType,0) in (5) and isnull(b6.ViewColWidth,40)&gt;0
+												then b6.TitleCaption end 'field/fileAttachment/titleCaption',
+
+										--tokenbox
+										case when isnull(b6.comboType,0) in (13) and b6.xtype in(231) and isnull(b6.ViewColWidth,40)&gt;0 
+											then b6.TitleCaption else null end 'field/tokenBox/titleCaption',
+										case when isnull(b6.comboType,0) in (13) and b6.xtype in(231) and isnull(b6.ViewColWidth,40)&gt;0 
+											then '#!'+b6.colname+'!#' else null end 'field/tokenBox/value',
+										case when isnull(b6.comboType,0) in (13) and b6.xtype in(231) and isnull(b6.ViewColWidth,40)&gt;0 
+											then '#!'+b6.ComboFieldId+'!#' else null end 'field/tokenBox/id',
+										case when isnull(b6.comboType,0) in (13) and b6.xtype in(231) and isnull(b6.ViewColWidth,40)&gt;0
+											then '#!'+b6.ComboFieldName+'!#' else null end 'field/tokenBox/name',
+										--case when isnull(b6.comboType,0) in (13) and b6.xtype in(36) and isnull(b6.ViewColWidth,40)&gt;0 
+										--	then '#!'+b6.ComboFieldId+'cbId!#' else null end 'field/tokenBox/id',
+										--case when isnull(b6.comboType,0) in (13) and b6.xtype in(36) and isnull(b6.ViewColWidth,40)&gt;0
+										--	then '#!'+b6.colName+'cbNm!#' else null end 'field/tokenBox/name',
+										case when isnull(b6.comboType,0) in (13) and b6.xtype in(231) and isnull(b6.ViewColWidth,40)&gt;0
+											then b6.ComboTable else null end 'field/tokenBox/tableName',
+										case when isnull(b6.comboType,0) in (13) and b6.xtype in(231) and isnull(b6.ViewColWidth,40)&gt;0
+											then isnull(b6.ComboFieldNameColWidth,0) else null end 'field/tokenBox/width',
+										case when isnull(b6.comboType,0) in (13) and b6.xtype in(231) and isnull(b6.ViewColWidth,40)&gt;0
+											then isnull(b6.defaultValue,'') else null end 'field/tokenBox/defaultValue',
+										case when isnull(b6.comboType,'') in (13) and b6.xtype in(231) and isnull(b6.ViewColWidth,40)&gt;0
+											then isnull(b6.ComboWhereField1,'') else null end 'field/tokenBox/filter'
+									from gen.coTABL a4
+										inner join gen.coTABLFIEL b6
+											on a4.TableGUID=b6.tableGUID
+									where tablename=@tablename and isViewable&gt;0 and b6.ViewPageNo=b5.ViewPageNo 
+										and b6.viewrowno=b5.ViewRowNo and b6.viewColno=b5.ViewColNo and b6.ViewOrderNo=b5.ViewOrderNo
+										and b5.ViewRowType=b6.viewRowType and b5.ViewRowTypeorder=b6.viewRowTypeorder 
+										and b6.ViewRowType is not null
+										and b6.viewpageNo&lt;9 and b6.ViewRowTypeOrder is not null
+									order by b6.viewpageNo, b6.ViewRowNo, b6.ViewRowType,b6.ViewRowTypeOrder,
+										b6.ViewColNo, b6.ViewOrderNo, b6.colname
+									for xml path(''), type
+									) 'viewOrder/fields/*'
+								from gen.coTABL a3
+									inner join gen.coTABLFIEL b5
+										on a3.TableGUID=b5.tableGUID
+								where tablename=@tablename and isViewable&gt;0 and b5.ViewPageNo=b4.ViewPageNo 
+									and b5.viewrowNo=b4.ViewRowNo and b5.viewColNo=b4.ViewColNo
+									and b5.ViewRowType=b4.viewRowType and b5.ViewRowTypeorder=b4.ViewRowTypeOrder
+									and b5.ViewRowType is not null and b5.ViewRowTypeOrder is not null
+								group by b5.viewpageNo, b5.ViewRowNo, b5.ViewRowType, b5.ViewRowTypeorder,
+									b5.ViewColNo, b5.ViewOrderNo
+								order by b5.viewpageNo, b5.ViewRowNo, b5.ViewColNo, b5.ViewOrderNo
+								for xml path(''), type
+								) 'viewCol/viewOrders/*'
+							from gen.coTABL a2
+								inner join gen.coTABLFIEL b4
+									on a2.TableGUID=b4.tableGUID
+							where tablename=@tablename and isViewable&gt;0 and b4.ViewPageNo=b1.ViewPageNo and b4.viewrowNo=b1.ViewRowNo
+								and b3.ViewRowType=b4.viewRowType and b3.ViewRowTypeorder=b4.viewRowTypeorder
+								and b4.ViewRowType is not null and b4.ViewRowTypeorder is not null
+							group by b4.viewpageNo, b4.ViewRowNo, b4.viewrowtype, b4.ViewRowTypeOrder, 
+								b4.ViewColNo 
+							order by b4.viewpageNo, b4.ViewRowNo, b4.ViewColNo
+							for xml path(''), type
+							) 'radioRow/viewCols/*'
+
+						from gen.coTABL a3
+							inner join gen.coTABLFIEL b3
+								on a3.TableGUID=b3.tableGUID
+						where tablename=@tablename and isViewable&gt;0 and b3.ViewPageNo=b2.ViewPageNo and b3.viewrowNo=b2.ViewRowNo
+							and b2.ViewRowType=b3.ViewRowType and b3.ViewRowType is not null and b3.ViewRowTypeOrder is not null
+							and b3.ViewRowTitle is not null
+						group by b3.viewpageNo, b3.ViewRowNo, b3.ViewRowType, b3.ViewRowTypeOrder, b3.ViewRowTitle, b3.colName
+						order by b3.viewpageNo, b3.ViewRowNo, b3.ViewRowType, b3.ViewRowTypeOrder
+						for xml path(''), type
+						) 'radio/radioRows'
+					from gen.coTABL a2
+						inner join gen.coTABLFIEL b2
+							on a2.TableGUID=b2.tableGUID
+					where tablename=@tablename and isViewable&gt;0 and b2.ViewPageNo=b1.ViewPageNo and b2.viewrowNo=b1.ViewRowNo
+						and b2.ViewRowType is not null and b2.ViewRowTypeOrder is null
+					group by b2.viewpageNo, b2.ViewRowNo, b2.ViewRowType, b2.ViewRowTitle, b2.ColName, b2.isEditable,
+						b2.isnullable, b2.ViewColWidth
+					order by b2.viewpageNo, b2.ViewRowNo, b2.ViewRowType
+					for xml path(''), type
+					) 'viewRow/radios/*',
+					
+					--non radio
+					(
+					select b2.viewcolNo 'viewCol/@colNo',
+						(
+						select b3.ViewOrderNo 'viewOrder/@orderNo',
+							(
+							select 
+								b4.colname 'field/@fieldName',
+								case when @editmode=0 then 0 else b4.iseditable end 'field/@isEditable',
+								--0  'field/@isNullable',
+								case when @editmode=0 then 1 else b4.isnullable end 'field/@isNullable',
+								--hidden
+								case when isnull(b4.ViewColWidth,40)=0
+									then '#!'+b4.colname+'!#' end 'field/hiddenBox/value',
+
+								--textbox
+							case when isnull(b4.comboType,0) not in (1,2,3,10,11,12,13,4,40,41,42,43,44,45,5,6) and b4.xtype in(36) and isnull(b4.ViewColWidth,40)&gt;0
+										then '#*'+b4.colname+'*#'
+									when isnull(b4.comboType,0) not in (1,2,3,10,11,12,13,4,40,41,42,43,44,45,5,6) and b4.xtype not in(36, 104) and isnull(b4.ViewColWidth,40)&gt;0
+										then case when @isnew=1 then b4.defaultvalue else '#!'+b4.colname+'!#' end end 'field/textBox/value',
+								case when isnull(b4.comboType,0) not in (1,2,3,10,11,12,13,4,40,41,42,43,44,45,5,6) and b4.xtype not in(104) and isnull(b4.ViewColWidth,40)&gt;0
+										then b4.TitleCaption else null end 'field/textBox/titleCaption',
+								case when isnull(b4.comboType,0) not in (1,2,3,10,11,12,13,4,40,41,42,43,44,45,5,6) and b4.xtype not in(104) and isnull(b4.ViewColWidth,40)&gt;0
+										then b4.PrefixCaption else null end 'field/textBox/prefixCaption',
+								case when isnull(b4.comboType,0) not in (1,2,3,10,11,12,13,4,40,41,42,43,44,45,5,6) and b4.xtype not in(104) and isnull(b4.ViewColWidth,40)&gt;0
+										then b4.SuffixCaption else null end 'field/textBox/suffixCaption',
+								case when isnull(b4.comboType,0) not in (1,2,3,10,11,12,13,4,40,41,42,43,44,45,5,6) and b4.xtype not in(104) and isnull(b4.ViewColWidth,40)&gt;0
+									then case when isnull(b4.ViewColWidth,0)&lt;50 then isnull(b4.ViewColWidth,0) else 50 end else null end 'field/textBox/width/cols',
+								case when isnull(b4.comboType,0) not in (1,2,3,10,11,12,13,4,40,41,42,43,44,45,5,6) and b4.xtype not in(104) and isnull(b4.ViewColWidth,40)&gt;0
+									then case when isnull(b4.ViewColWidth,0)&lt;50 then 1 else isnull(b4.ViewColWidth,0)/50 end else null end 'field/textBox/width/rows',
+								case when isnull(b4.comboType,0) not in (1,2,3,10,11,12,13,4,40,41,42,43,44,45,5,6) and b4.xtype not in(104) and isnull(b4.ViewColWidth,40)&gt;0
+									then isnull(b4.ViewColWidth,0) else null end 'field/textBox/width/length',
+
+								case when isnull(b4.comboType,0) not in (1,2,3,10,11,12,13,4,40,41,42,43,44,45,5,6) and b4.xtype not in(104) and isnull(b4.ViewColWidth,40)&gt;0
+										then isnull(b4.ViewColAlign,0) else null end 'field/textBox/align',
+								case when isnull(b4.comboType,0) not in (1,2,3,10,11,12,13,4,40,41,42,43,44,45,5,6) and b4.xtype not in(104) and isnull(b4.ViewColWidth,40)&gt;0
+										then b4.ViewColDigit else null end 'field/textBox/digit',
+								case when isnull(b4.comboType,0) not in (1,2,3,10,11,12,13,4,40,41,42,43,44,45,5,6) and b4.xtype not in(104) and isnull(b4.ViewColWidth,40)&gt;0
+										then isnull(b4.DefaultValue,'') else null end 'field/textBox/defaultValue',
+
+								--datebox
+								case when isnull(b4.comboType,0) in (4,40,41,42,43,44,45) and isnull(b4.ViewColWidth,40)&gt;0
+									then '#@'+b4.colname+'@#' end 'field/dateBox/value',
+								case when isnull(b4.comboType,0) in (4,40,41,42,43,44,45) and isnull(b4.ViewColWidth,40)&gt;0
+										then b4.TitleCaption end 'field/dateBox/titleCaption',
+								case when isnull(b4.comboType,0) in (4,40,41,42,43,44,45) and isnull(b4.ViewColWidth,40)&gt;0
+										then b4.DefaultValue end 'field/dateBox/defaultValue',
+
+								--checkbox
+								case when b4.xType=104 
+									then '#!isnull('+b4.colname+',0)!#' else null end 'field/checkBox/value',
+								case when b4.xType=104
+										then b4.TitleCaption end 'field/checkBox/titleCaption',
+								case when b4.xType=104
+										then b4.defaultValue end 'field/checkBox/defaultValue',
+
+								--autosuggestbox
+								case when isnull(b4.comboType,0) in (1,2,3,10,12) and b4.xtype in(36) 
+										then b4.TitleCaption end 'field/autoSuggestBox/titleCaption',
+								case when isnull(b4.comboType,0) in (1,2,3) and b4.xtype in(36) 
+									then '#!'+b4.ColName+'!#' else null end 'field/autoSuggestBox/value',
+								case when isnull(b4.comboType,0) in (1,2,3) and b4.xtype in(36) 
+									then '#!'+b4.ComboFieldId+'!#' else null end 'field/autoSuggestBox/id',
+								case when isnull(b4.comboType,0) in (1,2,3) and b4.xtype in(36) 
+									then '#!'+b4.ComboFieldName+'!#' else null end 'field/autoSuggestBox/name',
+								case when isnull(b4.comboType,0) in (10,12) and b4.xtype in(36) 
+									then '#!'+b4.colname+'!#' else null end 'field/autoSuggestBox/value',
+								case when isnull(b4.comboType,0) in (10,12) and b4.xtype in(36) 
+									then '#!'+b4.colname+'cbId!#' else null end 'field/autoSuggestBox/id',
+								case when isnull(b4.comboType,0) in (10,12) and b4.xtype in(36) 
+									then '#!'+b4.colname+'cbNm!#' else null end 'field/autoSuggestBox/name',								
+								case when isnull(b4.comboType,0) in (1,2,3,10,12) and b4.xtype in(36) 
+									then b4.ComboTable else null end 'field/autoSuggestBox/tableName',
+								case when isnull(b4.comboType,0) in (1,2,3,10,12) and b4.xtype in(36) 
+									then isnull(b4.ComboFieldNameColWidth,0) else null end 'field/autoSuggestBox/width',
+								case when isnull(b4.comboType,0) in (1,2,3,10,12) and b4.xtype in(36) 
+									then isnull(b4.defaultValue,'') else null end 'field/autoSuggestBox/defaultValue',
+								case when isnull(b4.comboType,0) in (1,2,3,10,12) and b4.xtype in(36) 
+									then isnull(b4.ComboWhereField1,'') else null end 'field/autoSuggestBox/filter',
+
+								--attachment
+								case when isnull(b4.comboType,0) in (5) and isnull(b4.ViewColWidth,40)&gt;0
+									then '#!'+b4.colname+'!#' end 'field/fileAttachment/value',
+								case when isnull(b4.comboType,0) in (5) and isnull(b4.ViewColWidth,40)&gt;0
+										then b4.TitleCaption end 'field/fileAttachment/titleCaption',
+
+								--tokenbox
+								case when isnull(b4.comboType,0) in (13) and b4.xtype in(231) 
+										then b4.TitleCaption end 'field/tokenBox/titleCaption',
+								case when isnull(b4.comboType,0) in (13) and b4.xtype in(231) 
+									then '#!'+b4.ColName+'!#' else null end 'field/tokenBox/value',
+								case when isnull(b4.comboType,0) in (13) and b4.xtype in(231) 
+									then '#!'+b4.ColName+'cbId!#' else null end 'field/tokenBox/id',
+								case when isnull(b4.comboType,0) in (13) and b4.xtype in(231) 
+									then '#!'+b4.ColName++'cbNm!#' else null end 'field/tokenBox/name',
+								
+								case when isnull(b4.comboType,0) in (13) and b4.xtype in(231) 
+									then b4.ComboTable else null end 'field/tokenBox/tableName',
+								case when isnull(b4.comboType,0) in (13) and b4.xtype in(231) 
+									then b4.ColName else null end 'field/tokenBox/xa',
+								case when isnull(b4.comboType,0) in (13) and b4.xtype in(231) 
+									then isnull(b4.ComboFieldNameColWidth,0) else null end 'field/tokenBox/width',
+								case when isnull(b4.comboType,0) in (13) and b4.xtype in(231) 
+									then isnull(b4.defaultvalue,'') else null end 'field/tokenBox/defaultValue',
+								case when isnull(b4.comboType,0) in (13) and b4.xtype in(231) 
+									then isnull(b4.ComboFieldNameEx1,'') else null end 'field/tokenBox/child',
+								case when isnull(b4.comboType,0) in (13) and b4.xtype in(231) 
+									then isnull(b4.ComboFieldNameEx2,'') else null end 'field/tokenBox/child2',
+								case when isnull(b4.comboType,0) in (13) and b4.xtype in(231) 
+									then isnull(b4.ComboWhereField1,'') else null end 'field/tokenBox/filter'
+
+							from gen.coTABL a4
+								inner join gen.coTABLFIEL b4
+									on a4.TableGUID=b4.tableGUID
+							where tablename=@tablename and isViewable&gt;0 and b4.ViewPageNo=b3.ViewPageNo 
+								and b4.viewrowno=b3.ViewRowNo and b4.viewColno=b3.ViewColNo and b4.ViewOrderNo=b3.ViewOrderNo
+								and b4.viewpageNo&lt;9
+							order by b4.viewpageNo, b4.ViewRowNo, b4.ViewColNo, b4.ViewOrderNo, b4.colname
+							for xml path(''), type
+							) 'viewOrder/fields/*'
+						from gen.coTABL a3
+							inner join gen.coTABLFIEL b3
+								on a3.TableGUID=b3.tableGUID
+						where tablename=@tablename and isViewable&gt;0 and b3.ViewPageNo=b2.ViewPageNo 
+							and b3.viewrowNo=b2.ViewRowNo and b3.viewColNo=b2.ViewColNo
+						group by b3.viewpageNo, b3.ViewRowNo, b3.ViewColNo, b3.ViewOrderNo
+						order by b3.viewpageNo, b3.ViewRowNo, b3.ViewColNo, b3.ViewOrderNo
+						for xml path(''), type
+						) 'viewCol/viewOrders/*'
+					from gen.coTABL a2
+						inner join gen.coTABLFIEL b2
+							on a2.TableGUID=b2.tableGUID
+					where tablename=@tablename and isViewable&gt;0 and b2.ViewPageNo=b1.ViewPageNo and b2.viewrowNo=b1.ViewRowNo
+						and b2.ViewRowType is null
+					group by b2.viewpageNo, b2.ViewRowNo, b2.ViewColNo
+					order by b2.viewpageNo, b2.ViewRowNo, b2.ViewColNo
+					for xml path(''), type
+					) 'viewRow/viewCols/*'
+				from gen.coTABL a1
+					inner join gen.coTABLFIEL b1
+						on a1.TableGUID=b1.tableGUID
+				where tablename=@tablename and isViewable&gt;0 and b1.ViewPageNo=b.ViewPageNo
+					and ViewPageNo&lt;9
+				group by b1.viewpageNo, b1.ViewRowNo
+				order by b1.viewpageNo, b1.ViewRowNo
+				for xml path(''), type
+				) 'viewRows'
+			from gen.coTABL a
+				inner join gen.coTABLFIEL b
+					on a.TableGUID=b.tableGUID
+			where a.tablename=@tablename and isViewable&gt;0 
+			group by b.ViewPageNo
+			order by b.ViewPageNo
+			for xml path('viewPage'), type
+			)
+
+	declare @nullstr1 varchar(max)
+	declare @nullstr2 varchar(max)
+	declare @c int
+
+	
+	select @c=count(*)
+	from gen.coTABLFIEL a
+		inner join gen.coTABL b
+			on a.tableGUID=b.TableGUID
+	where b.tablename=@tablename
+
+	set @nullstr1='union all select '+replicate('null, ',@c-1)+'null'
+
+	set @nullstr2='union all select null'
+
+	--select @xViewPage, @tablename, @fieldKey, @GUID, @fieldKey, @xinfo--*
+	set @x2='
+	declare @x xml
+	Declare @status2 varchar(100),@lvl varchar(100)
+	if substring('''+@tablename+''',1,1)=''t'' begin
+			DECLARE cursor1 cursor FOR
+				select g.status,g.lvl
+				from oph.fn_'+@tablename2+'APRV('''+convert(nvarchar(100), @hostguid)+''') g
+				left join oph.fn_'+@tablename1+'('''+convert(nvarchar(100), @hostguid)+''') c
+					on g.'+@fieldKey1+'= c.'+@fieldKey1+'
+				left join oph.fn_'+@tablename+'('''+convert(nvarchar(100), @hostguid)+''') b
+					on c.'+@fieldKey1+'=  b.'+@fieldKey1+'
+				where g.approvaluserGUID='''+convert(varchar(50),@UserGUID)+''' and b.'+@fieldKey+'='''+convert(varchar(50),@GUID)+'''
+
+			OPEN cursor1
+			FETCH next from cursor1 into @status2,@lvl
+			WHILE @@fetch_status =0
+			BEGIN
+				if @status2 is null and @lvl is not null set @status2=null
+				else
+				set @status2=@status2
+
+
+			FETCH next from cursor1 into @status2,@lvl
+			END
+			CLOSE cursor1
+			DEALLOCATE cursor1
+	end
+	if exists(select * from oph.fn_'+@tablename+'('''+convert(nvarchar(100), @hostGUID)+''') where '+@fieldKey+'='''+convert(varchar(50),@GUID)+''')
+	begin
+	select @x=
+	'''+replace(
+			replace(
+				replace(
+					replace(
+						replace(
+							replace(
+								cast(@xViewPage as varchar(max))
+								,'#*','''+isnull(convert(varchar(50),')
+							,'*#','),'''')+''')
+						,'#!','''+replace(isnull(cast(')
+					,'!#',' as varchar(max)),''''),''&amp;'',''&amp;amp;'')+''')
+				,'#@',
+				'''+
+						isnull((select isnull(xdate, ''1/1/2000'')+''''
+							from 
+							(select convert(datetime, '),'@#',') xdate
+							from oph.fn_'+@tablename+'('''+convert(nvarchar(100), @hostguid)+''')
+							where '+@fieldKey+'='''+convert(varchar(50),@GUID)+''') '+@tablename+' 
+							for xml path('''')),''''
+						)+''')
+				+'''
+	from (
+		select top 1 * 
+		from ( 
+			select * 
+			from oph.fn_'+@tablename+'('''+convert(nvarchar(100), @hostguid)+''')
+			where ('+@fieldKey+'='''+convert(varchar(50),@GUID)+''')
+			
+		) '+@tablename+'
+    order by createddate desc
+
+	) '+@tablename+'
+
+	select 
+		(	select ('+@xinfo+')
+		for xml path(''''), type
+		) ''info'',
+		(	select @x
+			for xml path(''''), type
+		) ''viewPages'', null
+	for xml path(''view''), root  end 
+	else
+	begin
+	select @x=
+	'''+replace(
+			replace(
+				replace(
+					replace(
+						replace(
+							replace(
+								cast(@xViewPage as varchar(max))
+								,'#*','''+isnull(convert(varchar(50),')
+							,'*#','),'''')+''')
+						,'#!','''+replace(isnull(cast(')
+					,'!#',' as varchar(max)),''''),''&amp;'',''&amp;amp;'')+''')
+				,'#@',
+				'''+
+						isnull((select isnull(xdate, ''1/1/2000'')+''''
+							from 
+							(select convert(datetime, '),'@#',') xdate
+							from oph.fn_'+@tablename+'('''+convert(nvarchar(100), @hostguid)+''')
+							where '+@fieldKey+'='''+convert(varchar(50),@GUID)+'''union all select null) '+@tablename+'
+							  
+							for xml path('''')),''''
+						)+''')
+				+'''
+	from (
+		select top 1 * 
+		from ( 
+			select * 
+			from oph.fn_'+@tablename+'('''+convert(nvarchar(100), @hostguid)+''')
+			where ('+@fieldKey+'='''+convert(varchar(50),@GUID)+''')
+			'+@nullstr1+'
+		) '+@tablename+'
+    order by createddate desc
+
+	) '+@tablename+'
+
+	select 
+		(	select ('+@xinfo+')
+		for xml path(''''), type
+		) ''info'',
+		(	select @x
+			for xml path(''''), type
+		) ''viewPages'', null
+	for xml path(''view''), root
+	end'
+
+	--select @x2, @xinfo, @nullstr1, @tablename
+	--select @xViewPage, @x2
+	--select @nullstr1, @nullstr2
+	exec(@x2)
+
+
+
+
+
+
+
+
+
+
+

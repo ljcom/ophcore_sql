@@ -1,0 +1,23 @@
+CREATE PROCEDURE [dbo].[TaPCSO_save_preview]	@GUID uniqueidentifier, @hostGUID uniqueidentifier, @CarolGUID uniqueidentifier, @PAYMGUID uniqueidentifier, @isReceived bit, @preview int = 0--Automatic Parameters by OPH. Do Not Modify This Parameters Intentionally.
+
+as	--CreatedBy eLs ON Jan, 2017
+
+	if @preview = 1 begin
+		select c.*, d.* from (select 1 [row]) a
+			left join ToPCSO b ON b.PCSOGUID = @GUID AND 1=1
+			left join (
+				select PAYMGUID, Name [PAYMGUID_name] from MoPAYM where Name = 'Salary Deduction' and @PAYMGUID is NULL
+			) c ON b.PAYMGUID is NULL
+			left join (
+				select ParameterValueGUID [EVGRGUID], ParReference + ' - ' + ParValueDesc [EVGRGUID_name] 
+				from poEVGR where ParameterValueGUID = '9573DD6B-DB6F-4153-8A07-9B7CC8C0ADE7'
+			) d ON b.EVGRGUID is NULL
+		for xml path ('root'), type
+	end
+
+	if @preview = 2 begin
+		select WorkAddress [Address] from CoUSER a
+			left join ToPCSO b ON PCSOGUID = @GUID
+		where UserGUID = @CarolGUID AND b.Address is NULL
+		for xml path ('root'), type
+	end

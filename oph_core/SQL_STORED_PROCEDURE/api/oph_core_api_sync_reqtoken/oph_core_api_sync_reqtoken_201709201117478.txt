@@ -1,0 +1,44 @@
+
+
+
+
+
+CREATE procedure [api].[sync_reqtoken] 
+	@accountId nvarchar(50), @userID as nvarchar(100), @password as nvarchar(50), @r xml=null output
+--WITH ENCRYPTION
+as
+
+	declare @timestamp datetime=current_timestamp
+	declare @sessionToken uniqueidentifier, @isPushCore bit
+
+	update r
+	set sessionToken=newid()
+	from acctrepl r 
+		inner join acct a on a.AccountGUID=r.accountGUID
+	where r.userId=@userid and r.privateToken=@password and a.AccountId=@accountId
+
+	select @sessionToken=r.sessionToken, @isPushCore=isPushCore
+	from acctrepl r 
+		inner join acct a on a.AccountGUID=r.accountGUID
+	where r.userId=@userid and r.privateToken=@password and a.AccountId=@accountId
+
+	set @r=replace((
+		select @sessionToken sessionToken, @isPushCore pushCore
+		for xml path('replicationToken'), root('sqroot')
+		), '&'+'#x0D;', '')
+
+	print @sessionToken
+	print @ispushcore
+
+	select @r
+
+	--declare @timestamp datetime=current_timestamp
+	declare @comment nvarchar(max)='api.verifyToken @userId:'+@userid+', @sessionToken:'+cast(@sessionToken as nvarchar(50))
+	exec gen.evnt_save null, 'token', @password, @timestamp, @comment
+
+
+
+
+
+
+

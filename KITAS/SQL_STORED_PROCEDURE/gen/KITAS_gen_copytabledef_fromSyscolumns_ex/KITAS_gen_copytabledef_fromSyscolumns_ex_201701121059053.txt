@@ -1,0 +1,46 @@
+
+
+
+
+
+CREATE procedure [gen].[copytabledef_fromSyscolumns_ex] @tbl nvarchar(20), @replacewithtbl nvarchar(20), @sourceDB nvarchar(100)--=null
+as
+	declare @tableGUID uniqueidentifier
+
+	select @tableguid=tableguid 
+	from gen.cotabl
+	where tablename=@tbl
+
+	delete from gen.cotablfiel
+	from gen.cotablfiel a
+	where TableGUID=@tableguid
+	
+	if @sourceDB is null	
+		--insert into gen.cotablfiel(tableFieldGUID, TableGUID, ColName, id, colorder, xType, isNullable, TitleCaption, TitleShort, PrefixCaption, SuffixCaption, isBrowsable, BrowseColDigit, BrowseColWidth, BrowseColAlign, BrowseOrder, BrowseFilter, isSumable, SumField, isViewable, ViewPageNo, ViewRowNo, ViewRowType, ViewRowTypeOrder, ViewRowTitle, ViewColNo, ViewOrderNo, ViewColDigit, ViewColWidth, ViewColAlign, isEditable, isApproval, ComboType, ComboTable, ComboFieldKey, ComboFieldId, ComboFieldIdColWidth, ComboFieldName, ComboFieldNameColWidth, ComboFieldNameEx1, ComboFieldNameEx2, ComboWhereField1, ComboWhereRequired1, ComboWhereField2, ComboWhereRequired2, ActivateField, DefaultValue, PrimaryCol, isDeleted, DeletedDate, CreatedDate, UpdatedDate, DeletedUser, CreatedUser, UpdatedUser, TriggerDate)
+		--select NEWID(), @tableGUID, ColName, id, colorder, xType, isNullable, TitleCaption, TitleShort, PrefixCaption, SuffixCaption, isBrowsable, BrowseColDigit, BrowseColWidth, BrowseColAlign, BrowseOrder, BrowseFilter, isSumable, SumField, isViewable, ViewPageNo, ViewRowNo, ViewRowType, ViewRowTypeOrder, ViewRowTitle, ViewColNo, ViewOrderNo, ViewColDigit, ViewColWidth, ViewColAlign, isEditable, isApproval, ComboType, ComboTable, ComboFieldKey, ComboFieldId, ComboFieldIdColWidth, ComboFieldName, ComboFieldNameColWidth, ComboFieldNameEx1, ComboFieldNameEx2, ComboWhereField1, ComboWhereRequired1, ComboWhereField2, ComboWhereRequired2, ActivateField, DefaultValue, PrimaryCol, isDeleted, DeletedDate, CreatedDate, UpdatedDate, DeletedUser, CreatedUser, UpdatedUser, TriggerDate
+		--from gen.cotablfiel a
+		--	inner join gen.cotabl b
+		--		on a.tableguid=b.tableguid
+		--where tablename=@replacewithtbl
+		print 'Query terminate -- Please input @sourceDB'
+	else
+	begin
+		declare @sqlstr nvarchar(4000)
+		set @sqlstr='insert into gen.cotablfiel(TableFieldGUID, tableGUID, ColName, id, colorder, xType, isNullable, TitleCaption, TitleShort, PrefixCaption, SuffixCaption, isBrowsable, BrowseColDigit, BrowseColWidth, BrowseColAlign, BrowseOrder, BrowseFilter, isSumable, SumField, isViewable, ViewPageNo, ViewRowNo, ViewRowType, ViewRowTypeOrder, ViewRowTitle, ViewColNo, ViewOrderNo, ViewColDigit, ViewColWidth, ViewColAlign, isEditable, isApproval, ComboType, ComboTable, ComboFieldKey, ComboFieldId, ComboFieldIdColWidth, ComboFieldName, ComboFieldNameColWidth, ComboFieldNameEx1, ComboFieldNameEx2, ComboWhereField1, ComboWhereRequired1, ComboWhereField2, ComboWhereRequired2, ActivateField, DefaultValue, PrimaryCol, DeletedDate, CreatedDate, UpdatedDate, DeletedUser, CreatedUser, UpdatedUser, TriggerDate) '+ char(13) + char(10) + 
+			'select NEWID(), '''+convert(nvarchar(50), @tableGUID)+''', ColName, id, colorder, xType, isNullable, TitleCaption, TitleShort, PrefixCaption, SuffixCaption, isBrowsable, BrowseColDigit, BrowseColWidth, BrowseColAlign, BrowseOrder, BrowseFilter, isSumable, SumField, isViewable, ViewPageNo, ViewRowNo, ViewRowType, ViewRowTypeOrder, ViewRowTitle, ViewColNo, ViewOrderNo, ViewColDigit, ViewColWidth, ViewColAlign, isEditable, isApproval, ComboType, ComboTable, ComboFieldKey, ComboFieldId, ComboFieldIdColWidth, ComboFieldName, ComboFieldNameColWidth, ComboFieldNameEx1, ComboFieldNameEx2, ComboWhereField1, ComboWhereRequired1, ComboWhereField2, ComboWhereRequired2, ActivateField, DefaultValue, PrimaryCol,  DeletedDate, CreatedDate, UpdatedDate, DeletedUser, CreatedUser, UpdatedUser, TriggerDate '+
+			'from '+@sourceDB+'.syscolumns_ex '+
+			'where tablename='''+@replacewithtbl+''''
+		print @sqlstr
+		exec sp_executesql @sqlstr
+	end
+
+
+
+
+
+
+
+
+
+
+

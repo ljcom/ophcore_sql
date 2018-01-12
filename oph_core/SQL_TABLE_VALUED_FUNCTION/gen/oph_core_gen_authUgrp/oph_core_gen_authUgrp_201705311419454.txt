@@ -1,0 +1,17 @@
+
+CREATE FUNCTION [gen].[authUgrp] (@hostGUID uniqueidentifier)
+RETURNS 
+@result TABLE 
+(ugroupGUID uniqueidentifier, groupId nvarchar(50), allExceptModule bit)
+AS
+BEGIN
+	
+	insert into @result (ugroupGUID, groupId, allExceptModule)
+	select UGroupGUID, GroupID, allExceptModule
+	--select *
+	from ugrp x
+		inner join (select distinct a.userguid from [user] a inner join userhost b on a.userguid=b.userguid where hostguid=@hostGUID) y
+			on iif(CHARINDEX(cast(y.userguid as varchar(50)), x.TokenUser)>0,1,0)<>x.allExceptUser
+
+	RETURN 
+END

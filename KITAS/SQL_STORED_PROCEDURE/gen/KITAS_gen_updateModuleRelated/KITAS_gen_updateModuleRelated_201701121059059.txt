@@ -1,0 +1,37 @@
+
+
+
+
+
+
+
+
+
+CREATE procedure [gen].[updateModuleRelated]
+as
+	update coMODL
+	set moduleRelatedGUID='00000000-0000-0000-0000-000000000000'
+	--select * 
+	from coMODL a
+		INNER JOIN sysobjects b
+			ON left(a.ModuleId,1)+'o'+SUBSTRING(a.ModuleId,3,LEN(a.moduleid)-2)=b.name
+	where b.xtype='V' and a.moduleRelatedGUID is null
+
+	update a
+	set moduleRelatedGUID=c.moduleGUID
+	from coMODL a
+		INNER JOIN sysobjects b
+			ON left(a.ModuleId,1)+'o'+SUBSTRING(a.ModuleId,3,LEN(a.moduleid)-3)=b.name
+		inner join coMODL c
+			on left(b.name,1)+'a'+SUBSTRING(b.name,3,LEN(b.name)-2)=c.moduleid
+	where b.xtype='U' and a.ModuleRelatedGUID='00000000-0000-0000-0000-000000000000'
+		and a.modulerelatedGUID is not null
+
+
+
+
+
+
+
+
+

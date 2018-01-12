@@ -1,0 +1,22 @@
+
+
+CREATE procedure [gen].[userinfo_save] @userguid uniqueidentifier, @key nvarchar(50), @value nvarchar(max)
+as
+	if exists(select * from userinfo where userguid=@userguid and infokey=@key)
+	begin
+		--update
+		update userinfo
+		set Infovalue=@value
+		where userguid=@userguid and infokey=@key
+	end
+	else
+	begin
+		--insert
+		insert into userinfo (userguid, infokey, infovalue)
+		values (@userguid, @key, @value)
+	end
+
+
+
+
+

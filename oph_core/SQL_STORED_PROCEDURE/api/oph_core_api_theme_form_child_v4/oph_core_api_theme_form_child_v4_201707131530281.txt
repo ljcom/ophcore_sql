@@ -1,0 +1,138 @@
+CREATE procedure [api].[theme_form_child_v4] @hostGUID uniqueidentifier, @code nvarchar(max), @db nvarchar(max), @typecode nvarchar(1), @childxml xml output, @isdebug bit=0
+--WITH ENCRYPTION
+as
+
+--declare @hostGUID uniqueidentifier = gen.gethost('ap\edrick.leonardo'), @code nvarchar(max) = 'ugrp', @db nvarchar(max), @typecode nvarchar(1) = 'c', @childxml xml, @isdebug bit=0
+
+	declare @sqlstr nvarchar(max)
+
+	if @typecode='c' begin
+		set @sqlstr ='select @xml = (
+			select lower(c.moduleid) as code, c.ModuleDescription as childTitle, b2.colkey as parentkey, (
+				select (
+					select lower(aum.ModuleID) [@module], allowAccess [allowBrowse], AllowAdd, allowEdit, allowDelete
+					from [gen].[authModl] ('''+cast(@hostGUID as varchar(50))+''', NULL) aum
+					where aum.moduleGUID = c.ModuleGUID for xml path(''permission''),type
+					)
+				) as info
+			from modl p
+				inner join modl c on c.ParentModuleGUID=p.ModuleGUID
+				inner join modlcolm b2 on p.ModuleGUID=b2.ModuleGUID 
+				inner join modlcolm b on c.ModuleGUID=b.ModuleGUID and b.colkey=b2.colkey
+			where p.moduleid = '''+@code+''' 
+				and b2.colorder=(
+					select min(colorder)
+					from modl a
+						inner join modlcolm b on a.moduleguid=b.moduleguid
+					where a.moduleid='''+@code+''' 
+				)
+			order by c.OrderNo, c.ModuleDescription, c.ModuleID
+			for xml path(''child''),type,root(''children'')) '
+
+/*
+		set @sqlstr ='select @xml = (
+			select lower(c.moduleid) as code, c.ModuleDescription as childTitle, b2.colkey as parentkey, (
+				select (
+					select LOWER(GroupID) [@group],
+						IIF(capa.[Browse] = 0, 0, isNULL(AllowAccess, 0)) [allowBrowse],
+						IIF(capa.[Add] = 0, 0, ISNULL(AllowAdd, 0)) [allowAdd],
+						IIF(capa.Edit = 0, 0, ISNULL(AllowEdit, 0)) [allowEdit],
+						IIF(capa.Del = 0, 0, ISNULL(AllowDelete, 0)) [allowDelete],
+						IIF(capa.Force = 0, 0, ISNULL(AllowForce, 0)) [allowForce],
+						IIF(capa.Wipe = 0, 0, ISNULL(AllowWipe, 0)) [allowWipe]
+					from modl m1
+						inner join (
+							select 
+								ModuleGUID, isNULL(AllowBrowse, 0) [Browse], isNULL(AllowAdd, 0) [Add], isNULL(AllowEdit, 0) [Edit], 
+								isNULL(AllowDelete, 0) [Del], ISNULL(AllowForce, 0) [Force], ISNULL(AllowWipe, 0) [Wipe]
+							from (
+								select b.ModuleGUID, InfoKey, InfoValue from modl a
+									inner join modlinfo b ON a.ModuleGUID = b.ModuleGUID
+								where a.ModuleGUID = c.ModuleGUID
+							) xs
+							PIVOT (
+								max(InfoValue) for InfoKey in ([AllowAdd], [AllowBrowse], [AllowDelete], [AllowEdit], [AllowWipe], [AllowForce])
+							) pvt
+						) capa ON m1.ModuleGUID = capa.ModuleGUID
+						left join (
+							select ModuleGUID, AllowAccess, AllowAdd, AllowEdit, AllowDelete, AllowForce, AllowWipe, GroupID
+							from ugrp u1
+								inner join ugrpmodl um ON u1.UGroupGUID = um.UGroupGUID
+							where TokenUser like ''%'+cast(gen.getUserHost(@hostGUID) as varchar(50))+'%'' 
+						) uper ON m1.ModuleGUID = uper.ModuleGUID
+					where m1.ModuleGUID = c.ModuleGUID
+					for xml path(''permission''),type
+					) 
+				) as info
+			from modl p
+				inner join modl c on c.ParentModuleGUID=p.ModuleGUID
+				inner join modlcolm b2 on p.ModuleGUID=b2.ModuleGUID 
+				inner join modlcolm b on c.ModuleGUID=b.ModuleGUID and b.colkey=b2.colkey
+			where p.moduleid = ''' + @code + ''' 
+				and b2.colorder = (
+					select min(colorder) from modl a
+						inner join modlcolm b on a.moduleguid=b.moduleguid
+					where a.moduleid= ''' + @code + ''' 
+				)
+			order by c.OrderNo, c.ModuleDescription, c.ModuleID
+			for xml path(''child''),type,root(''children'')
+		)'
+*/
+/*
+		set @sqlstr ='select @xml = (
+			select lower(c.moduleid) as code, c.ModuleDescription as childTitle, b2.colkey as parentkey, (
+				select (
+						select b1.infovalue allowbrowse, b2.infovalue allowadd,
+							b3.infovalue allowedit, --b4.infovalue allowhold,
+							b5.infovalue allowdelete--, b6.infovalue allowwipe, b7.infovalue allowbatch 
+						from modl a
+							left join modlinfo b1 on a.moduleguid=b1.moduleguid and (b1.infokey=''AllowBrowse'' or b1.infokey=''AllowAccess'')
+							left join modlinfo b2 on a.moduleguid=b2.moduleguid and b1.infokey=''allowadd''
+							left join modlinfo b3 on a.moduleguid=b3.moduleguid and b1.infokey=''allowedit''
+							left join modlinfo b5 on a.moduleguid=b5.moduleguid and b1.infokey=''allowdelete''
+						where moduleid='''+@code+''' for xml path(''permission''),type)
+				) as info
+			from modl p
+				inner join modl c on c.ParentModuleGUID=p.ModuleGUID
+				inner join modlcolm b2 on p.ModuleGUID=b2.ModuleGUID 
+				inner join modlcolm b on c.ModuleGUID=b.ModuleGUID and b.colkey=b2.colkey
+				--inner join modlcolminfo d on d.ColumnGUID=b.ColumnGUID and d.InfoKey=''isParentKey''
+			where p.moduleid = '''+@code+''' 
+				and b2.colorder=(
+					select min(colorder)
+					from modl a
+						inner join modlcolm b on a.moduleguid=b.moduleguid
+					where a.moduleid='''+@code+''' 
+				)
+			order by c.OrderNo, c.ModuleDescription, c.ModuleID
+			for xml path(''child''),type,root(''children'')) '
+*/
+	end
+	else begin
+		set @sqlstr ='select @xml = (
+			select lower(c.moduleid) as code, c.ModuleDescription as childTitle, ''parentDocGUID'' parentkey,
+				(
+					select (
+						select b1.infovalue allowBrowse, b2.infovalue allowadd,
+							b3.infovalue allowedit, --b4.infovalue allowhold,
+							b5.infovalue allowdelete--, b6.infovalue allowwipe, b7.infovalue allowbatch 
+						from modl a
+							left join modlinfo b1 on a.moduleguid=b1.moduleguid and (b1.infokey=''AllowBrowse'' or b1.infokey=''AllowAccess'')
+							left join modlinfo b2 on a.moduleguid=b2.moduleguid and b1.infokey=''allowadd''
+							left join modlinfo b3 on a.moduleguid=b3.moduleguid and b1.infokey=''allowedit''
+							left join modlinfo b5 on a.moduleguid=b5.moduleguid and b1.infokey=''allowdelete''
+						where moduleid='''+@code+''' for xml path(''permission''),type)
+				) as info
+			from modl p
+				inner join modl c on c.ParentModuleGUID=p.ModuleGUID
+			where p.moduleid = '''+@code+''' 
+			order by c.OrderNo, c.ModuleDescription, c.ModuleID
+			for xml path(''child''),type,root(''children'')) '
+
+	end
+
+	print @sqlstr
+
+	EXECUTE sp_executesql @sqlstr, N'@xml xml output', @xml = @childxml output
+
+	--select @childxml

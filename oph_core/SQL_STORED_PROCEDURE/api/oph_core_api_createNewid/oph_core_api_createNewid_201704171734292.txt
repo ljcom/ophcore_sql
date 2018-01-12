@@ -1,0 +1,6 @@
+CREATE procedure [api].[createNewid] 
+--WITH ENCRYPTION
+as
+
+	select newid()
+

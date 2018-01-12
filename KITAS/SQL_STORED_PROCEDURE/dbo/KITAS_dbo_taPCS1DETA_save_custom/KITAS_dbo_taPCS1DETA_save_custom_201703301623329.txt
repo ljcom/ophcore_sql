@@ -1,0 +1,124 @@
+
+
+CREATE procedure [dbo].[taPCS1DETA_save_custom]
+	@GUID uniqueidentifier , @hostGUID uniqueidentifier, @savexml xml
+as
+
+	--additional script for save_custom --
+	declare @savelist api.fieldlist1
+
+	insert into @saveList
+	exec api.convertXML2FieldList 'taPCS1DETA', @savexml
+
+	-- end additional script for save_custom --	
+	
+	declare @PCSODETAGUID uniqueidentifier = (select fieldvalue from @savelist where fieldId ='PCSODETAGUID')
+			, @Qty int = (select fieldvalue from @savelist where fieldId ='qty')
+			, @PCSOGUID uniqueidentifier
+	
+	declare @evenGUID uniqueidentifier, @evename nvarchar(100), @prodGUID uniqueidentifier, @carolGUID uniqueidentifier, @price money
+
+	select @PCSOGUID = a.PCSOGUID, @evenGUID = EVENGUID, @prodGUID = PRODGUID, @carolGUID = carolGUID, @price = price
+	from kitas.dbo.ToPCSODETA a
+		inner join kitas.dbo.ToPCSO b on a.PCSOGUID = b.pcsoGUID
+	where PCSODETAGUID = @PCSODETAGUID
+
+		--declare @evenGUID uniqueidentifier, @evename nvarchar(100)
+	select @evename = name from kitas.dbo.MoEVENPSKU a 
+		inner join kitas.dbo.MoEVEN b on b.evenGUID = a.evenGUID
+	where a.evenGUID = @evenGUID and @prodGUID = PRODGUID 
+
+	declare @productName nvarchar(200)
+	select @productName = Name from kitas.dbo.moprod where prodGUID = @prodGUID
+
+	declare @limit money, @cekTotalShop money, @maxSales money
+		, @maxQty int, @qty1 int, @qty2 int, @sisaqty int
+	
+	if @EvenGUID in ('9573DD6B-DB6F-4153-8A07-9B7CC8C0ADE7','6A293D44-E76E-4979-BAD6-A598988FB61B')  begin 
+		select @qty1 = isnull(sum(Qty),0)
+		from kitas.dbo.ToPCSO a 
+			inner join  kitas.dbo.ToPCSODETA b 
+				on b.pcsoGUID = a.pcsoGUID
+		where a.carolGUID = @carolGUID and isdeleted = 0 and b.prodGUID = @PRODGUID and EvenGUID in ('9573DD6B-DB6F-4153-8A07-9B7CC8C0ADE7','6A293D44-E76E-4979-BAD6-A598988FB61B') 
+			and ((status &gt;= 100))
+
+		select @limit = limit from kitas.dbo.CoUSERLIMT where userGUID = @carolGUID
+		select @maxSales = maxsales, @maxQty = MaxQty from kitas.dbo.moEVEN where evenGUID = @evenGUID
+		set @sisaqty = @MaxQty - @qty1
+		set @cekTotalShop  = @Qty*@Price
+		set @cekTotalShop = @cekTotalShop + 
+			isnull((select sum(totalPrice) 
+		from kitas.dbo.ToPCSODETA 
+		where PCSOGUID = @PCSOGUID and EVENGUID in ('9573DD6B-DB6F-4153-8A07-9B7CC8C0ADE7','6A293D44-E76E-4979-BAD6-A598988FB61B')),0)
+	end
+	
+	else 
+		if @EvenGUID not in ('9573DD6B-DB6F-4153-8A07-9B7CC8C0ADE7','6A293D44-E76E-4979-BAD6-A598988FB61B')  begin 
+			select @qty2 = isnull(sum(Qty),0)
+			from kitas.dbo.ToPCSO a 
+				inner join kitas.dbo.ToPCSODETA b 
+					on b.pcsoGUID = a.pcsoGUID
+			where a.carolGUID = @carolGUID and isdeleted = 0 and b.prodGUID = @PRODGUID and EvenGUID = @evenGUID
+				and ((status &gt;= 100))
+		
+			select 
+				@limit = (select Top 1 MaxSales from kitas.dbo.moeven where evenGUID = @evenGUID)-isnull(sum(TotalPrice),0) 
+			from kitas.dbo.ToPCSODETA a1
+				inner join kitas.dbo.ToPCSO a2 
+					on a1.PCSOGUID = a2.PCSOGUID
+			where EVENGUID = @evenGUID
+				and a2.carolGUID = @carolGUID and status &gt;= 100 and a2.isdeleted = 0 
+
+			select @maxSales = maxsales,@maxQty = MaxQty from kitas.dbo.MoEven where evenGUID = @EvenGUID
+			set @sisaqty = @MaxQty - @qty1
+			set @cekTotalShop  = @Qty*@Price
+			set @cekTotalShop = @cekTotalShop + 
+				isnull((select sum(totalPrice) from kitas.dbo.ToPCSODETA where PCSOGUID = @PCSOGUID and EVENGUID = @evenGUID),0)
+		end
+		else begin
+			select 'ada yg salah'
+		end
+
+	--jika qty/limit melebihi (regular, web)
+	if @evenGUID in ('9573DD6B-DB6F-4153-8A07-9B7CC8C0ADE7','6A293D44-E76E-4979-BAD6-A598988FB61B') 
+		and (@cekTotalShop &gt; @limit or @Qty +  @qty1 &gt; @maxQty) 
+	begin
+		if @cekTotalShop &gt; @limit begin
+			select 'Your order for Event '+@evename+' exceeds the limit  &amp;lt;br/&amp;gt; (Your Limit : Rp. '+PARSENAME(CONVERT(VARCHAR,CAST(@limit AS MONEY),1),2)+')'
+		end 
+		else 
+			if @Qty +  @qty1 &gt; @maxQty begin
+				select 'Qty orders of this product ('+isnull(@productName,'')+') Event '+@evename+' exceeds the limit &amp;lt;br/&amp;gt; (Qty Limit : '+ convert(varchar(10),@maxqty-@qty1)+')'
+			end
+	end
+	--jika qty/limit melebihi selain (regular, web)
+	else 
+		if @evenGUID not in ('9573DD6B-DB6F-4153-8A07-9B7CC8C0ADE7','6A293D44-E76E-4979-BAD6-A598988FB61B') 
+			and (@cekTotalShop &gt; @limit or @Qty + @qty2 &gt; @maxQty) 
+		begin
+		--select @evename,convert(varchar(20),@limit)+'t',@cekTotalShop,'bazar'
+		
+			if @cekTotalShop &gt; @limit begin
+				select 'Your order for Event '+@evename+' exceeds the limit  &amp;lt;br/&amp;gt; (Your Limit : Rp. '+PARSENAME(CONVERT(VARCHAR,CAST(@limit AS MONEY),1),2)+')'
+			end 
+			else 
+				if @Qty +  @qty2 &gt; @maxQty begin
+					select 'Qty orders of this product ('+isnull(@productName,'')+') for Event '+@evename+' exceeds the limit &amp;lt;br/&amp;gt; (Qty Limit : '+ convert(varchar(10),@maxqty-@qty2)+')'
+				end
+		end
+		else begin
+			update kitas.dbo.ToPCSODETA
+			set QTY = @qty, TotalPrice = @qty * price
+			where pcsoDETAGUID = @PCSODETAGUID
+
+			declare	@TotalSales money, @totalQty int
+			select @TotalSales = sum(b.TotalPrice), @totalQty =sum(b.Qty)
+			from kitas.dbo.topcso a
+			inner join kitas.dbo.topcsodeta b on b.pcsoGUID= a.pcsoGUID
+			where a.pcsoGUID = @pcsoGUID
+
+			update kitas.dbo.topcso set totalSales = @TotalSales, TotalQty = @totalQty
+			where pcsoGUID = @pcsoGUID
+		end
+
+

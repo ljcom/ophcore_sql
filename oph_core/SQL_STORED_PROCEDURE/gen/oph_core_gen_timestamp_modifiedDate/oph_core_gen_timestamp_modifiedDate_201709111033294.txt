@@ -1,0 +1,32 @@
+
+
+CREATE procedure [gen].[timestamp_modifiedDate]
+as
+	declare @accountguid uniqueidentifier
+	exec gen.getDBInfo null, null, @accountGUID=@accountGUID
+
+	declare @updatedTS bigint=(
+		select avg(gen.datetoint(updatedDate)) ud
+		from (	
+			select (isnull(updatedDate, createdDate)) updatedDate
+			from dbo.modl m
+			union all
+			select (isnull(c.updatedDate, c.createdDate))
+			from dbo.modl m
+				inner join dbo.modlcolm c on m.moduleguid=c.moduleguid
+			--union all
+			--select (isnull(i.updatedDate, i.createdDate))
+			--from dbo.modl m
+			--	inner join dbo.modlcolm c  on m.moduleguid=c.moduleguid
+			--	inner join dbo.modlcolminfo i  on c.columnguid=i.columnguid
+			--union all
+			--select (isnull(i.updatedDate, i.createdDate))
+			--from dbo.modl m
+			--	inner join dbo.modlinfo i  on m.moduleguid=i.moduleguid
+		) x
+	)
+	--print @updatedTS
+	exec [gen].[acctinfo_save] @accountGUID, 'ts_md', @updatedTS
+
+
+

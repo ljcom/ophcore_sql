@@ -1,0 +1,13 @@
+
+CREATE TRIGGER [dbo].[tg_modlinfo_updatedDate] 
+   ON  [dbo].[modlinfo]
+   AFTER INSERT, UPDATE
+AS 
+BEGIN
+	update modlinfo
+	set updatedDate=getdate()
+	from modlinfo a
+		inner join inserted b on a.ModuleInfoGUID=b.ModuleInfoGUID
+
+END
+

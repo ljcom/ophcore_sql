@@ -1,0 +1,62 @@
+
+
+
+
+CREATE procedure [gen].[addcolumns]
+as 
+	declare @id int, @tableName nvarchar(50), @sqlstr varchar(8000), @view nvarchar(50), @parameter nvarchar(400), @content varchar(8000)
+	DECLARE #cur001 CURSOR
+	   FOR 	select id, name from sysobjects	--tb
+		where xtype = 'U' and name like '[CMPRST]o%'
+	
+	OPEN #cur001
+	FETCH NEXT FROM #cur001
+	into @id, @tableName 
+	
+	WHILE @@FETCH_STATUS = 0
+	BEGIN
+		--if len(@tableName)=6 begin
+			--set @sqlstr = 'bit not null constraint [DF_' + @tableName + '_isDeleted] default (0) WITH VALUES'
+			--exec gen.addcolumn @id, @tableName, 'isDeleted', @sqlstr
+			--exec gen.addcolumn @id, @tableName, 'DeletedDate', 'smalldatetime null'
+			--exec gen.addcolumn @id, @tableName, 'DeletedUser', 'uniqueidentifier null'
+		--end
+		--exec gen.addcolumn @id, @tableName, 'DeletedUser', 'nvarchar(50) null'
+		
+		set @sqlstr = 'smalldatetime not null constraint [DF_' + @tableName + '_CreatedDate] default getdate() WITH VALUES'
+		exec gen.addcolumn @id, @tableName, 'CreatedDate', @sqlstr
+		exec gen.addcolumn @id, @tableName, 'CreatedUser', 'uniqueidentifier null'
+		--exec gen.addcolumn @id, @tableName, 'CreatedUser', 'nvarchar(50) null'
+	
+		set @sqlstr = 'smalldatetime not null constraint [DF_' + @tableName + '_UpdatedDate] default getdate() WITH VALUES'
+		exec gen.addcolumn @id, @tableName, 'UpdatedDate', @sqlstr
+		exec gen.addcolumn @id, @tableName, 'UpdatedUser', 'uniqueidentifier null'
+		--exec gen.addcolumn @id, @tableName, 'UpdatedUser', 'nvarchar(50) null'
+		
+		if LEFT(@tablename,2)='To' and LEN(@tableName)=6 begin
+			exec gen.addcolumn @id, @tableName, 'ClosedDate', 'datetime null'
+			exec gen.addcolumn @id, @tableName, 'initiatorGUID', 'uniqueidentifier null'
+		end
+		
+		FETCH NEXT FROM #cur001
+		into @id, @tableName
+	end
+	CLOSE #cur001
+	DEALLOCATE #cur001
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

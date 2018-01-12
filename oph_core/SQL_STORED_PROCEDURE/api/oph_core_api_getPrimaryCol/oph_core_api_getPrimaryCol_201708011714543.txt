@@ -1,0 +1,42 @@
+
+
+
+
+CREATE procedure [api].[getPrimaryCol] @hostGUID uniqueidentifier,
+	 @code varchar(50), @primaryNo int, @primaryCol varchar(50) OUTPUT
+--WITH ENCRYPTION
+AS
+BEGIN
+	declare @ver varchar(10), @db varchar(50), @typecode varchar(1)--, @modlDB nvarchar(50)
+	exec gen.getDBInfo @hostguid, @code, @ver output, @db output, @typecode output
+	--exec gen.getDBInfo @hostguid, 'modl', @ver output, @modlDB output--, @typecode output
+
+	declare @colname varchar(50)
+	declare @sqlstr nvarchar(max)
+	declare @sqlpar nvarchar(max)='@colname varchar(50) OUTPUT'
+	if @ver='3.0' begin
+		set @sqlstr='
+			select @colname=colname
+			from '+@db+'.gen.cotabl a 
+				inner join '+@db+'.gen.cotablfiel b
+					on a.tableguid=b.tableguid
+			where a.tablename like '''+@code+''' and primarycol='+cast(@primaryno as varchar(1))
+	end
+	else if @ver='4.0' begin
+		set @sqlstr='
+			select @colname=b.colKey 
+			from modl a
+				inner join dbo.modlcolm b on a.ModuleGUID=b.moduleguid
+				inner join dbo.modlcolminfo c on b.ColumnGUID=c.ColumnGUID and c.InfoKey=''PrimaryCol'' and c.infoValue='''+cast(@primaryNo as varchar(2))+'''
+			where a.ModuleID='''+@code+''''
+	end
+	exec sp_executesql @sqlstr, @sqlpar, @colname OUTPUT	
+
+	set @primaryCol=isnull(@colname,'')
+END
+
+
+
+
+
+

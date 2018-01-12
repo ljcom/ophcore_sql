@@ -1,0 +1,63 @@
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+CREATE procedure [gen].[dropcolumns]
+as 
+	declare @id int, @tableName nvarchar(50), @sqlstr varchar(8000), @view nvarchar(50), @parameter nvarchar(400), @content varchar(8000)
+	DECLARE cur CURSOR
+	   FOR 	select id, name from sysobjects	--tb
+		where xtype = 'U' and name like '[CMPRST]o%'
+	
+	OPEN cur
+	FETCH NEXT FROM cur
+	into @id, @tableName 
+	
+	WHILE @@FETCH_STATUS = 0
+	BEGIN	
+		--exec gen.dropcolumn @id, @tableName, 'isDeleted'
+		--exec gen.dropcolumn @id, @tableName, 'DeletedDate'
+		--exec gen.dropcolumn @id, @tableName, 'DeletedUser'
+		--exec gen.dropcolumn @id, @tableName, 'DeletedUser'
+	
+		--exec gen.dropcolumn @id, @tableName, 'CreatedDate'
+		--exec gen.dropcolumn @id, @tableName, 'CreatedUser'
+		--exec gen.dropcolumn @id, @tableName, 'CreatedUser'
+	
+		--exec gen.dropcolumn @id, @tableName, 'UpdatedDate'
+		--exec gen.dropcolumn @id, @tableName, 'UpdatedUser'
+		--exec gen.dropcolumn @id, @tableName, 'UpdatedUser'
+
+		FETCH NEXT FROM cur
+		into @id, @tableName
+	end
+	CLOSE cur
+	DEALLOCATE cur
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

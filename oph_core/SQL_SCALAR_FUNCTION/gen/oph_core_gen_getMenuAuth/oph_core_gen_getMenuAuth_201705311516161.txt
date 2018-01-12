@@ -1,0 +1,43 @@
+CREATE function [gen].[getMenuAuth] (@url varchar(max), @hostGUID uniqueidentifier, @curCode nvarchar(50)=null)
+returns bit
+as begin
+	declare @e1 int=charindex('env=', @url)
+
+	declare @e2 int=iif(@e1>0, charindex('&', @url, @e1), 0)
+	set @e2=iif(@e1>0 and @e2=0, len(@url)+1, @e2)	--harus ditambah satu, supaya sama dengan di charindex
+
+	declare @env varchar(50)=iif(@e2-4-2>0, substring(@url, @e1+4, @e2-4-2), '')
+
+
+	declare @curenv nvarchar(50)
+	select @curenv=b.ModuleGroupID
+	from modl a
+		inner join modg b on a.ModuleGroupGUID=b.ModuleGroupGUID
+	where moduleid=@curCode
+
+	declare @eresult bit=1
+	if not(@e1=0 and isnull(@url,'')<>'') and @env<>isnull(@curenv,'') and @env<> '' set @eresult=0
+
+	declare @n1 int=charindex('code=', isnull(@url,''))
+	declare @n2 int=iif(@n1>0, charindex('&', isnull(@url,''), @n1), 0)
+
+	declare @code varchar(50)=''
+	declare @result bit=0
+
+	if @n1=0 and isnull(@url,'')<>''
+		set @result=1
+	else begin
+		set @n2=iif(@n1>0 and @n2=0, len(@url)+1, @n2)	--harus ditambah satu, supaya sama dengan di charindex 
+		set @code=iif(@n2-5-2>0, substring(@url, @n1+5, @n2-5-2), '')
+
+		if exists(select * from modl where moduleid=@code) 
+			set @result=gen.getAuth(@code, @hostGUID, 'access')
+		else
+			set @result=0
+	end
+
+	if @eresult=0 set @result=0
+
+	return @result
+end
+	

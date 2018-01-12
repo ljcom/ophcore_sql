@@ -1,0 +1,10 @@
+create procedure api.account @accountid varchar(50), @dbcore varchar(50), @key varchar(50)
+as
+	declare @sqlstr nvarchar(max)
+	set @sqlstr='
+		exec '+@dbcore+'.core.info_acct @accountid, @key'
+
+	exec sp_executesql @sqlstr, N'@accountid varchar(50), @key varchar(50)', @accountid, @key
+
+
+

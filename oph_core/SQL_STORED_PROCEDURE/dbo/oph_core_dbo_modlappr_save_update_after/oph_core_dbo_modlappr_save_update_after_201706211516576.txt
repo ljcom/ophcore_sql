@@ -1,0 +1,618 @@
+CREATE procedure dbo.modlappr_save_update_after @hostGUID uniqueidentifier, @code nvarchar(50), @GUID uniqueidentifier, @saveXML xml, @isUpdate bit=0
+as
+	declare @approvalGUID uniqueidentifier
+	
+	select @approvalguid=ApprovalGUID 
+	from modlappr a
+		inner join modl b 
+			on a.moduleguid=b.moduleguid
+	where moduleid=@code 
+	
+	--update only
+	update modlappr set BottomGroup = null
+	where ApprovalGUID=@approvalGUID
+
+	--b9
+	update cl
+	--select cl.approvalguid, cl.approvalgroupguid, 
+	set bottomgroup=	
+		isnull((select distinct ''''+convert(varchar(50), b7.approvalgroupguid)+''',' 'text()'
+			from modlappr b1
+				inner join modlappr b2
+					on b1.approvalgroupguid=b2.uppergroupguid
+				inner join modlappr b3
+					on b2.approvalgroupguid=b3.uppergroupguid
+				inner join modlappr b4
+					on b3.approvalgroupguid=b4.uppergroupguid
+				inner join modlappr b5
+					on b4.approvalgroupguid=b5.uppergroupguid
+				inner join modlappr b6
+					on b5.approvalgroupguid=b6.uppergroupguid
+				inner join modlappr b7
+					on b6.approvalgroupguid=b7.uppergroupguid
+				inner join modlappr b8
+					on b7.approvalgroupguid=b8.uppergroupguid
+				inner join modlappr b9
+					on b8.approvalgroupguid=b9.uppergroupguid
+			where cl.approvalgroupguid=b1.uppergroupguid
+				and b9.lvl=0
+			--group by b1.approvalgroupguid
+			for xml path('')),'')+
+		isnull((select distinct ''''+convert(varchar(50), b7.approvalgroupguid)+''',' 'text()'
+			from modlappr b1
+				inner join modlappr b2
+					on b1.approvalgroupguid=b2.uppergroupguid
+				inner join modlappr b3
+					on b2.approvalgroupguid=b3.uppergroupguid
+				inner join modlappr b4
+					on b3.approvalgroupguid=b4.uppergroupguid
+				inner join modlappr b5
+					on b4.approvalgroupguid=b5.uppergroupguid
+				inner join modlappr b6
+					on b5.approvalgroupguid=b6.uppergroupguid
+				inner join modlappr b7
+					on b6.approvalgroupguid=b7.uppergroupguid
+				inner join modlappr b8
+					on b7.approvalgroupguid=b8.uppergroupguid
+			where cl.approvalgroupguid=b1.uppergroupguid
+				and b8.lvl=0
+			--group by b1.approvalgroupguid
+			for xml path('')),'')+
+		isnull((select distinct ''''+convert(varchar(50), b7.approvalgroupguid)+''',' 'text()'
+			from modlappr b1
+				inner join modlappr b2
+					on b1.approvalgroupguid=b2.uppergroupguid
+				inner join modlappr b3
+					on b2.approvalgroupguid=b3.uppergroupguid
+				inner join modlappr b4
+					on b3.approvalgroupguid=b4.uppergroupguid
+				inner join modlappr b5
+					on b4.approvalgroupguid=b5.uppergroupguid
+				inner join modlappr b6
+					on b5.approvalgroupguid=b6.uppergroupguid
+				inner join modlappr b7
+					on b6.approvalgroupguid=b7.uppergroupguid
+			where cl.approvalgroupguid=b1.uppergroupguid
+				and b7.lvl=0
+			--group by b1.approvalgroupguid
+			for xml path('')),'')+
+		isnull((select distinct ''''+convert(varchar(50), b6.approvalgroupguid)+''',' 'text()'
+			from modlappr b1
+				inner join modlappr b2
+					on b1.approvalgroupguid=b2.uppergroupguid
+				inner join modlappr b3
+					on b2.approvalgroupguid=b3.uppergroupguid
+				inner join modlappr b4
+					on b3.approvalgroupguid=b4.uppergroupguid
+				inner join modlappr b5
+					on b4.approvalgroupguid=b5.uppergroupguid
+				inner join modlappr b6
+					on b5.approvalgroupguid=b6.uppergroupguid
+			where cl.approvalgroupguid=b1.uppergroupguid
+				and b6.lvl=0
+			--group by b1.approvalgroupguid
+			for xml path('')),'')+
+		isnull((select distinct ''''+convert(varchar(50), b5.approvalgroupguid)+''',' 'text()'
+			from modlappr b1
+				inner join modlappr b2
+					on b1.approvalgroupguid=b2.uppergroupguid
+				inner join modlappr b3
+					on b2.approvalgroupguid=b3.uppergroupguid
+				inner join modlappr b4
+					on b3.approvalgroupguid=b4.uppergroupguid
+				inner join modlappr b5
+					on b4.approvalgroupguid=b5.uppergroupguid
+			where cl.approvalgroupguid=b1.uppergroupguid
+				and b5.lvl=0
+			--group by b1.approvalgroupguid
+			for xml path('')),'')+
+		isnull((select distinct ''''+convert(varchar(50), b4.approvalgroupguid)+''',' 'text()'
+			from modlappr b1
+				inner join modlappr b2
+					on b1.approvalgroupguid=b2.uppergroupguid
+				inner join modlappr b3
+					on b2.approvalgroupguid=b3.uppergroupguid
+				inner join modlappr b4
+					on b3.approvalgroupguid=b4.uppergroupguid
+			where cl.approvalgroupguid=b1.uppergroupguid
+				and b4.lvl=0
+			--group by b1.approvalgroupguid
+			for xml path('')),'')+
+		isnull((select distinct ''''+convert(varchar(50), b3.approvalgroupguid)+''',' 'text()'
+			from modlappr b1
+				inner join modlappr b2
+					on b1.approvalgroupguid=b2.uppergroupguid
+				inner join modlappr b3
+					on b2.approvalgroupguid=b3.uppergroupguid
+			where cl.approvalgroupguid=b1.uppergroupguid
+				and b3.lvl=0
+			--group by b1.approvalgroupguid
+			for xml path('')),'')+
+		isnull((select distinct ''''+convert(varchar(50), b2.approvalgroupguid)+''',' 'text()'
+			from modlappr b1
+				inner join modlappr b2
+					on b1.approvalgroupguid=b2.uppergroupguid
+			where cl.approvalgroupguid=b1.uppergroupguid
+				and b2.lvl=0
+			--group by b1.approvalgroupguid
+			for xml path('')),'')+
+		isnull((select distinct ''''+convert(varchar(50), b2.approvalgroupguid)+''',' 'text()'
+			from modlappr b1
+				inner join modlappr b2
+					on b1.approvalgroupguid=b2.uppergroupguid
+			where cl.approvalgroupguid=b1.uppergroupguid
+				and b2.lvl=0
+			--group by b1.approvalgroupguid
+			for xml path('')),'')+
+		isnull((select distinct ''''+convert(varchar(50), b1.approvalgroupguid)+''',' 'text()'
+			from modlappr b1
+			where cl.approvalgroupguid=b1.uppergroupguid
+				and b1.lvl=0
+			--group by b1.approvalgroupguid
+			for xml path('')),'')+
+			'''00000000-0000-0000-0000-000000000000''' --bottomagroupguid
+	from modlappr cl
+	where cl.bottomgroup is null
+
+	--b8
+	update cl
+	--select cl.approvalguid, cl.approvalgroupguid, 
+	set bottomgroup=	
+		isnull((select distinct ''''+convert(varchar(50), b7.approvalgroupguid)+''',' 'text()'
+			from modlappr b1
+				inner join modlappr b2
+					on b1.approvalgroupguid=b2.uppergroupguid
+				inner join modlappr b3
+					on b2.approvalgroupguid=b3.uppergroupguid
+				inner join modlappr b4
+					on b3.approvalgroupguid=b4.uppergroupguid
+				inner join modlappr b5
+					on b4.approvalgroupguid=b5.uppergroupguid
+				inner join modlappr b6
+					on b5.approvalgroupguid=b6.uppergroupguid
+				inner join modlappr b7
+					on b6.approvalgroupguid=b7.uppergroupguid
+				inner join modlappr b8
+					on b7.approvalgroupguid=b8.uppergroupguid
+			where cl.approvalgroupguid=b1.uppergroupguid
+				and b8.lvl=0
+			--group by b1.approvalgroupguid
+			for xml path('')),'')+
+		isnull((select distinct ''''+convert(varchar(50), b7.approvalgroupguid)+''',' 'text()'
+			from modlappr b1
+				inner join modlappr b2
+					on b1.approvalgroupguid=b2.uppergroupguid
+				inner join modlappr b3
+					on b2.approvalgroupguid=b3.uppergroupguid
+				inner join modlappr b4
+					on b3.approvalgroupguid=b4.uppergroupguid
+				inner join modlappr b5
+					on b4.approvalgroupguid=b5.uppergroupguid
+				inner join modlappr b6
+					on b5.approvalgroupguid=b6.uppergroupguid
+				inner join modlappr b7
+					on b6.approvalgroupguid=b7.uppergroupguid
+			where cl.approvalgroupguid=b1.uppergroupguid
+				and b7.lvl=0
+			--group by b1.approvalgroupguid
+			for xml path('')),'')+
+		isnull((select distinct ''''+convert(varchar(50), b6.approvalgroupguid)+''',' 'text()'
+			from modlappr b1
+				inner join modlappr b2
+					on b1.approvalgroupguid=b2.uppergroupguid
+				inner join modlappr b3
+					on b2.approvalgroupguid=b3.uppergroupguid
+				inner join modlappr b4
+					on b3.approvalgroupguid=b4.uppergroupguid
+				inner join modlappr b5
+					on b4.approvalgroupguid=b5.uppergroupguid
+				inner join modlappr b6
+					on b5.approvalgroupguid=b6.uppergroupguid
+			where cl.approvalgroupguid=b1.uppergroupguid
+				and b6.lvl=0
+			--group by b1.approvalgroupguid
+			for xml path('')),'')+
+		isnull((select distinct ''''+convert(varchar(50), b5.approvalgroupguid)+''',' 'text()'
+			from modlappr b1
+				inner join modlappr b2
+					on b1.approvalgroupguid=b2.uppergroupguid
+				inner join modlappr b3
+					on b2.approvalgroupguid=b3.uppergroupguid
+				inner join modlappr b4
+					on b3.approvalgroupguid=b4.uppergroupguid
+				inner join modlappr b5
+					on b4.approvalgroupguid=b5.uppergroupguid
+			where cl.approvalgroupguid=b1.uppergroupguid
+				and b5.lvl=0
+			--group by b1.approvalgroupguid
+			for xml path('')),'')+
+		isnull((select distinct ''''+convert(varchar(50), b4.approvalgroupguid)+''',' 'text()'
+			from modlappr b1
+				inner join modlappr b2
+					on b1.approvalgroupguid=b2.uppergroupguid
+				inner join modlappr b3
+					on b2.approvalgroupguid=b3.uppergroupguid
+				inner join modlappr b4
+					on b3.approvalgroupguid=b4.uppergroupguid
+			where cl.approvalgroupguid=b1.uppergroupguid
+				and b4.lvl=0
+			--group by b1.approvalgroupguid
+			for xml path('')),'')+
+		isnull((select distinct ''''+convert(varchar(50), b3.approvalgroupguid)+''',' 'text()'
+			from modlappr b1
+				inner join modlappr b2
+					on b1.approvalgroupguid=b2.uppergroupguid
+				inner join modlappr b3
+					on b2.approvalgroupguid=b3.uppergroupguid
+			where cl.approvalgroupguid=b1.uppergroupguid
+				and b3.lvl=0
+			--group by b1.approvalgroupguid
+			for xml path('')),'')+
+		isnull((select distinct ''''+convert(varchar(50), b2.approvalgroupguid)+''',' 'text()'
+			from modlappr b1
+				inner join modlappr b2
+					on b1.approvalgroupguid=b2.uppergroupguid
+			where cl.approvalgroupguid=b1.uppergroupguid
+				and b2.lvl=0
+			--group by b1.approvalgroupguid
+			for xml path('')),'')+
+		isnull((select distinct ''''+convert(varchar(50), b2.approvalgroupguid)+''',' 'text()'
+			from modlappr b1
+				inner join modlappr b2
+					on b1.approvalgroupguid=b2.uppergroupguid
+			where cl.approvalgroupguid=b1.uppergroupguid
+				and b2.lvl=0
+			--group by b1.approvalgroupguid
+			for xml path('')),'')+
+		isnull((select distinct ''''+convert(varchar(50), b1.approvalgroupguid)+''',' 'text()'
+			from modlappr b1
+			where cl.approvalgroupguid=b1.uppergroupguid
+				and b1.lvl=0
+			--group by b1.approvalgroupguid
+			for xml path('')),'')+
+			'''00000000-0000-0000-0000-000000000000''' --bottomagroupguid
+	from modlappr cl
+	where cl.bottomgroup is null
+
+	--b7
+	update cl
+	--select cl.approvalguid, cl.approvalgroupguid, 
+	set bottomgroup=	
+		(select distinct ''''+convert(varchar(50), b7.approvalgroupguid)+''',' 'text()'
+			from modlappr b1
+				inner join modlappr b2
+					on b1.approvalgroupguid=b2.uppergroupguid
+				inner join modlappr b3
+					on b2.approvalgroupguid=b3.uppergroupguid
+				inner join modlappr b4
+					on b3.approvalgroupguid=b4.uppergroupguid
+				inner join modlappr b5
+					on b4.approvalgroupguid=b5.uppergroupguid
+				inner join modlappr b6
+					on b5.approvalgroupguid=b6.uppergroupguid
+				inner join modlappr b7
+					on b6.approvalgroupguid=b7.uppergroupguid
+			where cl.approvalgroupguid=b1.uppergroupguid
+				and b7.lvl=0
+			--group by b1.approvalgroupguid
+			for xml path(''))+
+		isnull((select distinct ''''+convert(varchar(50), b6.approvalgroupguid)+''',' 'text()'
+			from modlappr b1
+				inner join modlappr b2
+					on b1.approvalgroupguid=b2.uppergroupguid
+				inner join modlappr b3
+					on b2.approvalgroupguid=b3.uppergroupguid
+				inner join modlappr b4
+					on b3.approvalgroupguid=b4.uppergroupguid
+				inner join modlappr b5
+					on b4.approvalgroupguid=b5.uppergroupguid
+				inner join modlappr b6
+					on b5.approvalgroupguid=b6.uppergroupguid
+			where cl.approvalgroupguid=b1.uppergroupguid
+				and b6.lvl=0
+			--group by b1.approvalgroupguid
+			for xml path('')),'')+
+		isnull((select distinct ''''+convert(varchar(50), b5.approvalgroupguid)+''',' 'text()'
+			from modlappr b1
+				inner join modlappr b2
+					on b1.approvalgroupguid=b2.uppergroupguid
+				inner join modlappr b3
+					on b2.approvalgroupguid=b3.uppergroupguid
+				inner join modlappr b4
+					on b3.approvalgroupguid=b4.uppergroupguid
+				inner join modlappr b5
+					on b4.approvalgroupguid=b5.uppergroupguid
+			where cl.approvalgroupguid=b1.uppergroupguid
+				and b5.lvl=0
+			--group by b1.approvalgroupguid
+			for xml path('')),'')+
+		isnull((select distinct ''''+convert(varchar(50), b4.approvalgroupguid)+''',' 'text()'
+			from modlappr b1
+				inner join modlappr b2
+					on b1.approvalgroupguid=b2.uppergroupguid
+				inner join modlappr b3
+					on b2.approvalgroupguid=b3.uppergroupguid
+				inner join modlappr b4
+					on b3.approvalgroupguid=b4.uppergroupguid
+			where cl.approvalgroupguid=b1.uppergroupguid
+				and b4.lvl=0
+			--group by b1.approvalgroupguid
+			for xml path('')),'')+
+		isnull((select distinct ''''+convert(varchar(50), b3.approvalgroupguid)+''',' 'text()'
+			from modlappr b1
+				inner join modlappr b2
+					on b1.approvalgroupguid=b2.uppergroupguid
+				inner join modlappr b3
+					on b2.approvalgroupguid=b3.uppergroupguid
+			where cl.approvalgroupguid=b1.uppergroupguid
+				and b3.lvl=0
+			--group by b1.approvalgroupguid
+			for xml path('')),'')+
+		isnull((select distinct ''''+convert(varchar(50), b2.approvalgroupguid)+''',' 'text()'
+			from modlappr b1
+				inner join modlappr b2
+					on b1.approvalgroupguid=b2.uppergroupguid
+			where cl.approvalgroupguid=b1.uppergroupguid
+				and b2.lvl=0
+			--group by b1.approvalgroupguid
+			for xml path('')),'')+
+		isnull((select distinct ''''+convert(varchar(50), b2.approvalgroupguid)+''',' 'text()'
+			from modlappr b1
+				inner join modlappr b2
+					on b1.approvalgroupguid=b2.uppergroupguid
+			where cl.approvalgroupguid=b1.uppergroupguid
+				and b2.lvl=0
+			--group by b1.approvalgroupguid
+			for xml path('')),'')+
+		isnull((select distinct ''''+convert(varchar(50), b1.approvalgroupguid)+''',' 'text()'
+			from modlappr b1
+			where cl.approvalgroupguid=b1.uppergroupguid
+				and b1.lvl=0
+			--group by b1.approvalgroupguid
+			for xml path('')),'')+
+			'''00000000-0000-0000-0000-000000000000''' --bottomagroupguid
+	from modlappr cl
+	where cl.bottomgroup is null
+
+	--b6
+	update cl
+	--select cl.approvalguid, cl.approvalgroupguid, 
+	set bottomgroup=	
+		(select distinct ''''+convert(varchar(50), b6.approvalgroupguid)+''',' 'text()'
+			from modlappr b1
+				inner join modlappr b2
+					on b1.approvalgroupguid=b2.uppergroupguid
+				inner join modlappr b3
+					on b2.approvalgroupguid=b3.uppergroupguid
+				inner join modlappr b4
+					on b3.approvalgroupguid=b4.uppergroupguid
+				inner join modlappr b5
+					on b4.approvalgroupguid=b5.uppergroupguid
+				inner join modlappr b6
+					on b5.approvalgroupguid=b6.uppergroupguid
+			where cl.approvalgroupguid=b1.uppergroupguid
+				and b6.lvl=0
+			--group by b1.approvalgroupguid
+			for xml path(''))+
+		isnull((select distinct ''''+convert(varchar(50), b5.approvalgroupguid)+''',' 'text()'
+			from modlappr b1
+				inner join modlappr b2
+					on b1.approvalgroupguid=b2.uppergroupguid
+				inner join modlappr b3
+					on b2.approvalgroupguid=b3.uppergroupguid
+				inner join modlappr b4
+					on b3.approvalgroupguid=b4.uppergroupguid
+				inner join modlappr b5
+					on b4.approvalgroupguid=b5.uppergroupguid
+			where cl.approvalgroupguid=b1.uppergroupguid
+				and b5.lvl=0
+			--group by b1.approvalgroupguid
+			for xml path('')),'')+
+		isnull((select distinct ''''+convert(varchar(50), b4.approvalgroupguid)+''',' 'text()'
+			from modlappr b1
+				inner join modlappr b2
+					on b1.approvalgroupguid=b2.uppergroupguid
+				inner join modlappr b3
+					on b2.approvalgroupguid=b3.uppergroupguid
+				inner join modlappr b4
+					on b3.approvalgroupguid=b4.uppergroupguid
+			where cl.approvalgroupguid=b1.uppergroupguid
+				and b4.lvl=0
+			--group by b1.approvalgroupguid
+			for xml path('')),'')+
+		isnull((select distinct ''''+convert(varchar(50), b3.approvalgroupguid)+''',' 'text()'
+			from modlappr b1
+				inner join modlappr b2
+					on b1.approvalgroupguid=b2.uppergroupguid
+				inner join modlappr b3
+					on b2.approvalgroupguid=b3.uppergroupguid
+			where cl.approvalgroupguid=b1.uppergroupguid
+				and b3.lvl=0
+			--group by b1.approvalgroupguid
+			for xml path('')),'')+
+		isnull((select distinct ''''+convert(varchar(50), b2.approvalgroupguid)+''',' 'text()'
+			from modlappr b1
+				inner join modlappr b2
+					on b1.approvalgroupguid=b2.uppergroupguid
+			where cl.approvalgroupguid=b1.uppergroupguid
+				and b2.lvl=0
+			--group by b1.approvalgroupguid
+			for xml path('')),'')+
+		isnull((select distinct ''''+convert(varchar(50), b1.approvalgroupguid)+''',' 'text()'
+			from modlappr b1
+			where cl.approvalgroupguid=b1.uppergroupguid
+				and b1.lvl=0
+			--group by b1.approvalgroupguid
+			for xml path('')),'')+
+			'''00000000-0000-0000-0000-000000000000''' --bottomagroupguid
+	from modlappr cl
+	where cl.bottomgroup is null
+	 
+	--b5
+	update cl
+	--select cl.approvalguid, cl.approvalgroupguid, 
+	set bottomgroup=	
+		(select distinct ''''+convert(varchar(50), b5.approvalgroupguid)+''',' 'text()'
+			from modlappr b1
+				inner join modlappr b2
+					on b1.approvalgroupguid=b2.uppergroupguid
+				inner join modlappr b3
+					on b2.approvalgroupguid=b3.uppergroupguid
+				inner join modlappr b4
+					on b3.approvalgroupguid=b4.uppergroupguid
+				inner join modlappr b5
+					on b4.approvalgroupguid=b5.uppergroupguid
+			where cl.approvalgroupguid=b1.uppergroupguid
+				and b5.lvl=0
+			--group by b1.approvalgroupguid
+			for xml path(''))+
+		isnull((select distinct ''''+convert(varchar(50), b4.approvalgroupguid)+''',' 'text()'
+			from modlappr b1
+				inner join modlappr b2
+					on b1.approvalgroupguid=b2.uppergroupguid
+				inner join modlappr b3
+					on b2.approvalgroupguid=b3.uppergroupguid
+				inner join modlappr b4
+					on b3.approvalgroupguid=b4.uppergroupguid
+			where cl.approvalgroupguid=b1.uppergroupguid
+				and b4.lvl=0
+			--group by b1.approvalgroupguid
+			for xml path('')),'')+
+		isnull((select distinct ''''+convert(varchar(50), b3.approvalgroupguid)+''',' 'text()'
+			from modlappr b1
+				inner join modlappr b2
+					on b1.approvalgroupguid=b2.uppergroupguid
+				inner join modlappr b3
+					on b2.approvalgroupguid=b3.uppergroupguid
+			where cl.approvalgroupguid=b1.uppergroupguid
+				and b3.lvl=0
+			--group by b1.approvalgroupguid
+			for xml path('')),'')+
+		isnull((select distinct ''''+convert(varchar(50), b2.approvalgroupguid)+''',' 'text()'
+			from modlappr b1
+				inner join modlappr b2
+					on b1.approvalgroupguid=b2.uppergroupguid
+			where cl.approvalgroupguid=b1.uppergroupguid
+				and b2.lvl=0
+			--group by b1.approvalgroupguid
+			for xml path('')),'')+
+		isnull((select distinct ''''+convert(varchar(50), b1.approvalgroupguid)+''',' 'text()'
+			from modlappr b1
+			where cl.approvalgroupguid=b1.uppergroupguid
+				and b1.lvl=0
+			--group by b1.approvalgroupguid
+			for xml path('')),'')+
+			'''00000000-0000-0000-0000-000000000000''' --bottomagroupguid
+	from modlappr cl
+	where cl.bottomgroup is null
+
+	--b4
+	update cl
+	--select cl.approvalguid, cl.approvalgroupguid, 
+	set bottomgroup=	
+		(select distinct ''''+convert(varchar(50), b4.approvalgroupguid)+''',' 'text()'
+			from modlappr b1
+				inner join modlappr b2
+					on b1.approvalgroupguid=b2.uppergroupguid
+				inner join modlappr b3
+					on b2.approvalgroupguid=b3.uppergroupguid
+				inner join modlappr b4
+					on b3.approvalgroupguid=b4.uppergroupguid
+			where cl.approvalgroupguid=b1.uppergroupguid
+				and b4.lvl=0
+			--group by b1.approvalgroupguid
+			for xml path(''))+
+		isnull((select distinct ''''+convert(varchar(50), b3.approvalgroupguid)+''',' 'text()'
+			from modlappr b1
+				inner join modlappr b2
+					on b1.approvalgroupguid=b2.uppergroupguid
+				inner join modlappr b3
+					on b2.approvalgroupguid=b3.uppergroupguid
+			where cl.approvalgroupguid=b1.uppergroupguid
+				and b3.lvl=0
+			--group by b1.approvalgroupguid
+			for xml path('')),'')+
+		isnull((select distinct ''''+convert(varchar(50), b2.approvalgroupguid)+''',' 'text()'
+			from modlappr b1
+				inner join modlappr b2
+					on b1.approvalgroupguid=b2.uppergroupguid
+			where cl.approvalgroupguid=b1.uppergroupguid
+				and b2.lvl=0
+			--group by b1.approvalgroupguid
+			for xml path('')),'')+
+		isnull((select distinct ''''+convert(varchar(50), b1.approvalgroupguid)+''',' 'text()'
+			from modlappr b1
+			where cl.approvalgroupguid=b1.uppergroupguid
+				and b1.lvl=0
+			--group by b1.approvalgroupguid
+			for xml path('')),'')+
+			'''00000000-0000-0000-0000-000000000000''' --bottomagroupguid
+	from modlappr cl
+	where cl.bottomgroup is null
+
+	--b3
+	update cl
+	--select cl.approvalguid, cl.approvalgroupguid, 
+	set bottomgroup=	
+		(select distinct ''''+convert(varchar(50), b3.approvalgroupguid)+''',' 'text()'
+			from modlappr b1
+				inner join modlappr b2
+					on b1.approvalgroupguid=b2.uppergroupguid
+			inner join modlappr b3
+				on b2.approvalgroupguid=b3.uppergroupguid
+			where cl.approvalgroupguid=b1.uppergroupguid
+				and b3.lvl=0
+			--group by b1.approvalgroupguid
+			for xml path(''))+
+		isnull((select distinct ''''+convert(varchar(50), b2.approvalgroupguid)+''',' 'text()'
+			from modlappr b1
+				inner join modlappr b2
+					on b1.approvalgroupguid=b2.uppergroupguid
+			where cl.approvalgroupguid=b1.uppergroupguid
+				and b2.lvl=0
+			--group by b1.approvalgroupguid
+			for xml path('')),'')+
+		isnull((select distinct ''''+convert(varchar(50), b1.approvalgroupguid)+''',' 'text()'
+			from modlappr b1
+			where cl.approvalgroupguid=b1.uppergroupguid
+				and b1.lvl=0
+			--group by b1.approvalgroupguid
+			for xml path('')),'')+
+			'''00000000-0000-0000-0000-000000000000''' --bottomagroupguid
+	from modlappr cl
+	where cl.bottomgroup is null
+
+	--b2
+	update cl
+	--select cl.approvalguid, cl.approvalgroupguid, 
+	set bottomgroup=	
+		(select distinct ''''+convert(varchar(50), b2.approvalgroupguid)+''',' 'text()'
+			from modlappr b1
+				inner join modlappr b2
+					on b1.approvalgroupguid=b2.uppergroupguid
+			where cl.approvalgroupguid=b1.uppergroupguid
+				and b2.lvl=0
+			--group by b1.approvalgroupguid
+			for xml path(''))+
+		isnull((select distinct ''''+convert(varchar(50), b1.approvalgroupguid)+''',' 'text()'
+			from modlappr b1
+			where cl.approvalgroupguid=b1.uppergroupguid
+				and b1.lvl=0
+			--group by b1.approvalgroupguid
+			for xml path('')),'')+
+			'''00000000-0000-0000-0000-000000000000''' --bottomagroupguid
+	from modlappr cl
+	where cl.bottomgroup is null
+
+	--b1
+	update cl
+	--select cl.approvalguid, cl.approvalgroupguid, 
+	set bottomgroup=	
+		(select distinct ''''+convert(varchar(50), b1.approvalgroupguid)+''',' 'text()'
+			from modlappr b1
+			where cl.approvalgroupguid=b1.uppergroupguid
+				and b1.lvl=0
+			--group by b1.approvalgroupguid
+			for xml path(''))+'''00000000-0000-0000-0000-000000000000''' --bottomagroupguid
+	from modlappr cl
+	where cl.bottomgroup is null

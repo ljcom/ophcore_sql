@@ -1,0 +1,73 @@
+
+
+CREATE procedure [gen].[getNumber] @tablename nvarchar(14), @trxMonth date, 
+	@mode int, @currentDocNo nvarchar(40) OUTPUT
+as
+	declare @ref uniqueidentifier, @keepLoop int, @curDocNo nvarchar(40)
+	declare @docSource nvarchar(40), @docModule uniqueidentifier, @trxNo int
+
+	set @ref = newid()
+	set @keeploop = 10
+
+	if @mode=0
+		select @docSource =autonumberprefix1, @docModule=ModuleGUID
+		from coMODL
+		where Moduleid=@tablename
+	else
+		select @docSource =autonumberprefix2, @docModule=ModuleGUID
+		from coMODL
+		where Moduleid=@tablename
+
+	if charindex('{dd}',@docSource)=0 set @trxMonth=dateadd(dd, 1-day(@trxmonth), @trxmonth)
+	if charindex('{m}',@docSource)=0 and charindex('{mm}',@docSource)=0 set @trxMonth=dateadd(mm, 1-month(@trxmonth), @trxmonth)
+	
+	if not exists(select * 
+		from coDOCN 	
+		where trxFormat=@docSource and ModuleGUID = @docModule
+				and year(trxMonth) = year(@trxMonth) and month(trxMonth) = month(@trxMonth)
+				and day(trxMonth) = day(@trxMonth))
+		begin
+			insert into coDOCN (ModuleGUID, TrxFormat, TrxMonth, TrxNo)
+			values (@docModule, @docSource, @trxMonth, 0)
+		end
+
+	while @keeploop &gt;= 1
+	begin
+		select @trxNo=trxNo
+		from coDOCN
+		where trxFormat=@docSource and ModuleGUID = @docModule
+			and year(trxMonth) = year(@trxMonth) and month(trxMonth) = month(@trxMonth)
+			and day(trxMonth) = day(@trxMonth)
+
+		update coDOCN
+		set TRXNo = TRXNo + 1--, ModuleGUID= @ref
+		where trxFormat=@docSource and ModuleGUID = @docModule
+			and year(trxMonth) = year(@trxMonth) and month(trxMonth) = month(@trxMonth)
+			and day(trxMonth) = day(@trxMonth) and @trxno=trxno
+
+		select @curDocNo=trxNo
+		from coDOCN
+		where trxFormat=@docSource and ModuleGUID = @docModule
+			and year(trxMonth) = year(@trxMonth) and month(trxMonth) = month(@trxMonth)
+			and day(trxMonth) = day(@trxMonth) and trxno=@trxno+1
+
+		set @keeploop = @keeploop - 1		
+		if @curDocNo is not null begin
+			set @keeploop = 0
+			set @docSource=replace(@docSource, '{nnnnn}', right('00000'+convert(nvarchar(5), @curdocno),5))
+			set @docSource=replace(@docSource, '{nnnn}', right('0000'+convert(nvarchar(4), @curdocno),4))
+			set @docSource=replace(@docSource, '{nnn}', right('000'+convert(nvarchar(3), @curdocno),3))
+			set @docSource=replace(@docSource, '{mm}', right('00'+convert(nvarchar(2), month(@trxMonth)),2))
+			set @docSource=replace(@docSource, '{m}', char(64+month(@trxMonth)))
+			set @docSource=replace(@docSource, '{yyyy}', right('0000'+convert(nvarchar(4), year(@trxMonth)),4))
+			set @docSource=replace(@docSource, '{yy}', right('00'+convert(nvarchar(4), year(@trxMonth)),2))
+			set @docSource=replace(@docSource, '{dd}', right('00'+convert(nvarchar(2), day(@trxMonth)),2))
+			set @docSource=replace(@docSource, '{d}', char(64+day(@trxMonth)))
+
+		end
+	end
+	select @currentDocNo = @docSource
+
+
+
+

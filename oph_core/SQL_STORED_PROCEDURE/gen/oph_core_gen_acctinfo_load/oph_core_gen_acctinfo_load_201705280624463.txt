@@ -1,0 +1,7 @@
+create procedure [gen].[acctinfo_load] @accountguid uniqueidentifier, @key nvarchar(50), @value nvarchar(max)=null output
+as
+	if exists(select * from acctinfo where accountguid=@accountguid and infokey=@key)
+	begin
+		select @value=infovalue from acctinfo where accountguid=@accountguid and InfoKey=@key
+	end
+

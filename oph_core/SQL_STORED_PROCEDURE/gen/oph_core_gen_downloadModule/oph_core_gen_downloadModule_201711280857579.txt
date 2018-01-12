@@ -1,0 +1,37 @@
+CREATE PROCEDURE [gen].[downloadModule] @hostGUID uniqueidentifier, @code varchar(50) 
+as	--CreatedBy eLs ON Nov, 2017
+	
+	--declare @code varchar(50) = 'tapksp'
+
+	declare @moduleId varchar(50), @moduleDesc varchar(255), @moduleGUID uniqueidentifier, @L varchar(5), @cols varchar(MAX), @sqlstr nvarchar(MAX)
+
+	declare mdcur cursor read_only for
+		select ModuleId, ModuleDescription, ModuleGUID, 
+			IIF(orderNo = 0, 'H','L'+cast(ROW_NUMBER() OVER(Order by orderNo, ModuleId) - 1 as varchar(5))) [L]
+		from (
+			select a.ModuleId, a.ModuleDescription, a.ModuleGUID, isNULL(a.OrderNo, 1) [orderNo] from modl a
+				inner join modl p ON a.ParentModuleGUID = p.ModuleGUID
+				inner join modlinfo i ON a.ModuleGUID = i.ModuleGUID AND i.InfoKey = 'AllowBrowse' AND i.InfoValue = '1'
+			where p.ModuleID = @code
+			UNION
+			select ModuleId, ModuleDescription, ModuleGUID, 0 from modl where ModuleID = @code
+		) mdc --order by orderNo, ModuleId
+	open mdcur fetch next from mdcur into @moduleId, @moduleDesc, @moduleGUID, @L
+	while @@FETCH_STATUS = 0 begin
+		set @cols = isNULL(@cols, '') + ', '''+@moduleDesc+char(10)+'('+@L+')'' '+quotename(upper(@moduleId))+(
+			select ', '''+titleCaption+''' '+quotename(colKey) from modlcolm a
+				inner join modlcolminfo b ON a.ColumnGUID = b.ColumnGUID AND b.InfoKey = 'iseditable' AND b.InfoValue = '1'
+				inner join modlcolminfo c ON a.ColumnGUID = c.ColumnGUID AND c.InfoKey = 'isviewable' AND b.InfoValue = '1'
+			where a.ModuleGUID = @moduleGUID
+			order by colorder for xml path ('')
+		) 
+		set @cols = replace(@cols, '&amp;', '&')
+		fetch next from mdcur into @moduleId, @moduleDesc, @moduleGUID, @L
+	end
+	close mdcur deallocate mdcur
+
+	set @sqlstr = 'select gen.ZeroGUID() [DocGUID], ''Level'' [Level]' + isNULL(@cols, '')
+	--print @sqlstr
+
+	exec(@sqlstr)
+

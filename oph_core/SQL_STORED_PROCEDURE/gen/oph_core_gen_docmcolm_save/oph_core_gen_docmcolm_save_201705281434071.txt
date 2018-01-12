@@ -1,0 +1,18 @@
+create procedure [gen].[docmcolm_save] @docGUID uniqueidentifier, @key nvarchar(50), @value nvarchar(max)
+as
+	if exists(select * from docmcolm where docGUID=@docGUID and colkey=@key)
+	begin
+		--update
+		update docmcolm
+		set colvalue=@value
+		where docGUID=@docGUID and colkey=@key
+	end
+	else
+	begin
+		--insert
+		insert into docmcolm (docGUID, colkey, colvalue)
+		values (@docGUID, @key, @value)
+	end
+
+
+

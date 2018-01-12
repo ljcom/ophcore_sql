@@ -1,0 +1,37 @@
+
+CREATE procedure [core].[getComboView] @accountid nvarchar(50), @datadb nvarchar(50)
+as
+
+	declare @sqlstr nvarchar(max)
+	set @sqlstr='
+	select a.moduleid, z.colKey, x.infokey, x.infovalue, e.databasename, f.name
+	from eform_data.dbo.modlcolminfo x 
+		left join '+@datadb+'.dbo.modl y on x.infovalue=y.moduleid --and y.settingMode<>7
+		inner join '+@datadb+'.dbo.modlcolm z on z.ColumnGUID=x.ColumnGUID
+		inner join '+@datadb+'.dbo.modl a on z.ModuleGUID=a.ModuleGUID 
+		inner join '+@datadb+'.dbo.modlcolminfo b on b.columnguid=z.columnguid and b.infokey=''isviewable'' and b.infovalue=''1''
+		left join '+@datadb+'.sys.objects f on f.type=''V'' and f.name=a.moduleid+''_''+replace(replace(x.infovalue, ''view('', ''''), '')'', '''')
+		left join oph_core.dbo.acctdbse c on c.accountdbguid=a.accountdbguid
+		left join ef_main_20170705.dbo.comodl d on stuff(d.moduleid, 2, 1, ''o'')=stuff(x.infovalue, 2, 1, ''o'')
+		left join ef_main_20170705.dbo.coacctdbse e on e.accountdbguid=d.accountdbguid
+	where x.infokey=''combotable'' 
+		and y.moduleguid is null 
+		and x.infovalue not like ''par(%'' 
+		and x.infovalue not like ''deleted(%'' 
+		and x.infovalue not like ''active(%'' 
+		and x.infovalue not like ''closed(%'' 
+		and x.infovalue not like ''released(%'' 
+		--and x.infovalue not like ''view(%'' 
+		and isnull(x.infovalue,'''')<>''''
+	--order by e.databasename, x.infovalue
+	order by a.moduleid
+
+	select y.moduleid, x.*
+	from '+@datadb+'.dbo.modlinfo x 
+		inner join '+@datadb+'.dbo.modl y on x.moduleguid=y.moduleguid
+	where infokey like ''script%'' and (infokey like ''%custom'' or infokey like ''%after'' or infokey like ''%before'')'
+
+	exec sp_executesql @sqlstr
+
+
+

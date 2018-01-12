@@ -1,0 +1,72 @@
+
+CREATE procedure [api].[autosuggest] @accountid varchar(50), @code nvarchar(50),
+	@guid nvarchar(50), @id nvarchar(50), @name nvarchar(50), @searchtext nvarchar(max)='',
+	@wf1 nvarchar(max)='', @wf1value nvarchar(max)='', @wf2 nvarchar(max)='', @wf2value nvarchar(max)='', @isdebug bit=0
+as
+	
+	declare @db varchar(50)=api.fn_checkDB(@accountid, @code)
+	declare @ver varchar(10), @settingMode nvarchar(1)
+
+	select @ver=[version], @settingMode= api.SettingMode(settingmode)
+	--select * 
+	from modl a
+		inner join acctdbse	b 
+			on a.accountdbguid=b.accountdbguid
+		inner join acct c
+			on b.AccountGUID=c.AccountGUID
+	where moduleid=@code and c.accountid=@accountid
+
+	if @isdebug=1 print 'db =' +@db
+	if @isdebug=1 print 'code =' +@code
+	if @isdebug=1 print 'name =' +@name
+	if @isdebug=1 print 'id =' +@id
+	if @isdebug=1 print 'value =' +@guid
+	if @isdebug=1 print 'ver =' +@ver
+
+	if @name=@id set @name =''''''
+
+	declare @sx varchar(max)
+	declare @sxx varchar(max)
+	set @searchtext=ltrim(rtrim(@searchtext))
+	set @sx=replace(@searchText, '*', '%'' or value like ''%')
+	set @sxx='value like ''%'+@sx+'%'''
+
+	set @sx=replace(@searchText, '*', '%'' or (id+'' ''+name+'' '' + id) like ''%')
+	set @sxx=@sxx+' or (id+'' ''+name+'' '' + id) like ''%'+@sx+'%'''
+
+
+	declare @sqlstr nvarchar(max) = 'use '+@db+ '
+	
+		select 
+			isnull((	
+				select top 10 value,caption 
+				from (
+					select  '+@guid+' as value, '+@id+case when @name ='''''' then '' else +' +'' - ''+ '+ @name end + ' as caption,
+						'+@id+' id, '+@name+' name '+case when @wf1 !='' then ',
+						'+@wf1 else '' end+case when @wf2 !='' then ','+@wf2 else '' end +' 
+					from oph.'+@code +')as OPT
+					where ('+@sxx+') '+
+						case when @wf1 !='' then '
+							and '+@wf1+' = '+''''+@wf1value+'''' else '' end+
+						case when @wf2 !='' then '
+							and '+@wf2+' = '+''''+@wf2value+'''' else '' end +'  
+					for xml path(''option''), type, root(''sqroot'')
+				),
+				''&lt;sqroot&gt;&lt;option&gt;&lt;value&gt;NULL&lt;/value&gt; &lt;caption&gt;No Result Found&lt;/caption&gt;&lt;/option&gt;&lt;/sqroot&gt;'')'
+
+
+	if @isdebug=1 print @sqlstr
+	exec (@sqlstr)
+
+
+
+
+
+
+
+
+
+
+
+
+

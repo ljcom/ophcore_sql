@@ -1,0 +1,80 @@
+CREATE TRIGGER [dbo].[tg_modl_createDB] 
+ON [dbo].[modl]
+AFTER INSERT AS
+BEGIN
+
+	SET NOCOUNT ON;
+
+	declare @sqlstr nvarchar(max), @datadb nvarchar(30), @v4DB nvarchar(30), @code nvarchar(50)
+
+	set @datadb =  DB_NAME()
+
+	if exists(select * from inserted where settingmode in (1,3,4,7))
+	begin
+		select @v4DB = b.databasename , @code=moduleid
+		from inserted a
+			inner join acctdbse b on b.AccountDBGUID = a.AccountDBGUID
+	
+		set @sqlstr='
+			if not exists(select * from '+@v4DB+'.sys.schemas where name=''doc'') 
+				exec '+@v4DB+'.dbo.sp_executesql N''create schema doc'''
+	
+		exec sp_executesql @sqlstr
+
+		set @sqlstr='
+			Use '+@v4DB+'
+			if not exists(select * from sys.objects where name=''evnt'') begin
+				CREATE TABLE [dbo].[evnt](
+					[EventGUID] [uniqueidentifier] NOT NULL,
+					[AccountGUID] [uniqueidentifier] NULL,
+					[moduleGUID] [uniqueidentifier] NULL,
+					[DocGUID] [uniqueidentifier] NULL,
+					[timeRecord] [int] NOT NULL,
+					[Comment] [nvarchar](max) NULL,
+					[CreatedDate] [datetime] NULL,
+					[CreatedUser] [uniqueidentifier] NULL,
+					CONSTRAINT [PK_EVNT] PRIMARY KEY CLUSTERED 
+				(
+					[EventGUID] ASC
+				)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+				) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+					
+				ALTER TABLE [dbo].[evnt] ADD  CONSTRAINT [DF_EVNT_EventGUID]  DEFAULT (newid()) FOR [EventGUID]
+				ALTER TABLE [dbo].[evnt] ADD  CONSTRAINT [DF_evnt_timeRecord]  DEFAULT ((0)) FOR [timeRecord]
+				ALTER TABLE [dbo].[evnt] ADD  CONSTRAINT [DF_evnt_CreatedDate]  DEFAULT (getdate()) FOR [CreatedDate]
+			end	
+		'
+		exec sp_executesql @sqlstr
+
+		set @sqlstr='
+			Use '+@v4DB+'
+										
+			if not exists(select * from sys.objects where name='''+@code+''') begin
+				create table doc.['+@code+'] ([DocGUID] [uniqueidentifier] NOT NULL,
+				[AccountGUID] [uniqueidentifier] NULL, [ModuleGUID] [uniqueidentifier] NULL, [Status] [int] NOT NULL, 
+				[StatusComment] [nvarchar](500) NULL, [CreatedDate] [datetime] NOT NULL, [CreatedUser] [uniqueidentifier] NULL,
+				[updatedDate] [datetime] NULL, [updatedUser] [uniqueidentifier] NULL, [isClosed] [bit] NOT NULL, [isDeleted] [bit] NOT NULL,
+				[parentDocGUID] [uniqueidentifier] NULL, [oldId] [nvarchar](50) NULL, 
+				CONSTRAINT [PK_'''+@code+'''] PRIMARY KEY CLUSTERED 
+				(
+					[DocGUID] ASC
+				)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+				) ON [PRIMARY]
+
+				ALTER TABLE [doc].['+@code+'] ADD  CONSTRAINT [DF_'+@code+'_Status]  DEFAULT ((0)) FOR [Status]
+				ALTER TABLE [doc].['+@code+'] ADD  CONSTRAINT [DF_'+@code+'_isClosed]  DEFAULT ((0)) FOR [isClosed]
+				ALTER TABLE [doc].['+@code+'] ADD  CONSTRAINT [DF_'+@code+'_isDeleted]  DEFAULT ((0)) FOR [isDeleted]
+				ALTER TABLE [doc].['+@code+'] ADD  CONSTRAINT [DF_'+@code+'_CreatedDate]  DEFAULT (getdate()) FOR [CreatedDate]
+
+				declare @c nvarchar(max)=''CREATE NEW MODL: '+@code+'''
+				INSERT INTO evnt (EventGUID, AccountGUID, moduleGUID, DocGUID, timeRecord, Comment, CreatedDate, CreatedUser)
+				select newid(), null, null, null, 0, @c, getdate(), null
+					
+			end'
+		exec sp_executesql @sqlstr
+
+		exec gen.createSynonym @code, 'doc', @v4DB
+
+	end
+END
+

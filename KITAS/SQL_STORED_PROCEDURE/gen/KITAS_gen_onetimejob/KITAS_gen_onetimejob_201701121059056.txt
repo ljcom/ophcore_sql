@@ -1,0 +1,96 @@
+
+
+
+CREATE procedure [gen].[onetimejob] @sp nvarchar(200), @db nvarchar(20), @category nvarchar(100)='MAXFOUR'
+as
+	-- Script generated on 4/14/2007 8:56 AM
+	-- By: sa
+	-- Server: SAMNOTE
+	
+	BEGIN TRANSACTION            
+		DECLARE @JobID uniqueidentifier	-- BINARY(16)  
+		declare @jobName nvarchar(500)
+		set @jobName = replace(@sp,'.','') + convert(varchar(50), newid())
+		print '--'
+		print @sp
+		DECLARE @ReturnCode INT    
+		SELECT @ReturnCode = 0     
+		IF (SELECT COUNT(*) FROM msdb.dbo.syscategories WHERE name = @category) &lt; 1 
+			EXECUTE msdb.dbo.sp_add_category @name = @category
+	
+	  -- Delete the job with the same name (if it exists)
+		SELECT @JobID = job_id
+		FROM   msdb.dbo.sysjobs    
+		WHERE (name = @jobName)       
+		IF (@JobID IS NOT NULL)    
+		BEGIN  
+	  -- Check if the job is a multi-server job  
+			IF (EXISTS (SELECT  * 
+	              FROM    msdb.dbo.sysjobservers 
+	              WHERE   (job_id = @JobID) AND (server_id &lt;&gt; 0))) 
+			BEGIN 
+				-- There is, so abort the script
+				declare @err nvarchar(200)
+				set @err =  'Unable to import job ''' + @jobName + ''' since there is already a multi-server job with this name.'
+				RAISERROR (@err, 16, 1) 
+				GOTO QuitWithRollback  
+			END 
+			ELSE 
+				-- Delete the [local] job 
+				EXECUTE msdb.dbo.sp_delete_job @job_name = @jobName 
+			SELECT @JobID = NULL
+		END 
+	
+		BEGIN 
+	
+		  -- Add the job
+			EXECUTE @ReturnCode = msdb.dbo.sp_add_job @job_id = @JobID OUTPUT , @job_name = @jobName, @owner_login_name = N'sa', 
+				@description = @jobName, @category_name = @category, @enabled = 1, @notify_level_email = 0, 
+				@notify_level_page = 0, @notify_level_netsend = 0, @notify_level_eventlog = 2, @delete_level= 1
+			IF (@@ERROR &lt;&gt; 0 OR @ReturnCode &lt;&gt; 0) GOTO QuitWithRollback 
+	
+			-- Add the job steps
+			EXECUTE @ReturnCode = msdb.dbo.sp_add_jobstep @job_id = @JobID, @step_id = 1, 
+				@step_name = @jobName, @command = @sp, @database_name = @db, @server = N'', @database_user_name = N'', 
+				@subsystem = N'TSQL', @cmdexec_success_code = 0, @flags = 0, @retry_attempts = 0, @retry_interval = 5, 
+				@output_file_name = N'', @on_success_step_id = 2, @on_success_action = 4, @on_fail_step_id = 2, 
+				@on_fail_action = 4
+
+			declare @delJob nvarchar(4000)
+			--	set @delJob = 'WAITFOR DELAY ''00:00:10''' + char(13) + char(10) + 'exec msdb.dbo.sp_delete_job @Job_id = '''+ convert(varchar(50), @jobID) + ''''
+			set @delJob = 'WAITFOR DELAY ''00:00:10''' + char(13) + char(10) + 
+				'delete from msdb.dbo.sysjobs' + char(13) + char(10) + 
+				'where job_id = '''+ convert(varchar(50), @jobID) + '''' + char(13) + char(10) + 
+				'delete from msdb.dbo.sysjobschedules' + char(13) + char(10) + 
+				'where job_id = '''+ convert(varchar(50), @jobID) + '''' + char(13) + char(10) + 
+				'delete from msdb.dbo.sysjobsteps' + char(13) + char(10) + 
+				'where job_id = '''+ convert(varchar(50), @jobID) + '''' + char(13) + char(10) + 
+				'delete from msdb.dbo.sysjobservers' + char(13) + char(10) + 
+				'where job_id = '''+ convert(varchar(50), @jobID) + '''' + char(13) + char(10) + 
+				'delete from msdb.dbo.sysjobhistory' + char(13) + char(10) + 
+				'where job_id = ''12F11FDF-7237-46A2-BC13-BB694B449B70'''
+
+			EXECUTE @ReturnCode = msdb.dbo.sp_add_jobstep @job_id = @JobID, @step_id = 2, 
+				@step_name = 'del_job', @command = @delJob, @database_name = @db, @server = N'', @database_user_name = N'', 
+				@subsystem = N'TSQL', @cmdexec_success_code = 0, @flags = 0, @retry_attempts = 0, @retry_interval = 0, 
+				@output_file_name = N'', @on_success_step_id = 0, @on_success_action = 1, @on_fail_step_id = 0, 
+				@on_fail_action = 2
+			IF (@@ERROR &lt;&gt; 0 OR @ReturnCode &lt;&gt; 0) GOTO QuitWithRollback 
+
+			EXECUTE @ReturnCode = msdb.dbo.sp_update_job @job_id = @JobID, @start_step_id = 1 
+			IF (@@ERROR &lt;&gt; 0 OR @ReturnCode &lt;&gt; 0) GOTO QuitWithRollback 
+	
+			-- Add the Target Servers
+			EXECUTE @ReturnCode = msdb.dbo.sp_add_jobserver @job_id = @JobID, @server_name = N'(local)' 
+			IF (@@ERROR &lt;&gt; 0 OR @ReturnCode &lt;&gt; 0) GOTO QuitWithRollback 
+	
+			execute @ReturnCode = msdb.dbo.sp_start_job @job_id = @JobID
+		END
+	COMMIT TRANSACTION          
+	GOTO EndSave              
+	QuitWithRollback:
+	  IF (@@TRANCOUNT &gt; 0) ROLLBACK TRANSACTION 
+	EndSave:
+
+
+

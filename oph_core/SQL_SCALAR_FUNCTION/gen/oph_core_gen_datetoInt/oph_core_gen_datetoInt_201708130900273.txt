@@ -1,0 +1,11 @@
+CREATE function gen.datetoInt(@d datetime)
+returns bigint
+as begin
+	declare @r bigint
+	select @r=((datepart(year, @d)-2000)*12*31*24*3600)+ (datepart(month, @d)*31*24*3600)+ (datepart(day,@d)*24*3600)+
+	(datepart(hour, @d)*3600)+ (datepart(minute, @d)*60)+ datepart(second,@d)
+
+	return @r
+end
+
+

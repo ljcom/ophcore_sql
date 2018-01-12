@@ -1,0 +1,126 @@
+
+
+CREATE procedure [api].[function_delete] @accountid varchar(50), @dbcore varchar(50),
+	@hostGUID uniqueidentifier, 
+	@code varchar(20),
+	@GUID uniqueidentifier, 
+	@comment varchar(max),
+	@isDebug bit=0
+--WITH ENCRYPTION
+as
+	declare @ver varchar(10), @db varchar(50), @typecode varchar(1)
+	exec gen.getDBInfo @accountid, @dbcore, @code, @ver output, @db output, @typecode output
+
+	declare @dbcode varchar(100)= @code
+	if @ver='3.0' set @dbcode=@db+'.dbo.'+@typecode+'o'+substring(@code,3,len(@code)-2)
+	
+	--declare @dbcode varchar(100)=@db+'.dbo.'+@code
+	declare @isExists bit=0
+
+	set @db =api.fn_checkDB(@accountid, @code)
+	--select @code, @db, @dbcode
+	
+	--run standard
+	declare @userGUID uniqueidentifier
+	declare @msg nvarchar(100), @isCancel bit=0
+	declare @primaryCol varchar(50)
+
+	exec api.getPrimaryKey @accountid, @dbcore, @code, @primaryCol OUTPUT
+	set @msg =''
+
+	--check additional before delete
+	declare @before_proc nvarchar(max)=@code+'_delete_before'
+	declare @before_par nvarchar(max)='@guid uniqueidentifier, @hostGUID uniqueidentifier, @isCancel bit OUTPUT, @msg nvarchar(100) OUTPUT'
+
+	set @isExists=0
+	exec gen.checkObject @before_proc, 'dbo', @db, @isExists OUTPUT
+
+	if @isExists=1 begin
+		set @before_proc='exec '+@db+'.dbo.'+@before_proc+' '''+CAST(@GUID AS VARCHAR(50))+''', '''+CAST(@hostGUID AS VARCHAR(50))+''', @isCancel OUTPUT, @msg OUTPUT'
+		--set @before_proc=@db+'.dbo.'+@before_proc
+		if @isdebug=1 print @before_proc
+		if @isdebug=1 print @before_par
+		exec sp_executesql @before_proc, @before_par, @GUID, @hostGUID, @isCancel OUTPUT, @msg OUTPUT
+		--print @msg
+	end	
+	--get user information
+	select @userGUID=userguid 
+	from userhost where hostGUID=@hostGUID
+
+	-- put check process to make sure this user allow to delete --
+		
+	if @isCancel=0 begin
+		--run if only not cancelled
+		declare @sqlstr nvarchar(max)
+
+		declare @isColExists bit=0
+		exec api.checkIsDeleted @accountid, @code, @isColExists OUTPUT
+
+		print @isColExists
+
+		if @isColExists=1
+			set @sqlstr='
+				if exists(select * from '+@dbcode+' where '+@primaryCol+' = @GUID) and @userGUID is not null
+					update '+@dbcode+' set 
+						isDeleted = 1, DeletedDate = getdate(), DeletedUser = @userGUID
+					where '+@primaryCol+' = @GUID
+
+				if exists(select * from '+@dbcode+'
+					where '+@primaryCol+' = @GUID and isdeleted=0) 
+					set @msg=''This record cannot be deleted. You might don''''t have any authority to do this.''
+				--else exec api.function_mail @hostGUID, ''delete'', @code, @GUID
+				'
+		else
+			set @sqlstr='
+				if exists(select * from '+@dbcode+' where '+@primaryCol+' = @GUID)
+					delete '+@dbcode+' where '+@primaryCol+' = @GUID
+
+				if exists(select * from '+@dbcode+'
+					where '+@primaryCol+' = @GUID) 
+					set @msg=''This record cannot be deleted. You might don''''t have any authority to do this.''
+				--else exec api.function_mail @hostGUID, ''delete'', @code, @GUID
+				'
+				
+		declare @sqlpar nvarchar(max)='@hostGUID uniqueidentifier, @code varchar(50), @GUID uniqueidentifier, @userGUID uniqueidentifier, @msg varchar(max) OUTPUT'
+		exec sp_executesql @sqlstr, @sqlpar, @hostGUID, @code, @GUID, @userGUID, @msg=@msg OUTPUT
+		
+		print @sqlpar
+
+		--additional procedure after execution
+		declare @after_proc nvarchar(max)=@code+'_delete_after'
+		declare @after_par nvarchar(max)='@GUID uniqueidentifier, @hostGUID uniqueidentifier'
+
+		set @isExists=0
+		exec gen.checkObject @after_proc, 'dbo', @db, @isExists OUTPUT
+
+		if @isExists=1 begin
+			set @after_proc='exec '+@db+'.dbo.'+@after_proc+' '''+CAST(@GUID AS VARCHAR(50))+''', '''+CAST(@hostGUID AS VARCHAR(50))+''''
+			--set @after_proc=@db+'.dbo.'+@after_proc
+			exec sp_executesql @after_proc, @after_par, @GUID, @hostGUID
+		end
+	end
+
+	if @isDebug = 1 begin
+		select @primaryCol [PK], @isColExists [isDeleted], @db [db], @dbcode [dbcode], @userGUID [UserGUID]
+		select @sqlstr
+		select @msg [msg]
+	end
+	else
+		select @msg deleted
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

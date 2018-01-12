@@ -1,0 +1,23 @@
+
+
+
+
+
+
+
+CREATE procedure [api].[function_mail] 
+	@hostGUID uniqueidentifier, 
+	@mode varchar(10), 
+	@code varchar(20), 
+	@GUID uniqueidentifier, 
+	@isDebug bit=0
+as
+
+
+
+
+
+
+
+
+

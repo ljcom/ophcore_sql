@@ -1,0 +1,13 @@
+
+create procedure [gen].[activeUsers] @minLive int=15
+as
+	select b.userguid, userid, datediff(minute, getdate(), a.updateddate) 
+	from CoUSERHOST a
+		inner join CoUSER b
+			on a.UserGUID=b.UserGUID
+	where datediff(minute, getdate(), a.updateddate)&gt;=-@minLive
+	order by datediff(minute, getdate(), a.updateddate) desc
+
+
+
+

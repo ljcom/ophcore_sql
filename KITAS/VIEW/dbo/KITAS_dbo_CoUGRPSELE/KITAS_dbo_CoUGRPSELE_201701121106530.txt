@@ -1,0 +1,8 @@
+
+
+CREATE VIEW [dbo].[CoUGRPSELE]
+as
+	select UGroupGUID SelectGroupGUID, GroupId SelectGroupId, GroupDescription SelectGroupDescription, GroupLevel, IsRequired, NeedComplete, ModuleGUID, isDeleted, DeletedDate, CreatedDate, UpdatedDate, DeletedUser, CreatedUser, UpdatedUser
+	from coUGRP
+
+

@@ -1,0 +1,38 @@
+
+
+
+
+
+CREATE procedure [gen].[extractTableDef_load] @filename nvarchar(100), @result nvarchar(100)
+as
+/*
+EXEC sp_configure 'show advanced options', 1
+GO
+RECONFIGURE
+GO
+EXEC sp_configure 'xp_cmdshell', 1
+GO
+RECONFIGURE
+*/
+
+	declare @svr nvarchar(100)
+	declare @hst nvarchar(100)
+	declare @dbn nvarchar(100)
+	
+	set @svr=@@SERVERNAME
+	set @hst=USER_NAME()
+	set @dbn=DB_NAME()
+
+	declare @sqlstr nvarchar(1000)
+	--sqlcmd -S . -E -y0 -u -d OPH0001 -i c:\cougrp.sql -o "c:\cougrp_result.txt"
+	SELECT @sqlstr = 'sqlcmd -S '+@svr+' -E -y0 -u -d '+@dbn+' -i '+@filename+' -o '+@result
+	EXEC master.dbo.xp_cmdshell @sqlstr, no_output 
+
+
+
+
+
+
+
+
+

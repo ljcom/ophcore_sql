@@ -1,0 +1,66 @@
+
+
+
+
+
+
+
+
+
+CREATE procedure [gen].[getHTTPpart] @g uniqueidentifier, 
+	@searchStartText nvarchar(100), @searchEndText nvarchar(100), 
+	@resultText nvarchar(100) output, @nPointer int output
+as
+	--set @searchText='Periode&lt;/td&gt;&lt;td class="kursHeaderTd"&gt;'
+	declare @start int, @end int
+	SELECT @start=patindex('%'+@searchStartText+'%', httpText)
+	from CoHTTP where httpGUID=@g
+	
+	set @start=@start+len(@searchStartText)
+	
+	declare @smallstart int, @newStart int
+	
+	set @smallstart=@start
+	
+	declare @nGUID uniqueidentifier
+	declare @oldg uniqueidentifier
+	
+	set @oldg=@g
+	set @newStart=0
+	
+	while @nPointer&gt;@smallStart begin
+		set @newStart=@newStart+@smallstart
+		set @nPointer=@nPointer-@smallstart
+		set @smallStart=0 
+		set @nGUID=NEWID()
+		
+		insert into CoHTTP (httpGUID, HttpText)
+		SELECT @nGUID, substring(httpText,@start, 16000) from CoHTTP where httpGUID=@g
+		
+		set @g=@nGUID
+		
+		SELECT @smallStart=patindex('%'+@searchStartText+'%', httpText)
+		from CoHTTP where httpGUID=@g
+		
+		--print @smallStart
+		--print 'xx' 
+		set @smallStart=@smallStart+len(@searchStartText)
+		print @npointer
+		set @Start=@Start+@smallstart
+	end 
+	
+	SELECT @resultText=substring(httpText,@smallStart, 8000) from CoHTTP where httpGUID=@g
+	--print @resultText
+	--print charindex(@searchEndText,@resultText)
+	select @resultText=SUBSTRING(@resultText, 1, charindex(@searchEndText, @resultText)-1)
+	set @nPointer=@start
+
+
+
+
+
+
+
+
+
+

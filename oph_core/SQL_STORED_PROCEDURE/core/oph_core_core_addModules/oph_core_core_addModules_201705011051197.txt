@@ -1,0 +1,54 @@
+CREATE PROCEDURE [core].[addModules] @accountid nvarchar(50)=null, @db nvarchar(50)=null, @isdebug bit=0
+--WITH ENCRYPTION
+as	--ModifiedBy eLs ON Apr, 2017
+
+	--no need
+	--declare @ver varchar(10), @db varchar(50), @typecode varchar(1)
+	--exec gen.getDBInfo @accountid, @dbcore, @code, @ver output, @db output, @typecode output
+
+	--declare @accountid nvarchar(50)=null, @db nvarchar(50)=null, @isdebug bit=0
+
+	DECLARE #cur CURSOR READ_ONLY FOR
+		select 
+			a.DatabaseName, AccountId, [version], 
+			(select DatabaseName from acctdbse where version = '4.0' and isMaster = 1 and AccountGUID = b.AccountGUID)
+		from acctdbse a
+			inner join acct b on a.AccountGUID=b.AccountGUID
+		where isMaster=1 and AccountId = IIF(isNULL(@accountid, '') = '', AccountID, @accountid)
+			and a.DatabaseName = IIF(isNULL(@db, '') = '', a.DatabaseName, @db)
+
+		--select a.DatabaseName, b.AccountId, version, masterDB
+		--from acctdbse a
+		--	inner join (
+		--		select 
+		--			b.accountid, b.accountguid, a.DatabaseName
+		--		--select b.accountid, b.accountguid, max(a.DatabaseName) masterDB 
+		--		from acctdbse a
+		--			inner join acct b on a.AccountGUID=b.AccountGUID
+		--		where isMaster=1 and AccountId = IIF(isNULL(@accountid, '') = '', AccountID, @accountid)
+		--		--group by b.accountid, b.accountguid 
+		--		--having count(*)=1
+		--		) b on a.AccountGUID=b.AccountGUID
+		--where databasename = case when @db is null then DatabaseName else @db end
+	DECLARE @curdb varchar(50), @curAcct varchar(50), @curVer varchar(10), @masterDB varchar(50)
+	OPEN #cur
+
+	FETCH NEXT FROM #cur INTO @curdb, @curAcct, @curVer, @masterDB
+	WHILE (@@fetch_status = 0)
+	BEGIN
+			if @isdebug=1 select @curAcct, @curdb, @masterDB
+			if @curVer='4.0' begin
+				exec core.addModule_v4 @curAcct, @curdb, @isdebug
+				print 'exec core.addModule_v4 '''+@curAcct+''', '''+@curdb+''', '''+@masterDB+''''
+			end
+			else begin
+				exec core.addModule_v3 @curAcct, @curdb, @masterDB, @isdebug
+				print 'exec core.addModule_v3 '''+@curAcct+''', '''+@curdb+''', '''+@masterDB+''''
+			end
+	FETCH NEXT FROM #cur INTO @curdb, @curAcct, @curVer, @masterDB
+	END
+	CLOSE #cur DEALLOCATE #cur
+
+
+
+

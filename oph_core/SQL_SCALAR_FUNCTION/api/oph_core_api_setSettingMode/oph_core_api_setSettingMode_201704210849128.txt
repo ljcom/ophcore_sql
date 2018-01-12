@@ -1,0 +1,26 @@
+CREATE FUNCTION [api].[setSettingMode] (@moduleid nvarchar(50))
+RETURNS varchar
+--WITH ENCRYPTION
+AS
+BEGIN
+
+	declare @mode varchar
+	declare @lenModule int = len(@Moduleid)
+
+	if @lenModule between 5 AND 22 begin
+		set @mode =	
+			case LEFT(@moduleid, 1)
+				when 'C' then '0'
+				when 'M' then '1'
+				when 'P' then '2'
+				when 'S' then '3'
+				when 'T' then '4'
+				when 'Y' then '5'
+				when 'B' then '6'
+				else NULL
+			end
+	end
+
+	return @mode
+END
+

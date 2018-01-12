@@ -1,0 +1,40 @@
+
+
+
+
+CREATE procedure [gen].[updatecoTABLFIEL]
+as
+	print 'run manually'
+/*	
+	update b
+	set TitleCaption=c.TitleCaption, TitleShort=c.TitleShort, PrefixCaption=c.PrefixCaption, 
+		SuffixCaption=c.SuffixCaption, isBrowsable=c.isBrowsable, BrowseColDigit=c.BrowseColDigit, 
+		BrowseColWidth=c.BrowseColWidth, BrowseColAlign=c.BrowseColAlign, BrowseOrder=c.BrowseOrder, 
+		BrowseFilter=c.BrowseFilter, isSumable=c.isSumable, SumField=c.SumField, 
+		isViewable=c.isViewable, ViewPageNo=c.ViewPageNo, ViewRowNo=c.ViewRowNo, 
+		ViewRowType=c.ViewRowNo, ViewRowTypeOrder=c.ViewRowTypeOrder, ViewRowTitle=c.ViewRowTitle, 
+		ViewColNo=c.ViewColNo, ViewOrderNo=c.ViewOrderNo, ViewColDigit=c.ViewColDigit, 
+		ViewColWidth=c.ViewColWidth, ViewColAlign=c.ViewColAlign, 
+		isEditable=c.isEditable, isApproval=c.isApproval, 
+		ComboType=c.ComboType, ComboTable=c.ComboTable, ComboFieldKey=c.ComboFieldKey, 
+		ComboFieldId=c.ComboFieldId, ComboFieldIdColWidth=c.ComboFieldIdColWidth, 
+		ComboFieldName=c.ComboFieldName, ComboFieldNameColWidth=c.ComboFieldNameColWidth, 
+		ComboFieldNameEx1=c.ComboFieldNameEx1, ComboFieldNameEx2=c.ComboFieldNameEx2, 
+		ComboWhereField1=c.ComboWhereField1, ComboWhereRequired1=c.ComboWhereRequired1, 
+		ComboWhereField2=c.ComboWhereField2, ComboWhereRequired2=c.ComboWhereRequired2, 
+		ActivateField=c.ActivateField, DefaultValue=c.DefaultValue, 
+		PrimaryCol=c.PrimaryCol, UniqueKeys=c.UniqueKeys, ROZone=c.ROZone, HiddenZone=c.HiddenZone
+	from gen.coTABL a
+		inner join gen.coTABLFIEL b
+			on a.TableGUID=b.tableGUID
+		inner join syscolumns_ex c
+			on a.TableName=c.Tablename
+			and b.ColName=c.ColName
+*/
+
+		
+
+
+
+
+

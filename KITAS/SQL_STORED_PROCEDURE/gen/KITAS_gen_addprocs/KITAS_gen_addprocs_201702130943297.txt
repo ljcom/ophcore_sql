@@ -1,0 +1,320 @@
+
+
+CREATE procedure [gen].[addprocs] @tablename1 nvarchar(100)='', @isaddons bit=0, @isEnc bit=1, @isdebug bit=0
+as 
+--b 20141119
+
+	declare @accountid nvarchar(20)
+
+	declare @id int, @tableName nvarchar(50), @colName nvarchar(50)
+	declare @sqlstr varchar(max), @sp varchar(50), @parameter varchar(max), 
+		@content varchar(max), @content1 varchar(max), @content2 varchar(max)
+
+	declare @status nvarchar(50), @aTableName nvarchar(50), @oTableName nvarchar(50), 
+		@dTableName nvarchar(50), @eTableName nvarchar(50), @cTableName nvarchar(50), 
+		@tableApproveName nvarchar(50)
+
+	declare @insertstr varchar(max), @par varchar(max), @selectstr1 varchar(max),
+		@updatestr varchar(max), @valuestr varchar(max), @selectstr varchar(max), 
+		@browsestr varchar(max), @liststr varchar(max), @wherestr varchar(max), @wherefield varchar(max), 
+		@newstr varchar(max), @browsewherestr varchar(max), 
+		--@executeflag int,
+		@isDeleted bit, @isActive bit
+	declare @executestr nvarchar(100)
+	declare @primaryDate nvarchar(50), @PrimaryDateEdit int, @AutonumberCol nvarchar(50), @refNo nvarchar(50)
+	declare @approvaltablestr nvarchar(4000), @xx int
+
+	declare @attachmentcol1 nvarchar(50)
+	declare @attachmentcol2 nvarchar(50)
+	declare @attachmentcol3 nvarchar(50)
+
+	declare @parentField nvarchar(50), @needApproval bit
+	
+	set @xx=0
+	set @par = ''
+	set @insertstr = ''
+	set @updatestr = ''
+	set @valuestr = ''		
+	set @selectstr = ''		
+	set @browsestr = ''		
+	set @liststr = ''		
+	set @wherestr = ''		
+	set @whereField = ''		
+	set @newstr = ''
+
+	select @accountid = accountid from coACCT
+
+	DECLARE #cur_111 CURSOR
+	   FOR 	
+/*	   select sysobjects.id, sysobjects.name, syscolumns.name 
+	   from syscolumns
+			inner join sysobjects
+				on syscolumns.id = sysobjects.id
+			inner join (
+				select b.tablename from gen.cotablfiel a
+					inner join gen.cotabl b
+						on a.tableguid=b.tableGUID
+				group by b.tablename			
+			) x
+				on x.tablename=sysobjects.name
+		where colid=1 and sysobjects.xtype in ('U', 'V') and sysobjects.name like '[CMPRSTY]o%'   
+			and sysobjects.name like case when @tablename1='' then 
+					'%' else @tablename1+'%' end
+			and charindex('_', sysobjects.name, 1)=0
+		order by sysobjects.name
+		*/
+		select a.object_id, a.name, b.name 
+		--select b.*
+		from sys.columns b
+			inner join sys.objects a
+				on a.object_id = b.object_id
+			inner join sys.schemas d
+				on d.schema_id=a.schema_id
+				and d.name='dbo'
+			left join sys.objects c
+				on c.type='SN'
+				and substring(c.name,5,len(c.name)-4)=a.name
+			inner join (
+				select b.tablename from gen.cotablfiel a
+					inner join gen.cotabl b
+						on a.tableguid=b.tableGUID
+				group by b.tablename			
+			) x
+				on x.tablename=a.name
+		where b.column_id=1 and a.type in ('U', 'V') and a.name like '[CMPRSTY]o%'   
+			and c.name is null
+			and a.name like case when @tablename1='' then 
+					'%' else @tablename1+'%' end
+			and charindex('_', a.name, 1)=0
+		order by a.name
+
+	OPEN #cur_111
+	FETCH NEXT FROM #cur_111
+	into @id, @tableName, @colName
+	WHILE @@FETCH_STATUS = 0
+	BEGIN	
+		select @needApproval = NeedApproval from CoMODL 
+		where ModuleId = LEFT(@tableName, 1) + 'a' + SUBSTRING(@tableName, 3, LEN(@tableName) - 2)
+
+		if not exists(select * from sys.objects where type='SN' and name='syn_'+@oTableName) begin		
+			set @xx=@xx+1
+
+			update gen.cotablfiel
+			set TriggerDate=GETDATE()
+			from gen.cotablfiel	a
+				inner join gen.cotabl b
+					on a.tableguid=b.tableguid	
+			where b.Tablename=@tableName
+		
+			set @oTableName = left(@tableName,1) + 'o' + substring(@tableName,3,len(@tablename)-2) 
+			set @aTableName = left(@tableName,1) + 'a' + substring(@tableName,3,len(@tablename)-2) 
+			set @dTableName = left(@tableName,1) + 'd' + substring(@tableName,3,len(@tablename)-2) 
+			set @eTableName = left(@tableName,1) + 'e' + substring(@tableName,3,len(@tablename)-2) 
+			set @cTableName = left(@tableName,1) + 'c' + substring(@tableName,3,len(@tablename)-2) 
+		
+			if charindex('APRV', @otablename)=0 and len(@otablename)=6 and substring(@tablename,1,2)='to'
+				set @tableApproveName = @oTableName + 'APRV'
+			else
+				set @tableApproveName = ''
+
+			if exists (select name from syscolumns where id = @id and name = 'isDeleted')
+				select @isDeleted=1
+			else
+				select @isDeleted=0
+
+			if exists (select name from syscolumns where id = @id and name = 'isActive')
+				select @isActive=1
+			else
+				select @isActive=0
+
+			select @status=''
+			select @status = name from syscolumns where id = @id and name = 'status'
+
+			if right(@tablename,4)&lt;&gt;'APRV' begin
+				if not exists(select * from CoMODL where ModuleID = @atableName)
+				begin			
+					insert into CoMODL(ModuleID) values (@aTableName)
+				end
+
+				exec gen.addprocs_delete @atablename, @oTableName, @colName, @isDeleted, @isEnc=@isEnc, @isdebug=@isdebug
+				exec gen.addprocs_delete @etablename, @oTableName, @colName, @isDeleted, @isEnc=@isEnc, @isdebug=@isdebug
+			end
+			
+			--active views	
+			if substring(@tableName, 1, 2) = 'To' and charindex('APRV', @tablename, 0)=0
+				and exists(
+					select * from syscolumns 
+						inner join sysobjects on syscolumns.id=sysobjects.id 
+					where sysobjects.xtype in ('U') and sysobjects.name=@tablename)
+			begin
+				if @status &lt;&gt; '' and @tableApproveName&lt;&gt;''
+				begin
+					--print @approvaltablestr
+					set @approvaltablestr = '
+						CREATE TABLE ['+@tableApproveName+'] (
+							['+@tableApproveName+'GUID] [uniqueidentifier] NOT NULL ,
+							['+@colname+'] [uniqueidentifier] NULL ,
+							[ApprovalUserGUID] [uniqueidentifier] NULL ,
+							[CurLvl] [tinyint] NULL ,
+							[Lvl] [tinyint] NULL ,
+							[Status] [tinyint] NULL ,
+							[DelegateUserGUID] [uniqueidentifier] NULL,
+							[uGroupGUID] [uniqueidentifier] NULL,
+							[ReapprovalDate] [smalldatetime] NULL,
+							[RejectReason] [nvarchar](50) NULL,
+							[IsActive] [bit] NOT NULL,
+							[CreatedDate] [smalldatetime] NULL CONSTRAINT [DF_'+@tableApproveName+'_CreatedDate_1] DEFAULT (getdate()),
+							[UpdatedDate] [smalldatetime] NULL ,
+							[CreatedUser] [uniqueidentifier] NULL ,
+							[UpdatedUser] [uniqueidentifier] NULL ,
+							CONSTRAINT [PK_'+@tableApproveName+'] PRIMARY KEY  CLUSTERED 
+							(
+								['+@tableApproveName+'GUID]
+							) WITH  FILLFACTOR = 90  ON [PRIMARY] ,
+							CONSTRAINT [FK_'+@tableApproveName+'_'+@otablename+'] FOREIGN KEY 
+							(
+								['+@colname+']
+							) REFERENCES ['+@otablename+'] (
+								['+@colname+']
+							)
+						) ON [PRIMARY]'
+
+					if not exists (select * from sysobjects where name = @tableApproveName) begin
+						exec(@approvaltablestr)
+					end
+				end
+			end
+			if substring(@tableName, 1, 1) = 'T' and charindex('APRV', @tablename, 0)=0
+				and len(@tablename)=6
+			begin
+				--only with status
+				if @status &lt;&gt; '' and @needApproval = 1
+				begin			
+					exec gen.addprocs_execute @atablename, @otableName, @colname, @isEnc=@isEnc, @isdebug=@isdebug
+					exec gen.addprocs_force @atablename, @otableName, @colname, @status, @isEnc=@isEnc, @isdebug=@isdebug				
+					exec gen.addprocs_reopen @atablename, @otableName, @colname, @isEnc=@isEnc, @isdebug=@isdebug	
+					--exec gen.addprocs_recover @atablename, @otableName, @colname
+
+				end
+			end			
+
+			--print 'save'
+			exec gen.procfields_update @aTableName, @insertstr OUTPUT, @par OUTPUT, @updatestr OUTPUT, @valuestr OUTPUT
+			
+			exec gen.addprocs_save @atablename, @otablename, @colname, 
+				@status, @updatestr, @valuestr, @insertstr, @par, @tableApproveName, @isEnc=@isEnc, @isdebug=@isdebug
+
+			if substring(@tableName, 1, 1) = 'T' and  len(@tableName)&gt;=10 and 
+			exists(select * from Coqury where querycode=@tableName) 
+			begin
+				exec gen.addprocs_save_upload @atablename, @otablename, @colname, 
+					@status, @updatestr, @valuestr, @insertstr, @par, @tableApproveName, @isEnc=@isEnc, @isdebug=@isdebug
+			end
+			if @isaddons=1 
+				exec gen.addprocs_save_addons @atablename, @otablename, @colname, 
+					@status, @updatestr, @valuestr, @insertstr, @par, @tableApproveName, @isEnc=@isEnc, @isdebug=@isdebug
+		
+			exec gen.procfields_select @aTableName, @selectstr OUTPUT, @newstr OUTPUT, @liststr OUTPUT
+			if @selectstr &lt;&gt; ''exec gen.addprocs_select @atablename, @colName, @selectstr, @newstr, @isEnc=@isEnc, @isdebug=@isdebug
+			if @liststr&lt;&gt;'' exec gen.addprocs_list @atablename, @colname, @liststr, @isEnc=@isEnc, @isdebug=@isdebug
+
+			exec gen.procfields_select @dTableName, @selectstr OUTPUT, @newstr OUTPUT, @liststr OUTPUT
+			if @selectstr &lt;&gt; ''exec gen.addprocs_select @dtablename, @colName, @selectstr, @newstr, @isEnc=@isEnc, @isdebug=@isdebug
+			if @liststr&lt;&gt;'' exec gen.addprocs_list @dtablename, @colname, @liststr, @isEnc=@isEnc, @isdebug=@isdebug
+
+			exec gen.procfields_select @eTableName, @selectstr OUTPUT, @newstr OUTPUT, @liststr OUTPUT
+			if @selectstr &lt;&gt; ''exec gen.addprocs_select @etablename, @colName, @selectstr, @newstr, @isEnc=@isEnc, @isdebug=@isdebug
+			if @liststr&lt;&gt;'' exec gen.addprocs_list @etablename, @colname, @liststr, @isEnc=@isEnc, @isdebug=@isdebug
+
+			exec gen.procfields_select @cTableName, @selectstr OUTPUT, @newstr OUTPUT, @liststr OUTPUT
+			if @selectstr &lt;&gt; ''exec gen.addprocs_select @ctablename, @colName, @selectstr, @newstr, @isEnc=@isEnc, @isdebug=@isdebug
+			if @liststr&lt;&gt;'' exec gen.addprocs_list @ctablename, @colname, @liststr, @isEnc=@isEnc, @isdebug=@isdebug
+		end 
+
+		FETCH NEXT FROM #cur_111
+		into @id, @tableName, @colName
+	end
+	CLOSE #cur_111
+	DEALLOCATE #cur_111
+
+	-- add xml to coMODL
+	DECLARE #cur999 CURSOR
+	READ_ONLY
+	FOR select distinct a.tablename from gen.coTABL a 
+			inner join gen.coTABLFIEL b
+				on a.TableGUID=b.tableGUID
+		where a.tablename like 'ta%' and b.isBrowsable&gt;0
+			and len(tablename)=6	
+
+	DECLARE @name varchar(40)
+	declare @xserial varchar(max), @xsearch varchar(max)
+
+	OPEN #cur999
+
+	FETCH NEXT FROM #cur999 INTO @name
+	WHILE (@@fetch_status &lt;&gt; -1)
+	BEGIN
+		IF (@@fetch_status &lt;&gt; -2)
+		BEGIN
+			select @xserial =(
+				select
+					case 
+						when isnull(comboType,0) in (1,2,3,10,12) 
+							then ''''+colname+''' as ''field/autosuggestbox/@name'','''+isnull(b.TitleCaption,colname)+''' ''field/autosuggestbox/Caption/*'', '+colname+' ''field/autosuggestbox/value/*'', ' 
+						when isnull(comboType,0) in (11) 
+							then ''''+colname+''' as ''field/parcombobox/@name'','''+isnull(b.TitleCaption,colname)+''' ''field/parcombobox/Caption/*'', '+colname+' ''field/parcombobox/value/*'', ' 
+
+						when isnull(comboType,0) in (4,40,41,42,43,44,45) 
+							then ''''+colname+''' as ''field/datebox/@name'','''+isnull(b.TitleCaption,colname)+''' ''field/datebox/Caption/*'',  '+colname+' ''field/datebox/value/*'', '+convert(varchar(4),comboType)+' ''field/datebox/type/*'', ' 
+						else ''''+colname+''' as ''field/textbox/@name'','''+isnull(b.TitleCaption,colname)+''' ''field/textbox/Caption/*'',  '+
+							colname+' ''field/textbox/value/*'', ' end+
+					case 
+						when isnull(comboType,0) in (1,2,3) then
+							case when isnull(comboFieldId,'')&lt;&gt;'' then ''+isnull(comboFieldId,'')+' ''field/autosuggestbox/ref/id/*''' else 'null' end +', '+
+							case when isnull(comboFieldName,'')&lt;&gt;'' then ''+isnull(comboFieldName,'')+' ''field/autosuggestbox/ref/name/*''' else 'null' end +', '+
+							case when isnull(comboFieldNameEx1,'')&lt;&gt;'' then ''+isnull(comboFieldNameEx1,'')+' ''field/autosuggestbox/ref/name1/*''' else 'null' end +', '+
+							case when isnull(comboFieldNameEx2,'')&lt;&gt;'' then ''+isnull(comboFieldNameEx2,'')+' ''field/autosuggestbox/ref/name2/*''' else 'null' end +', ' 
+						when isnull(comboType,0) in (10,12) then
+							case when isnull(comboFieldId,'')&lt;&gt;'' then ''+isnull(ColName,'')+'cbId ''field/autosuggestbox/ref/id/*''' else 'null' end +', '+
+							case when isnull(comboFieldName,'')&lt;&gt;'' then ''+isnull(ColName,'')+'cbNm ''field/autosuggestbox/ref/name/*''' else 'null' end +', '+
+							case when isnull(comboFieldNameEx1,'')&lt;&gt;'' then ''+isnull(comboFieldNameEx1,'')+' ''field/autosuggestbox/ref/name1/*''' else 'null' end +', '+
+							case when isnull(comboFieldNameEx2,'')&lt;&gt;'' then ''+isnull(comboFieldNameEx2,'')+' ''field/autosuggestbox/ref/name2/*''' else 'null' end +', ' 
+						when isnull(comboType,0) in (11) then
+							case when isnull(comboType,'')&lt;&gt;'' then ''+isnull(ColName,'')+'parId ''field/parcombobox/ref/id/*''' else 'null' end +', '+
+							case when isnull(comboType,'')&lt;&gt;'' then ''+isnull(ColName,'')+'parVal ''field/parcombobox/ref/name/*''' else 'null' end +', '+
+							case when isnull(comboFieldNameEx1,'')&lt;&gt;'' then ''+isnull(comboFieldNameEx1,'')+' ''field/parcombobox/ref/name1/*''' else 'null' end +', '+
+							case when isnull(comboFieldNameEx2,'')&lt;&gt;'' then ''+isnull(comboFieldNameEx2,'')+' ''field/parcombobox/ref/name2/*''' else 'null' end +', ' 
+						else '' end+
+					'null, '
+				--select *
+				from gen.coTABL a
+					inner join gen.coTABLFIEL b
+						on a.TableGUID=b.tableGUID
+				where tablename=@name and isBrowsable&gt;0
+				order by BrowseOrder
+				for xml path('')
+			)
+
+			exec gen.procfields_browse @name, @browsestr OUTPUT, @wherestr OUTPUT, @wherefield OUTPUT
+
+			--print len(@xserial)
+			--print @xserial
+
+			update coMODL 
+			set xmlBrowsestr=substring(@xserial, 1, len(@xserial)-1),
+				xmlSearchStr=@whereField	--substring(@whereField, 1, len(@whereField)-1) 
+			where moduleid=@name
+
+		END
+		FETCH NEXT FROM #cur999 INTO @name
+	END
+
+	CLOSE #cur999
+	DEALLOCATE #cur999
+
+
+
+
+
+
+

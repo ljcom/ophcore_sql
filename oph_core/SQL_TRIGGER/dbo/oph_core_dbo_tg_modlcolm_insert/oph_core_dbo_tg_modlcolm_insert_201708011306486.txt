@@ -1,0 +1,23 @@
+
+
+CREATE TRIGGER [dbo].[tg_modlcolm_insert]
+   ON  [dbo].[modlcolm]
+   AFTER insert
+AS 
+BEGIN
+	SET NOCOUNT ON;
+	declare @colkey nvarchar(50), @colLength int, @colType int
+	select @colkey=colkey, @colLength=colLength, @coltype=colType 
+	from inserted
+
+	if exists(select * from inserted)
+
+		if len(@colkey)<2 or CHARINDEX(' ', @colkey)>0 
+			or @coltype is null --or @colLength is null 
+		begin
+			RAISERROR ('Wrong Column Key Naming. Please read the instruction.', 16, 1)
+			ROLLBACK TRANSACTION
+		end
+
+END
+

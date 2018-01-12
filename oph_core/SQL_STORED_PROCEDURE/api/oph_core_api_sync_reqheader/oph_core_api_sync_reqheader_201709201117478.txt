@@ -1,0 +1,64 @@
+
+
+
+
+CREATE procedure [api].[sync_reqheader] @accountid nvarchar(50), @token uniqueidentifier, @code nvarchar(50), @page int, @r xml=null output, @issilent bit=0, @isdebug bit=0
+as
+
+	declare @dataDB nvarchar(50), @schema nvarchar(50), @fieldKey nvarchar(50), @settingmode int
+	select @datadb=databasename 
+	from oph_core.dbo.acctdbse d	
+		inner join oph_core.dbo.acct a on a.AccountGUID=d.AccountGUID
+	where accountid=@accountid and isMaster=1 and [version]='4.0'
+
+	declare @sqlstr nvarchar(max)='
+		select @settingmode=settingmode
+		from '+@datadb+'.dbo.modl m
+		where moduleid='''+@code+''''
+
+	exec sp_executesql @sqlstr, N'@settingmode int output', @settingmode output
+
+	select @schema=iif(@settingMode=0, 'dbo', 'doc')
+	
+	select @fieldKey=colkey
+	from modl m
+		inner join modlcolm c on m.moduleguid=c.ModuleGUID
+		inner join modlcolminfo i on c.ColumnGUID=i.ColumnGUID and i.InfoKey='primaryCol' and i.infovalue='1'
+	where moduleid=@code
+	--print @datadb
+
+	set @fieldKey=iif(isnull(@fieldKey, '')<>'', @fieldkey, 'docGUID')
+
+
+	set @sqlstr ='
+		declare @c int
+		select @c=(count(*)+999)/1000
+		from '+@datadb+'.'+@schema+'.['+@code+'] m
+		--where datediff(n, isnull(@latestDate, ''1/1/2000''), isnull(updatedDate, createdDate))>=0
+
+		set @r = (
+			select @page ''info/pageNo'', @c ''info/nbPages'',
+				(
+				select '+@fieldKey+' GUID, updatedDate
+				from (
+					select '+@fieldKey+', gen.datetoint(isnull(updateddate, createddate)) updateddate, ROW_NUMBER() OVER ( ORDER BY isnull(updatedDate, createdDate) desc) AS RowNo
+					from '+@datadb+'.'+@schema+'.['+@code+'] m
+					--where datediff(n, isnull(@latestDate, ''1/1/2000''), isnull(updatedDate, createdDate))>=0
+					) x
+				where rowno between '+CAST(((@page-1)*1000)+1 as nvarchar(10))+' and '+CAST(@page*1000 as nvarchar(10))+'
+				--order by updatedDate desc
+				for xml path(''header''), type--, binary base64
+				) headers
+			for xml path(''replication''), root(''sqroot''))
+
+		'
+
+	if @isdebug=1 print @sqlstr
+	exec sp_executesql @sqlstr, N'@page int, @r xml output', @page, @r output
+
+	if @issilent=0 select @r
+
+
+
+
+

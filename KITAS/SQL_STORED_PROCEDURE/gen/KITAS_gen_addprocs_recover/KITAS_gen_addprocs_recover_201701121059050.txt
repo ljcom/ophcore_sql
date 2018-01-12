@@ -1,0 +1,71 @@
+
+
+CREATE procedure [gen].[addprocs_recover] @tablename nvarchar(50), @otablename nvarchar(50), 
+	@colname nvarchar(50), @isdebug bit=0 
+	--@isdeleted bit
+as
+	declare @sp nvarchar(4000), @parameter nvarchar(4000), @content nvarchar(4000)
+	declare @dTableName nvarchar(50)
+	set @dTableName = left(@tableName,1) + 'd' + substring(@tableName,3,len(@tablename)-2) 
+
+	
+
+
+		set @sp = '' + @dTableName + '_recover' 
+		set @parameter = char(9) + '@GUID uniqueidentifier, @hostGUID uniqueidentifier'
+		set @content = 	
+				--char(9) + 'if dbo.fn_checkObject(''dbo'','''+@tablename+'_delete_custom'')=0 begin' + char(13) + char(10) + 
+				char(9) + char(9) + 'declare @userGUID uniqueidentifier, @userName nvarchar(100)' + char(13) + char(10) + 
+				char(9) + char(9) + 'declare @msg nvarchar(100)' + char(13) + char(10) + 
+				char(9) + char(9) + 'set @msg =''''' + char(13) + char(10) + 
+				char(9) + char(9) + char(13) + char(10) + 
+				--char(9) + char(9) + 'if dbo.fn_checkObject(''dbo'','''+@tablename+'_delete_before'')=1 exec dbo.'+@tablename+'_delete_before @GUID, @hostGUID' + char(13) + char(10) + 
+				char(9) + char(9) + 'select @userGUID=userguid from coUSERHOST where hostGUID=@hostGUID' + char(13) + char(10) + 
+				char(9) + char(9) + char(13) + char(10) + 
+				char(9) + char(9) + 'select @username=username' + char(13) + char(10) +  
+				char(9) + char(9) + 'from coUSER' + char(13) + char(10) + 
+				char(9) + char(9) + 'where userguid=@userguid' + char(13) + char(10) + 
+				char(13) + char(10) + 
+				--char(9) + char(9) + 'if exists(select * from oph.' + @tableName + ' where ' + @colName + ' = @GUID)' + char(13) + char(10) + 
+--						case when isnull(@tableApproveName,'') = '' then '' else char(9) + 'and exists(select * from ' + @tableName + 'APRV where userGUID=@userGUID and ' + @colName + ' = @GUID)' + char(13) + char(10) end + 
+				char(9) + char(9) + char(9) + 'update ' + @oTableName + char(13) + char(10) + 
+				--char(9) + char(9) + char(9) + 'set status = 400,statuscomment=''reopen by '+' '+' @username '  + char(13) + char(10) + 
+				char(9) + char(9) + char(9) + 'set isDeleted = 0,statuscomment=''recover by   ''+ @username' + char(13) + char(10) + 
+				char(9) + char(9) + char(9) + 'where   '+ @colname + ' = @GUID' + char(13) + char(10) + 
+				char(9) + char(9) + char(13) + char(10) + 
+				--char(9) + char(9) + 'if dbo.fn_checkObject(''dbo'','''+@tablename+'_delete_before'')=1 exec dbo.'+@tablename+'_delete_after @GUID, @hostGUID' + char(13) + char(10) + 
+				char(9) + char(9) + char(13) + char(10) + 
+				--char(9) + char(9) + 'if exists(select * from oph.' + @tableName + '' + char(13) + char(10) + 
+				--char(9) + char(9) + char(9) + 'where ' + @colname + ' = @GUID) begin' + char(13) + char(10) + 
+				--char(9) + char(9) + char(9) + 'set @msg=''This record cannot be deleted. You might don''''t have any authority to do this.''' + char(13) + char(10) + 
+				--char(9) + char(9) + 'end' + char(13) + char(10) + 
+				--char(9) + char(9) + 'else begin' + char(13) + char(10) + 
+				--char(9) + char(9) + char(9) + 'if dbo.fn_checkObject(''dbo'','''+@tablename+'_delete_after'')=1 exec dbo.'+@tablename+'_delete_after_success @GUID, @hostGUID' + char(13) + char(10) + 
+				--char(9) + char(9) + 'end' +char(13) + char(10) + 
+				char(9) + char(9) + char(13) + char(10) + 
+				char(9) + char(9) + 'select @msg recover' + char(13) + char(10) 
+				--char(9) + 'end else' + char(13) + char(10)
+				--char(9) + CHAR(9) + 'exec dbo.'+@tablename+'_reopen_custom @GUID, @hostGUID' + char(13) + char(10) 
+				--char(9) + CHAR(9) + 'exec dbo.'+@tablename+'_delete_custom @GUID, @hostGUID' + char(13) + char(10) 
+				
+		exec gen.addproc @sp, @parameter, @content
+		
+	
+			
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

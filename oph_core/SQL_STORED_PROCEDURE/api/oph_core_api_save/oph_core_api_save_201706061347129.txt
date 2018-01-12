@@ -1,0 +1,34 @@
+
+
+
+CREATE procedure [api].[save] 
+	@hostGUID uniqueidentifier,	@code varchar(20), @GUID uniqueidentifier, @saveXML xml,
+	@preview int=0, @isDebug bit=0
+--WITH ENCRYPTION
+as
+	declare @timestamp datetime=current_timestamp
+
+	declare @ver varchar(10), @db varchar(50), @typecode varchar(1)
+	exec gen.getDBInfo @hostguid, @code, @ver output, @db output, @typecode output
+
+	declare @moduleGUID uniqueidentifier
+	select @moduleguid=ModuleGUID from modl where moduleid=@code
+
+	--if @ver='3.0' and exists(select * from docm where moduleguid=@moduleguid) begin
+	--	set @ver='4.0'
+	--	set @db=db_name()
+	--end
+
+	if @ver='3.0' 
+		exec [api].[save_v3] @hostGUID, @code, @GUID, @saveXML, @preview, @isDebug
+	else if @ver='4.0' 
+		exec [api].[save_v4] @hostGUID, @code, @GUID, @saveXML, @preview, @isDebug
+
+	--declare @timestamp datetime=current_timestamp
+	declare @comment nvarchar(max)=N'api.save @saveXML:'+isnull(cast(@saveXML as nvarchar(max)), '')+' @preview:'+isnull(cast(@preview as nvarchar(1)), '')
+	exec gen.evnt_save @hostguid, @code, @GUID, @timestamp, @comment
+
+
+
+
+

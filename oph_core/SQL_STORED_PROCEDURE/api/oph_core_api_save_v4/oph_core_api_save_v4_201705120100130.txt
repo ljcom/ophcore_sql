@@ -1,0 +1,109 @@
+
+CREATE PROCEDURE [api].[save_v4] 
+	@accountid varchar(50), @dbcore varchar(50), @hostGUID uniqueidentifier, @code varchar(20), @GUID uniqueidentifier, @saveXML xml, 
+	@preview int=0, @isDebug bit=0
+--WITH ENCRYPTION
+as	--CreatedBy eLs ON Apr, 2017
+
+	--declare @accountid varchar(50) = 'kitashop', @hostGUID uniqueidentifier, @code varchar(20) = 'acct', 
+	--@GUID uniqueidentifier, 
+	--@saveXML xml = '<sqroot><field id="q"><value>,</value></field><field id="AccountId"><value>KITASHOP</value></field></sqroot>', 
+	--@preview int=0, @isDebug bit=1 set @hostGUID = gen.getHost('oph')
+	SET NOCOUNT ON
+
+	--declare @ver varchar(10), @db varchar(50), @typecode varchar(1)
+	--exec gen.getDBInfo @accountid, @dbcore, @code, @ver output, @db output, @typecode output
+
+	declare @PrimaryKey nvarchar(50), @sqlstr nvarchar(max), 
+		@insertStr nvarchar(max), @insertField nvarchar(max),
+		@updateStr nvarchar(max), @colKey nvarchar(max), @msg varchar(MAX)
+	declare @cid uniqueidentifier, @parentKey nvarchar(50)
+
+	--check parent
+	set @sqlstr='
+		select @parentKey=colkey 
+		from modl a
+			inner join modl b on a.parentmoduleguid=b.moduleguid
+			inner join modlcolm c on b.moduleguid=c.moduleguid and c.colorder=1
+		where a.moduleid='''+@code+'''
+		'
+	exec sp_executesql @sqlstr, N'@parentKey nvarchar(50) OUTPUT', @parentKey OUTPUT
+
+	select @cid=typenode.value('value[1]', 'varchar(MAX)')
+	from @saveXML.nodes('/sqroot/field') AS XTbl(typenode)
+	where typenode.value('@id', 'varchar(50)')='cid'
+	--
+	
+	--set @PrimaryKey = api.fn_PrimaryKey (@code)
+	exec api.getPrimaryKey @accountid, @dbcore, @code, @PrimaryKey OUTPUT
+	declare @isNew bit=iif(ISNULL(@GUID, gen.ZeroGUID()) = gen.ZeroGUID(),1,0)
+
+	set @colKey = STUFF((
+		select ','+ColKey 
+		--select *
+		from modlcolm a
+			inner join modlcolminfo b ON a.ColumnGUID = b.ColumnGUID
+			inner join modl c ON a.ModuleGUID = c.ModuleGUID
+		where c.ModuleId = @code 
+			and b.InfoKey = 'isEditable' and (b.infoValue = '1' or (@isNew=1 and b.infoValue = '2'))
+		order by colkey
+		for xml path('')), 1, 1, '')
+
+	if @isNew=1 begin
+		print 'SQL Query Insert' + char(10) + '================'
+		set @GUID=NEWID()
+		set @insertStr = STUFF((
+			select
+				', '''+ replace(typenode.value('value[1]', 'varchar(MAX)'),'''','''''') +''''
+			from @saveXML.nodes('/sqroot/field') AS XTbl(typenode)
+			where charindex(typenode.value('@id', 'varchar(50)'), @colKey)>1
+			order by typenode.value('@id', 'varchar(50)')
+			for xml path('')), 1, 2, ''
+		)
+
+		set @insertField = STUFF((
+			select
+				', '+ typenode.value('@id', 'varchar(50)') +''
+			from @saveXML.nodes('/sqroot/field') AS XTbl(typenode)
+			where charindex(typenode.value('@id', 'varchar(50)'), @colKey)>1
+			order by typenode.value('@id', 'varchar(50)')
+			for xml path('')), 1, 2, ''
+		)
+
+		set @sqlstr = 'insert into ' + QUOTENAME(@code) + ' (' + @PrimaryKey + iif(isnull(@parentKey,'')='','', ', '+@parentKey) + ',' + @insertField + ')' + char(10) +
+			'values(''' + cast(@GUID as varchar(50)) + '''' + iif(isnull(@parentKey,'')='','', ', '''+cast(@cid as varchar(50))+'''') + ',' + @insertStr + ')'
+	end
+	else begin
+		print 'SQL Query Update' + char(10) + '================'
+		set @updateStr = STUFF((
+			select
+				', '+typenode.value('@id', 'varchar(50)') +' = '''+ replace(typenode.value('value[1]', 'varchar(MAX)'),'''','''''') +''''
+			from @saveXML.nodes('/sqroot/field') AS XTbl(typenode)
+			where @colKey like '%' + typenode.value('@id', 'varchar(50)') + '%'
+			order by typenode.value('@id', 'varchar(50)')
+			for xml path('')), 1, 2, ''
+		)
+
+		set @sqlstr = 'update ' + QUOTENAME(@code) + ' set ' + @updateStr + ' where ' + @PrimaryKey + ' = ''' + CAST(@GUID as varchar(50)) + ''''
+	end
+
+	if @preview=0 begin
+		begin try
+			exec(@sqlstr)
+		end try
+		begin catch
+			if @isdebug=1 print @sqlstr
+			set @msg = ERROR_MESSAGE()
+		end catch
+	end
+	if @isDebug = 1 begin	
+		--select @isDebug [isDebug], IIF(@insertStr is NULL, 'update', 'insert') [mode], @accountID [AccountID], @code [Module], @PrimaryKey [PrimaryKey], isNULL(@GUID, @newid) [GUID]
+		--select cast(@colKey as xml) [Column Key], cast(ISNULL(@insertStr, @updateStr) as xml) [Fields Value], cast(@sqlstr as xml) [SQL Query]
+		print @sqlstr 
+		print @msg
+	end
+
+	select @msg 'message', @GUID 'guid'
+	for xml path('sqroot')
+
+

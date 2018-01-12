@@ -1,0 +1,285 @@
+
+CREATE procedure [gen].[doSync_lvl1_push] @paccountid nvarchar(50), @saccountid nvarchar(50), 
+	@code_preset nvarchar(50), @paddress nvarchar(500), @token uniqueidentifier, @xx xml, @xx2 xml, @isLAN bit=0, @isdebug bit=0
+as
+	declare @url nvarchar(max), @g uniqueidentifier, @x nvarchar(max)
+		
+	-- reqcodeprop
+	DECLARE #curf CURSOR
+	READ_ONLY
+	FOR 
+		select x.id
+		from (
+			SELECT Tbl.Col.value('id[1]', 'nvarchar(50)') id, 
+				Tbl.Col.value('modifiedDate[1]', 'bigint') md
+			FROM @xx2.nodes('/sqroot/replicationCheck/code') Tbl(Col)
+			) x 
+			left join (
+				SELECT Tbl.Col.value('id[1]', 'nvarchar(50)') id, 
+					Tbl.Col.value('modifiedDate[1]', 'bigint') md
+				FROM @xx.nodes('/sqroot/replicationCheck/code') Tbl(Col)
+				) y on x.id=y.id
+		where x.md - isnull(y.md, gen.datetoint('1/1/2000'))<>0
+			and x.id=iif(isnull(@code_preset,'')='', x.id, @code_preset)
+		order by x.md
+
+	DECLARE @id nvarchar(50), @yy xml
+	declare @moduleGUID uniqueidentifier, @poststring nvarchar(max)
+
+	OPEN #curf
+
+	FETCH NEXT FROM #curf INTO @id
+	WHILE (@@fetch_status <> -1)
+	BEGIN
+		IF (@@fetch_status <> -2)
+		BEGIN
+			----select @yy=null--, @url=null, @g=null, @x=null
+			--print @id
+
+			--set @url=@paddress+'?mode=reqcodeprop&code='+@id+'&token='+cast(@token as nvarchar(50))
+			--print @url
+			--if @isLAN=0 begin
+			--	exec gen.gethttp @url, @g output
+	
+			--	select @x=httptext 
+			--	from http where httpguid=@g
+
+			--	set @xx2=replace(@x, '<?xml version="1.0" encoding="utf-8"?>', '')
+			--end else begin
+			--	exec api.sync_reqcodeprop @paccountid, @token, @id, @xx2 output
+			--end
+			----select @xx2
+
+			exec api.sync_reqcodeprop @saccountid, @token, @id, @xx output, @issilent=1
+
+			set @url=@paddress+'?mode=sendcodeprop&code='+@id+'&token='+cast(@token as nvarchar(50))
+			set @poststring='dataXML='+replace(replace(replace(cast(@xx as nvarchar(max)), '<', '%26lt;'), '>', '%26gt;'), '&', '%26')
+			--if charindex('modl', @poststring)>1 begin
+			if @isLAN=0 begin
+				print @url
+				print @poststring
+				exec gen.gethttp @url, @g output, @method='POST', @poststring=@poststring
+	
+				select @x=httptext 
+				from http where httpguid=@g
+
+				set @yy=replace(@x, '<?xml version="1.0" encoding="utf-8"?>', '')
+			end else begin
+				exec api.sync_sendcodeprop @paccountid, @token, @id, @yy
+			end
+			--end
+--			select @xx
+
+/*
+			--modl
+			set @yy=(
+				select (
+					select x.ModuleGUID, x.AccountGUID, x.ModuleID, x.ModuleDescription, 
+						x.settingMode, x.AccountDBGUID, x.needLogin, x.ThemePageGUID, 
+						x.ModuleStatusGUID, x.ModuleGroupGUID, x.createdDate, x.updatedDate
+					from (
+						SELECT Tbl.Col.value('ModuleGUID[1]', 'uniqueidentifier') ModuleGUID, 
+							Tbl.Col.value('AccountGUID[1]', 'uniqueidentifier') AccountGUID,
+							Tbl.Col.value('ModuleID[1]', 'nvarchar(50)') ModuleID,
+							Tbl.Col.value('ModuleDescription[1]', 'nvarchar(200)') ModuleDescription,
+							Tbl.Col.value('settingMode[1]', 'int') settingMode,
+							Tbl.Col.value('AccountDBGUID[1]', 'uniqueidentifier') AccountDBGUID,
+							Tbl.Col.value('needLogin[1]', 'bit') needLogin,
+							Tbl.Col.value('ThemePageGUID[1]', 'uniqueidentifier') ThemePageGUID,
+							Tbl.Col.value('ModuleStatusGUID[1]', 'uniqueidentifier') ModuleStatusGUID,
+							Tbl.Col.value('ModuleGroupGUID[1]', 'uniqueidentifier') ModuleGroupGUID,
+							Tbl.Col.value('createdDate[1]', 'datetime') createdDate,
+							Tbl.Col.value('updatedDate[1]', 'datetime') updatedDate,
+							gen.datetoint(isnull(Tbl.Col.value('updatedDate[1]', 'datetime'), Tbl.Col.value('createdDate[1]', 'datetime'))) ud
+						FROM @xx.nodes('/sqroot/replicationCode/modl/item') Tbl(Col)
+						) x 
+						left join (
+							SELECT Tbl.Col.value('ModuleGUID[1]', 'uniqueidentifier') ModuleGUID, 
+								Tbl.Col.value('AccountGUID[1]', 'uniqueidentifier') AccountGUID,
+								Tbl.Col.value('ModuleID[1]', 'nvarchar(50)') ModuleID,
+								Tbl.Col.value('ModuleDescription[1]', 'nvarchar(200)') ModuleDescription,
+								Tbl.Col.value('settingMode[1]', 'int') settingMode,
+								Tbl.Col.value('AccountDBGUID[1]', 'uniqueidentifier') AccountDBGUID,
+								Tbl.Col.value('needLogin[1]', 'bit') needLogin,
+								Tbl.Col.value('ThemePageGUID[1]', 'uniqueidentifier') ThemePageGUID,
+								Tbl.Col.value('ModuleStatusGUID[1]', 'uniqueidentifier') ModuleStatusGUID,
+								Tbl.Col.value('ModuleGroupGUID[1]', 'uniqueidentifier') ModuleGroupGUID,
+								gen.datetoint(isnull(Tbl.Col.value('updatedDate[1]', 'datetime'), Tbl.Col.value('createdDate[1]', 'datetime'))) ud
+							FROM @xx2.nodes('/sqroot/replicationCode/modl/item') Tbl(Col)
+							) y on x.ModuleGUID=y.ModuleGUID
+					where x.ud - isnull(y.ud, gen.datetoint('1/1/2000'))<>0
+					for xml path('item'), root('modl'), type)
+				for xml path('replicationCode'), root('sqroot')
+				)
+
+			set @url=@paddress+'?mode=sendcodeprop&code='+@id+'&token='+cast(@token as nvarchar(50))
+			set @poststring='dataXML='+replace(replace(replace(cast(@yy as nvarchar(max)), '<', '%26lt;'), '>', '%26gt;'), '&', '%26')
+			if charindex('modl', @poststring)>1 begin
+				if @isdebug=0 begin
+					print @url
+					print @poststring
+					exec gen.gethttp @url, @g output, @method='POST', @poststring=@poststring
+	
+					select @x=httptext 
+					from http where httpguid=@g
+
+					set @yy=replace(@x, '<?xml version="1.0" encoding="utf-8"?>', '')
+				end else begin
+					exec api.sync_sendcodeprop @paccountid, @token, @id, @yy
+				end
+			end
+
+			--modlcolm
+			set @yy=(
+				select (
+					select x.ColumnGUID, x.ModuleGUID, x.colKey, x.colType, x.colOrder, x.colLength, 
+						x.createdDate, x.updatedDate
+					from (
+						SELECT Tbl.Col.value('ColumnGUID[1]', 'uniqueidentifier') ColumnGUID, 
+							Tbl.Col.value('ModuleGUID[1]', 'uniqueidentifier') ModuleGUID,
+							Tbl.Col.value('colKey[1]', 'nvarchar(50)') colKey,
+							Tbl.Col.value('colType[1]', 'int') colType,
+							Tbl.Col.value('colOrder[1]', 'int') colOrder,
+							Tbl.Col.value('colLength[1]', 'int') colLength,
+							Tbl.Col.value('createdDate[1]', 'datetime') createdDate,
+							Tbl.Col.value('updatedDate[1]', 'datetime') updatedDate,
+							gen.datetoint(isnull(Tbl.Col.value('updatedDate[1]', 'datetime'), Tbl.Col.value('createdDate[1]', 'datetime'))) ud
+						FROM @xx.nodes('/sqroot/replicationCode/modlcolm/item') Tbl(Col)
+						) x 
+						left join (
+							SELECT Tbl.Col.value('ColumnGUID[1]', 'uniqueidentifier') ColumnGUID, 
+								Tbl.Col.value('ModuleGUID[1]', 'uniqueidentifier') ModuleGUID,
+								Tbl.Col.value('colKey[1]', 'nvarchar(50)') colKey,
+								Tbl.Col.value('colType[1]', 'int') colType,
+								Tbl.Col.value('colOrder[1]', 'int') colOrder,
+								Tbl.Col.value('colLength[1]', 'int') colLength,
+								gen.datetoint(isnull(Tbl.Col.value('updatedDate[1]', 'datetime'), Tbl.Col.value('createdDate[1]', 'datetime'))) ud
+							FROM @xx2.nodes('/sqroot/replicationCode/modlcolm/item') Tbl(Col)
+							) y on x.ColumnGUID=y.ColumnGUID
+					where x.ud - isnull(y.ud, gen.datetoint('1/1/2000'))<>0
+					for xml path('item'), root('modlcolm'), type)
+				for xml path('replicationCode'), root('sqroot')
+			)
+
+			set @url=@paddress+'?mode=sendcodeprop&code='+@id+'&token='+cast(@token as nvarchar(50))
+			set @poststring='dataXML='+replace(replace(replace(cast(@yy as nvarchar(max)), '<', '%26lt;'), '>', '%26gt;'), '&', '%26')
+			if charindex('modlcolm', @poststring)>1 begin
+				if @isdebug=0 begin
+					--select @yy
+					print @url
+					set @poststring='dataXML='+replace(replace(replace(cast(@yy as nvarchar(max)), '<', '%26lt;'), '>', '%26gt;'), '&', '%26')
+					print @poststring
+					exec gen.gethttp @url, @g output, @method='POST', @poststring=@poststring
+	
+					select @x=httptext 
+					from http where httpguid=@g
+
+					set @yy=replace(@x, '<?xml version="1.0" encoding="utf-8"?>', '')
+				end else begin
+					exec api.sync_sendcodeprop @paccountid, @token, @id, @yy
+				end
+			end
+			
+			--modlcolminfo
+			set @yy=(
+				select (
+					select x.ColumnInfoGUID, x.ColumnGUID, x.InfoKey, x.InfoValue, 
+						x.createdDate, x.updatedDate
+					from (
+						SELECT Tbl.Col.value('ColumnInfoGUID[1]', 'uniqueidentifier') ColumnInfoGUID, 
+							Tbl.Col.value('ColumnGUID[1]', 'uniqueidentifier') ColumnGUID,
+							Tbl.Col.value('InfoKey[1]', 'nvarchar(50)') InfoKey,
+							Tbl.Col.value('InfoValue[1]', 'nvarchar(max)') InfoValue,
+							Tbl.Col.value('createdDate[1]', 'datetime') createdDate,
+							Tbl.Col.value('updatedDate[1]', 'datetime') updatedDate,
+							gen.datetoint(isnull(Tbl.Col.value('updatedDate[1]', 'datetime'), Tbl.Col.value('createdDate[1]', 'datetime'))) ud
+						FROM @xx.nodes('/sqroot/replicationCode/modlcolminfo/item') Tbl(Col)
+						) x 
+						left join (
+							SELECT Tbl.Col.value('ColumnInfoGUID[1]', 'uniqueidentifier') ColumnInfoGUID, 
+								Tbl.Col.value('ColumnGUID[1]', 'uniqueidentifier') ColumnGUID,
+								Tbl.Col.value('InfoKey[1]', 'nvarchar(50)') InfoKey,
+								Tbl.Col.value('InfoValue[1]', 'nvarchar(max)') InfoValue,
+								gen.datetoint(isnull(Tbl.Col.value('updatedDate[1]', 'datetime'), Tbl.Col.value('createdDate[1]', 'datetime'))) ud
+							FROM @xx2.nodes('/sqroot/replicationCode/modlcolminfo/item') Tbl(Col)
+							) y on x.ColumnInfoGUID=y.ColumnInfoGUID
+					where x.ud - isnull(y.ud, gen.datetoint('1/1/2000'))<>0
+					for xml path('item'), root('modlcolminfo'), type)
+				for xml path('replicationCode'), root('sqroot')
+			)
+
+			set @url=@paddress+'?mode=sendcodeprop&code='+@id+'&token='+cast(@token as nvarchar(50))
+			set @poststring='dataXML='+replace(replace(replace(cast(@yy as nvarchar(max)), '<', '%26lt;'), '>', '%26gt;'), '&', '%26')
+			if charindex('modlcolminfo', @poststring)>1 begin
+				if @isdebug=0 begin
+					print @url
+					set @poststring='dataXML='+replace(replace(replace(cast(@yy as nvarchar(max)), '<', '%26lt;'), '>', '%26gt;'), '&', '%26')
+					print @poststring
+					exec gen.gethttp @url, @g output, @method='POST', @poststring=@poststring
+	
+					select @x=httptext 
+					from http where httpguid=@g
+
+					set @yy=replace(@x, '<?xml version="1.0" encoding="utf-8"?>', '')
+				end else begin
+					exec api.sync_sendcodeprop @paccountid, @token, @id, @yy
+				end
+			end
+
+
+			--modlinfo
+			set @yy=(
+				select (
+					select x.ModuleInfoGUID, x.ModuleGUID, x.InfoKey, x.InfoValue, 
+						x.createdDate, x.updatedDate
+					from (
+						SELECT Tbl.Col.value('ModuleInfoGUID[1]', 'uniqueidentifier') ModuleInfoGUID, 
+							Tbl.Col.value('ModuleGUID[1]', 'uniqueidentifier') ModuleGUID,
+							Tbl.Col.value('InfoKey[1]', 'nvarchar(50)') InfoKey,
+							Tbl.Col.value('InfoValue[1]', 'nvarchar(max)') InfoValue,
+							Tbl.Col.value('createdDate[1]', 'datetime') createdDate,
+							Tbl.Col.value('updatedDate[1]', 'datetime') updatedDate,
+							gen.datetoint(isnull(Tbl.Col.value('updatedDate[1]', 'datetime'), Tbl.Col.value('createdDate[1]', 'datetime'))) ud
+						FROM @xx.nodes('/sqroot/replicationCode/modlinfo/item') Tbl(Col)
+						) x 
+						left join (
+							SELECT Tbl.Col.value('ModuleInfoGUID[1]', 'uniqueidentifier') ModuleInfoGUID, 
+								Tbl.Col.value('ModuleGUID[1]', 'uniqueidentifier') ModuleGUID,
+								Tbl.Col.value('InfoKey[1]', 'nvarchar(50)') InfoKey,
+								Tbl.Col.value('InfoValue[1]', 'nvarchar(max)') InfoValue,
+								gen.datetoint(isnull(Tbl.Col.value('updatedDate[1]', 'datetime'), Tbl.Col.value('createdDate[1]', 'datetime'))) ud
+							FROM @xx2.nodes('/sqroot/replicationCode/modlinfo/item') Tbl(Col)
+							) y on x.ModuleInfoGUID=y.ModuleInfoGUID
+					where x.ud - isnull(y.ud, gen.datetoint('1/1/2000'))<>0
+					for xml path('item'), root('modlinfo'), type)
+				for xml path('replicationCode'), root('sqroot')
+			)
+
+			set @url=@paddress+'?mode=sendcodeprop&code='+@id+'&token='+cast(@token as nvarchar(50))
+			set @poststring='dataXML='+replace(replace(replace(cast(@yy as nvarchar(max)), '<', '%26lt;'), '>', '%26gt;'), '&', '%26')
+			if charindex('modlinfo', @poststring)>1 begin
+				if @isdebug=0 begin
+					print @url
+					set @poststring='dataXML='+replace(replace(replace(cast(@yy as nvarchar(max)), '<', '%26lt;'), '>', '%26gt;'), '&', '%26')
+					print @poststring
+					exec gen.gethttp @url, @g output, @method='POST', @poststring=@poststring
+	
+					select @x=httptext 
+					from http where httpguid=@g
+
+					set @yy=replace(@x, '<?xml version="1.0" encoding="utf-8"?>', '')
+				end else begin
+					exec api.sync_sendcodeprop @paccountid, @token, @id, @yy
+				end
+			end
+*/
+		END
+		FETCH NEXT FROM #curf INTO @id
+	END
+
+	CLOSE #curf
+	DEALLOCATE #curf
+
+
+
+

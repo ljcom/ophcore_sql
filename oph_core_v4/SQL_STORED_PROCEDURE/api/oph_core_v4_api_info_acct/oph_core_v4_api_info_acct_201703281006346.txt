@@ -1,0 +1,12 @@
+create procedure api.info_acct @hostGUID uniqueidentifier, @key varchar(100)
+as
+	select infovalue 
+	from acctinfo a 
+		inner join acct b 
+			on a.accountguid=b.accountguid 
+		inner join [user] d 
+			on d.accountguid = b.AccountGUID 
+		inner join userhost c 
+			on c.UserGUID = d.userguid 
+	where infokey=@key and c.hostguid=@hostGUID
+

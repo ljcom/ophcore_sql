@@ -1,0 +1,53 @@
+CREATE procedure core.getOrphanList
+as
+	declare @sqlstr nvarchar(max)
+	set @sqlstr='	select * into #viewlist
+	from ('+replace(stuff((
+	select '	union select o.name, o.type from '+DatabaseName+'.sys.objects o inner join EF_STRD.sys.schemas s on o.schema_id=s.schema_id where type in(''V'', ''P'') and s.name=''dbo''
+	'
+	from acct a inner join acctdbse d on a.AccountGUID=d.AccountGUID
+	where accountid='eform' and migrateDB is not null
+	for xml path('')),1,7,''),'&#x0D;', '')+') x'+
+	'	
+
+	select * into #scriptlist
+	from ('+
+	replace(stuff((
+	select '	union
+		select o.name, (
+			select text+''''
+			from EF_PROJ.sys.syscomments 
+			where id=o.object_id
+			for xml path('''')) script
+		from EF_PROJ.sys.objects o 
+		where type in (''P'', ''V'', ''FN'', ''FT'')
+	'
+	from acct a inner join acctdbse d on a.AccountGUID=d.AccountGUID
+	where accountid='eform' and migrateDB is not null
+	for xml path('')),1,6,''),'&#x0D;', '')+') x
+	
+	select a.name, a.type, b.script, b.name parentName
+	into #childList
+	from #viewlist a
+		inner join #scriptlist b
+			on charindex(a.name, b.script)>0
+	where a.name<>b.name
+
+	select a.name orphanName, type
+	from #viewlist a
+		left join (
+			select name from #childList
+			group by name) b
+			on a.name=b.name
+	where b.name is null
+	
+	select name usedName, type 
+	from #childList
+	'
+
+
+	print @sqlstr
+
+	exec sp_executesql @sqlstr
+
+

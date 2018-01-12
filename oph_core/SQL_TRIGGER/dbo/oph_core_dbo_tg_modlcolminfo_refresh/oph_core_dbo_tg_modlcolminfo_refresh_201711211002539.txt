@@ -1,0 +1,39 @@
+
+
+CREATE TRIGGER [dbo].[tg_modlcolminfo_refresh]
+   ON  [dbo].[modlcolminfo]
+   AFTER INSERT, UPDATE
+AS 
+BEGIN
+	-- SET NOCOUNT ON added to prevent extra result sets from
+	-- interfering with SELECT statements.
+	SET NOCOUNT ON;
+	declare @sqlstr nvarchar(max)
+	declare @columnGUID uniqueidentifier, @infokey nvarchar(50)
+
+	select @columnGUID=ColumnGUID, @infokey=InfoKey 
+	from inserted
+
+	if exists(
+		select * 
+		from inserted i
+			left join deleted d on i.ColumnInfoGUID=d.ColumnInfoGUID
+		where isnull(i.InfoValue, '')<>isnull(d.InfoValue, '')) begin
+
+		if @infokey='isBrowsable' or @infokey='isViewable' or @infokey='colType' or @infokey='pageNo'  or @infokey='sectionNo'  or @infokey='rowNo'  
+			or @infokey='colNo'  or @infokey='fieldNo' or @infokey='primaryCol'   
+		begin
+			set @sqlstr=replace((
+				select '
+					exec gen.modlcolminfo_refresh '''+cast(i.ColumnGUID as nvarchar(50))+'''' 
+				from inserted i
+					left join deleted d on i.ColumnInfoGUID=d.ColumnInfoGUID
+				where isnull(i.InfoValue, '')<>isnull(d.InfoValue, '')
+				for xml path('')), '&'+'#x0D;', '')
+			print @sqlstr
+
+			exec sp_executesql @sqlstr
+
+		END
+	end
+end

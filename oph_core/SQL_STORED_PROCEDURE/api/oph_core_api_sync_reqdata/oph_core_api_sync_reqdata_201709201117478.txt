@@ -1,0 +1,72 @@
+
+
+CREATE procedure [api].[sync_reqdata] @accountid nvarchar(50), @token uniqueidentifier, @code nvarchar(50), @guid nvarchar(max), @r xml=null output, @issilent bit=0
+as
+	
+	declare @dataDB nvarchar(50), @settingmode int, @fieldkey nvarchar(50)
+	select @datadb=databasename 
+	from oph_core.dbo.acctdbse d	
+		inner join oph_core.dbo.acct a on a.AccountGUID=d.AccountGUID
+	where accountid=@accountid and isMaster=1 and [version]='4.0'
+
+	declare @sqlstr nvarchar(max)='
+		select @settingmode=settingmode
+		from '+@datadb+'.dbo.modl m
+		where moduleid='''+@code+''''
+
+	exec sp_executesql @sqlstr, N'@settingmode int output', @settingmode output
+
+	set @sqlstr='
+		set @fieldKey=''''
+
+		select @fieldkey=iif(m.settingmode=0, c.colkey, ''docGUID'')
+		from '+@datadb+'.dbo.modl m
+			inner join '+@datadb+'.dbo.modlcolm c on m.moduleguid=c.moduleguid
+			inner join '+@datadb+'.dbo.modlcolminfo i on c.columnguid=i.columnguid and i.infokey=''primaryCol'' and i.infovalue=''1''
+		where moduleid='''+@code+'''
+
+		select @fieldkey=iif(isnull(@fieldkey, '''')<>'''', @fieldkey, iif(charindex(''APRV'', '''+@code+''')>0, ''docAprvGUID'', ''docGUID''))
+
+		--167,173,175,231,239
+		select @fieldList=stuff((select '', ''+iif(c.coltype in (167,173,175,231,239), ''gen.validXMLString([''+c.colkey+''])'', ''[''+c.colKey+'']'')+'' [''+replace(c.colkey, '' '', '''')+'']''
+		from '+@datadb+'.dbo.modl m
+			inner join '+@datadb+'.dbo.modlcolm c
+				on m.moduleguid=c.moduleguid
+		where m.moduleid='''+@code+''''+'
+			'+iif(@settingmode in (1,3,4),
+			'and c.colkey not in (''updatedDate'', ''createdDate'', ''docGUID'', ''parentdocGUID'', 
+				''AccountGUID'', ''ModuleGUID'', ''Status'', ''StatusComment'', 
+				''CreatedUser'', ''updatedUser'', ''isClosed'', ''closedDate'', ''closedUser'', ''isDeleted'', ''deletedDate'', ''deletedUser'', ''oldId'')', '')+'
+		for xml path('''')), 1, 2, '''')
+		'	
+	declare @fieldList nvarchar(max) 
+	exec sp_executesql @sqlstr, N'@fieldList nvarchar(max) output, @settingmode int output, @fieldkey nvarchar(50) output', @fieldList output, @settingmode output, @fieldkey output
+
+	--print @sqlstr
+	--print @fieldList
+	if @settingmode=1 or @settingmode=3 or @settingmode=4 
+		set @fieldList='docGUID, parentdocGUID, AccountGUID, ModuleGUID, '+@fieldList+', Status, StatusComment, createdDate, CreatedUser, updatedDate, updatedUser, isClosed, 
+			closedDate, closedUser, isDeleted, deletedDate, deletedUser, oldId'
+
+	set @sqlstr ='
+		set @r=(
+			
+			select 
+				(
+				select '+@fieldList+'
+				from '+@datadb+'.'+iif(@settingmode=0, 'dbo', 'doc')+'.['+@code+'] m
+				where '+@fieldkey+' in('''+replace(@guid, '*', ''', ''')+''')
+				order by isnull(updatedDate, createdDate)
+				for xml path(''item''), type--, binary base64
+				) data
+				
+			for xml path(''replication''), root(''sqroot''))
+		'
+	--print @sqlstr
+	exec sp_executesql @sqlstr, N'@r xml output', @r output
+
+	if @issilent=0 select @r
+		
+
+
+

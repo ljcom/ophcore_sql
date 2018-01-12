@@ -1,0 +1,120 @@
+
+
+
+CREATE procedure [gen].[procfields_browse_block] 
+			@tableName nvarchar(50), @browsestr varchar(max) OUTPUT, 
+			@wherestr varchar(max) OUTPUT--, @liststr varchar(8000) OUTPUT
+as
+--b 20120420
+
+	declare @colName nvarchar(50), @colOrder int, @isbrowsable bit, @comboType int, @comboFieldName nvarchar(50), 
+		@comboFieldNameEx1 nvarchar(50), @comboFieldNameEx2 nvarchar(50), @comboFieldId nvarchar(50), @viewPageNo int,
+		@colTitle nvarchar(50), @colWidth int, @colWidthText nvarchar(5), @colAlign tinyint, @searchable int
+	declare @viewable bit
+	declare @otablename varchar(20), @primaryCol  varchar(100)
+	set @otablename=left(@tablename,1)+'o'+substring(@tablename, 3, len(@tablename)-2)
+
+	select @primarycol=b.colname 
+	from gen.coTABL a inner join gen.coTABLFIEL b on a.TableGUID=b.tableGUID 
+	where colorder=10 and a.TableName=@tablename
+
+	set @browsestr = ''
+	--set @liststr = ''
+	set @wherestr = ''
+		
+	DECLARE curD CURSOR
+		FOR 	
+		select c.ColName, c.colorder,  
+			isBrowsable, comboType, ComboFieldName, ComboFieldNameEx1, ComboFieldNameEx2, ComboFieldId, 
+			case when len(isnull(TitleShort, ''))&gt;0 then TitleShort when len(isnull(TitleCaption, ''))&gt;0 then TitleCaption else ColName end, 
+			case when BrowseColWidth &lt; 50 then BrowseColWidth else 50 end, BrowsecolAlign, 
+			case when c.xtype=167 and BrowseColWidth=0 then 2 when c.xtype in (175, 239, 231, 167, 56, 60) then 1 else 0 end Searchable, isViewable, viewPageNo
+		from gen.cotabl b
+			--	on sysobjects.name=b.tablename
+			inner join gen.cotablfiel c
+				--on c.colname = syscolumns.name
+				on c.tableguid = b.tableguid
+		where b.TableName = @TableName and (isBrowsable &gt;0 or viewPageno=9)	--and viewpageno&lt;&gt;0
+		order by isnull(browseOrder, 99)--, colorder	--sysobjects.name, syscolumns.name, syscolumns.colOrder, systypes.name 
+
+	OPEN curD
+	FETCH NEXT FROM curD
+	into @colName, @colOrder, @isBrowsable, @comboType, @comboFieldName, @comboFieldNameEx1, @comboFieldNameEx2, @comboFieldId, @colTitle, @colWidth, @colAlign, @searchable, @viewable, @viewPageNo
+	
+	WHILE @@FETCH_STATUS = 0
+	BEGIN	
+		if @colOrder &gt; 1 and @colname not in ('userGUID')
+		begin
+
+			set @colWidthText = convert(nvarchar(1), @colAlign) + right('0000' + convert(nvarchar(4), @colWidth),4)
+			if @searchable = 2 and (@isbrowsable &gt;= 1)
+			begin
+				set @wherestr = @wherestr + 'or ('+@tableName+'.'+@primarycol+' in (select '+@primarycol+' from '+@otablename+' where contains(' + @colname + ', @searchText1))) '+char(13)+char(10)
+				print @wherestr
+			end
+			if @isBrowsable &gt;= 1 or @viewpageno=9
+			begin
+				set @browsestr = @browsestr + dbo.IgnoreDuplicate(@browsestr, ', ' + @colName+' ') --	+ ' [' + @colName + '@' + @colTitle + @colWidthText + ']'
+			end
+			if @searchable = 1 and (@isbrowsable &gt;= 1)
+			begin
+				set @wherestr = @wherestr + 'or isnull(cast(' + @colname + ' as varchar(max)),'''''''') like ''''%'''' + case when  isnull(convert(nvarchar(100),@searchText),'''''''')&lt;&gt;'''''''' then  isnull(convert(nvarchar(100),@searchText),'''''''') else isnull(cast(' + @colname + ' as varchar(max)),'''''''') end + ''''%'''' '+char(13)+char(10)
+			end
+			if (@comboType=2 or @comboType=11) and (@isbrowsable &gt;= 1 or @viewPageNo=9) begin
+				set @browsestr = @browsestr +  dbo.IgnoreDuplicate(@browsestr, ', ' +@colName+'parId'+' ') -- + ' [' + @comboFieldName + '@' + @comboFieldName + @colWidthText + ']'
+				--set @liststr = @liststr +  dbo.IgnoreDuplicate(@liststr, ', ' +@colName+'parId'+' ') -- + ' [' + @comboFieldName + '@' + @comboFieldName + @colWidthText + ']'
+
+				set @browsestr = @browsestr +  dbo.IgnoreDuplicate(@browsestr, ', ' +@colName+'parVal'+' ')
+				--set @liststr = @liststr +  dbo.IgnoreDuplicate(@liststr, ', ' +@colName+'parVal'+' ')
+
+				set @wherestr = @wherestr + 'or isnull(cast(' + @colName+'parId' + ' as varchar(max)),'''''''') like ''''%'''' + case when  isnull(convert(nvarchar(100),@searchText),'''''''')&lt;&gt;'''''''' then  isnull(convert(nvarchar(100),@searchText),'''''''') else isnull(cast(' + @colName+'parId' + ' as varchar(max)),'''''''') end + ''''%'''' ' 
+				set @wherestr = @wherestr + 'or isnull(cast(' + @colName+'parVal' + ' as varchar(max)),'''''''') like ''''%'''' + case when isnull(convert(nvarchar(100),@searchText),'''''''')&lt;&gt;'''''''' then isnull(convert(nvarchar(100),@searchText),'''''''') else isnull(cast(' + @colName+'parVal' + ' as varchar(max)),'''''''') end + ''''%'''' ' 
+			end	
+			else if @comboType in (10,12) and (@isbrowsable &gt;= 1 or @viewPageNo=9) begin
+				set @browsestr = @browsestr +  dbo.IgnoreDuplicate(@browsestr, ', ' +@colName+'cbId'+' ') -- + ' [' + @comboFieldName + '@' + @comboFieldName + @colWidthText + ']'
+				--set @liststr = @liststr +  dbo.IgnoreDuplicate(@liststr, ', ' +@colName+'parId'+' ') -- + ' [' + @comboFieldName + '@' + @comboFieldName + @colWidthText + ']'
+
+				set @browsestr = @browsestr +  dbo.IgnoreDuplicate(@browsestr, ', ' +@colName+'cbNm'+' ')
+				--set @liststr = @liststr +  dbo.IgnoreDuplicate(@liststr, ', ' +@colName+'parVal'+' ')
+
+				set @wherestr = @wherestr + 'or isnull(cast(' +@tablename+'.'+ @colName+'cbId' + ' as varchar(max)),'''''''') like ''''%'''' + case when  isnull(convert(nvarchar(100),@searchText),'''''''')&lt;&gt;'''''''' then  isnull(convert(nvarchar(100),@searchText),'''''''') else isnull(cast(' +@tablename+'.'+ @colName+'cbId' + ' as varchar(max)),'''''''') end + ''''%'''' ' 
+				set @wherestr = @wherestr + 'or isnull(cast(' +@tablename+'.'+ @colName+'cbNm' + ' as varchar(max)),'''''''') like ''''%'''' + case when isnull(convert(nvarchar(100),@searchText),'''''''')&lt;&gt;'''''''' then isnull(convert(nvarchar(100),@searchText),'''''''') else isnull(cast(' +@tablename+'.'+ @colName+'cbNm' + ' as varchar(max)),'''''''') end + ''''%'''' ' 
+			
+				--set @wherestr = @wherestr + 'or isnull('+ @colName+'cbId' + ','''''''') like ''''%'''' + case when  isnull(convert(nvarchar(100),@searchText),'''''''')&lt;&gt;'''''''' then  isnull(convert(nvarchar(100),@searchText),'''''''') else isnull(' + @colName+'cbId' + ','''''''') end + ''''%'''' ' 
+				--set @wherestr = @wherestr + 'or isnull('+ @colName+'cbNm' + ','''''''') like ''''%'''' + case when isnull(convert(nvarchar(100),@searchText),'''''''')&lt;&gt;'''''''' then isnull(convert(nvarchar(100),@searchText),'''''''') else isnull('+ @colName+'cbNm' + ','''''''') end + ''''%'''' ' 
+			end
+			else if @comboType &gt; 0  
+				and @comboType&lt;&gt;2 and left(@comboType,1)&lt;&gt;'4' and @comboType&lt;&gt;5 and @isbrowsable &gt;= 1
+			begin
+				set @browsestr = @browsestr +  dbo.IgnoreDuplicate(@browsestr, ', ' +@comboFieldId+' ') -- + ' [' + @comboFieldName + '@' + @comboFieldName + @colWidthText + ']'
+				--set @liststr = @liststr +  dbo.IgnoreDuplicate(@liststr, ', ' +@comboFieldId+' ') -- + ' [' + @comboFieldName + '@' + @comboFieldName + @colWidthText + ']'
+
+				if len(@comboFieldName) &gt; 0 set @browsestr = @browsestr +  dbo.IgnoreDuplicate(@browsestr, ', ' +@comboFieldName+' ')
+				--if len(@comboFieldName) &gt; 0 set @liststr = @liststr +  dbo.IgnoreDuplicate(@liststr, ', ' +@comboFieldName+' ')
+
+				set @wherestr = @wherestr + 'or isnull(cast(' + @comboFieldId + ' as varchar(max)),'''') like ''''%'''' + case when  isnull(convert(nvarchar(100),@searchText),'''''''')&lt;&gt;'''''''' then  isnull(convert(nvarchar(100),@searchText),'''''''') else isnull(cast(' + @comboFieldId + ' as varchar(max)),'''') end + ''''%'''' ' 
+				if @comboFieldName &lt;&gt; '' begin
+					set @wherestr = @wherestr + 'or isnull(cast(' + @comboFieldName + ' as varchar(max)),'''') like ''''%'''' + case when isnull(convert(nvarchar(100),@searchText),'''''''')&lt;&gt;'''''''' then isnull(convert(nvarchar(100),@searchText),'''''''') else isnull(cast(' + @comboFieldName + ' as varchar(max)),'''') end + ''''%'''' ' 
+				end
+			end	
+		end
+		
+		FETCH NEXT FROM curD
+		into @colName, @colOrder, @isBrowsable, @comboType, @comboFieldName, @comboFieldNameEx1, @comboFieldNameEx2, @comboFieldId, @colTitle, @colWidth, @colAlign, @searchable, @viewable, @viewPageNo
+
+	end
+
+	CLOSE curD
+	DEALLOCATE curD
+	
+
+	if len(@browsestr)&gt;2 set @browsestr = substring(@browsestr, 3, len(@browsestr) - 2)
+	--if len(@liststr)&gt;2 set @liststr = substring(@liststr, 3, len(@liststr) - 2)	
+	if len(@wherestr)&gt;3 set @wherestr = substring(@wherestr, 4, len(@wherestr) - 3)
+	if len(@wherestr)&gt;0 set @wherestr = '(' + @wherestr + ')'
+
+
+
+
+
+

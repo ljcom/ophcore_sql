@@ -1,0 +1,13 @@
+
+CREATE procedure [gen].[dropSynonyms]
+as
+	select 'drop view dbo.'+b.name 
+	from sys.syscomments a
+		inner join sys.sysobjects b
+			on a.id=b.id
+	where a.text like '%syn_%'
+		and b.type='V'
+
+
+
+

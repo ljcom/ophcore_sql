@@ -1,0 +1,24 @@
+CREATE procedure [api].[theme_talk] @hostGUID uniqueidentifier, @docGUID uniqueidentifier, @xmlTalk xml output, @isdebug bit=0
+as
+	declare @userGUID uniqueidentifier
+	select @userguid=userguid from userhost where hostguid=@hostGUID
+
+	set @xmltalk=(
+		select comment '@comment', talkDate '@talkDate', 
+			case  
+				when  CAST(DATEDIFF(HOUR, talkDate, getdate()) AS NVARCHAR(50)) < 1 then CAST(DATEDIFF(MINUTE, talkDate, getdate()) AS NVARCHAR(50)) + ' minute ago'
+				when  CAST(DATEDIFF(HOUR, talkDate, getdate()) AS NVARCHAR(50)) between 1 and 23 then CAST(DATEDIFF(HOUR, talkDate, getdate()) AS NVARCHAR(50)) + ' hour ago'
+				when  CAST(DATEDIFF(HOUR, talkDate, getdate()) AS NVARCHAR(50)) between 23 and 168 then CAST(DATEDIFF(DAY, talkDate, getdate()) AS NVARCHAR(50)) + ' days ago'
+				when  CAST(DATEDIFF(HOUR, talkDate, getdate()) AS NVARCHAR(50)) > 168 then convert(nvarchar(11),talkDate,13) end '@talkDateCaption',
+			talkUser '@talkUser', userProfile '@talkUserProfile', iif(@userguid=userguid, 1, null) '@itsMe'
+		from (
+			select top 100 comment, a.createdDate talkDate, username talkUser, userprofilepath userProfile, userguid
+			from docmtalk a
+				inner join [user] b
+					on a.talkuser=b.userguid
+			where docguid=@docguid
+			order by a.createddate desc) x
+		order by talkDate
+		for xml path('talk'), root('talks'))
+
+

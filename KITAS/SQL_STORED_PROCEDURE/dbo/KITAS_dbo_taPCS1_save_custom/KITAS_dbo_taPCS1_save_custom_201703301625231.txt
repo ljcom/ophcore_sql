@@ -1,0 +1,30 @@
+
+
+CREATE procedure [dbo].[taPCS1_save_custom]
+	@GUID uniqueidentifier , @hostGUID uniqueidentifier, @savexml xml
+as
+
+	--additional script for save_custom --
+	declare @savelist api.fieldlist1
+
+	insert into @saveList
+	exec api.convertXML2FieldList 'TaPCS1', @savexml
+
+	-- end additional script for save_custom --	
+	declare @hosGUIDkitas  uniqueidentifier, @GUIDkitas uniqueidentifier
+
+	set @GUIDkitas = (select fieldvalue from @savelist where fieldId ='PCSOGUID')
+	select @hosGUIDkitas = hostGUID from kitas.dbo.couserhost where userGUID  = (select createduser from kitas.dbo.topcso where pcsoGUID = @GUIDkitas)
+
+	declare @totalBuy money
+	select @totalbuy = totalsales  from kitas.dbo.ToPCSO where PCSOGUID = @GUIDkitas
+
+	if @totalBuy &lt; 200000 begin 
+		select 'Minimum Transaction is Rp. 200,000'
+	end
+	else begin
+		exec [kitas].[oph].[TaPCSOAPRV_setuser] @GUIDkitas,@hosGUIDkitas
+		exec [kitas].[dbo].[TaPCSO_execute_custom] @GUIDkitas,@hosGUIDkitas
+	end
+	 --exec api.[save] '13953328-E607-4538-A86F-6D5EF23A4413', 'PCSO', null, '&lt;sqroot&gt;&lt;field id="PCSOGUID"&gt;&lt;value&gt;DDB6D33E-73FA-41BE-B6DC-7CEE1913096C&lt;/value&gt;&lt;/field&gt;&lt;/sqroot&gt;'
+

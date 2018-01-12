@@ -1,0 +1,21 @@
+
+
+CREATE procedure [gen].[resetStatus]
+as
+
+	insert into CoMODLSTAT (ModuleStatusGUID, ModuleStatusID, ModuleStatusCode, ModuleStatusDesc, ModuleStatusName, ModuleGUID, 
+		FlagStatus, isDefault, isCustom, aModuleGUID)
+	select newid(), parvalueid, ParValueNumber, ParReference, ParValueDesc, x.ModuleGUID,
+		'isDefault', 0, 0, null
+	from (	select moduleid, ModuleGUID, poSTAT.ParValueId, poSTAT.ParValueNumber, poSTAT.ParReference, poSTAT.ParValueDesc 
+			from coMODL, poSTAT) x
+		left join CoMODLSTAT y
+			on x.ModuleGUID=y.ModuleGUID 
+			and x.ParValueId=y.ModuleStatusID
+	where len(moduleid)=6 and left(moduleid,1)='t'
+		and y.ModuleGUID is null
+	--order by moduleid
+
+
+
+

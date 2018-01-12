@@ -1,0 +1,270 @@
+
+
+CREATE procedure [gen].[createTable] @dataDB nvarchar(50), @v4DB nvarchar(50)=null, @svr nvarchar(50)=null, @code nvarchar(50), 
+	@isdelTable bit=0, @skipView bit=0, @isdebug bit=0
+as
+	declare @moduleGUID uniqueidentifier, @settingmode int
+
+	select @moduleguid=moduleguid, @settingmode=settingMode
+	from modl where moduleid=@code
+
+	declare @sqlstr nvarchar(max)
+
+	--create schema doc
+	set @sqlstr='
+		if not exists(select * from '+@v4DB+N'.sys.schemas where name=''doc'') 
+			exec '+@v4DB+N'.dbo.sp_executesql N''create schema doc'''
+	
+	if @isdebug=1 print @sqlstr
+	exec sp_executesql @sqlstr
+
+	set @sqlstr=N'
+		use '+@v4db+N'
+		if not exists(select * from sys.objects where name=''evnt'') begin
+			CREATE TABLE [dbo].[evnt](
+				[EventGUID] [uniqueidentifier] NOT NULL,
+				[AccountGUID] [uniqueidentifier] NULL,
+				[moduleGUID] [uniqueidentifier] NULL,
+				[DocGUID] [uniqueidentifier] NULL,
+				[timeRecord] [int] NOT NULL,
+				[Comment] [nvarchar](max) NULL,
+				[CreatedDate] [datetime] NULL,
+				[CreatedUser] [uniqueidentifier] NULL,
+				CONSTRAINT [PK_EVNT] PRIMARY KEY CLUSTERED 
+			(
+				[EventGUID] ASC
+			)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+			) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+					
+			ALTER TABLE [dbo].[evnt] ADD  CONSTRAINT [DF_evnt_EventGUID]  DEFAULT (newid()) FOR [EventGUID]
+			ALTER TABLE [dbo].[evnt] ADD  CONSTRAINT [DF_evnt_timeRecord]  DEFAULT ((0)) FOR [timeRecord]
+			ALTER TABLE [dbo].[evnt] ADD  CONSTRAINT [DF_evnt_CreatedDate]  DEFAULT (getdate()) FOR [CreatedDate]
+		end
+		'
+	if @isdebug=1 print @sqlstr
+	exec sp_executesql @sqlstr
+
+	set @sqlstr=N'
+		use '+@v4db+N'
+		'+iif(@isdeltable=1, N'
+		if exists(select * from sys.objects where name='''+@code+N''') 
+			drop table doc.['+@code+N'] 	', '')+N'
+										
+		if not exists(select * from sys.objects where name='''+@code+N''') begin
+			create table doc.['+@code+N'] ([DocGUID] [uniqueidentifier] NOT NULL,
+			[AccountGUID] [uniqueidentifier] NULL, [ModuleGUID] [uniqueidentifier] NULL, 
+			[Status] [int] NOT NULL, [StatusComment] [nvarchar](500) NULL, 
+			[CreatedDate] [datetime] NOT NULL, [CreatedUser] [uniqueidentifier] NULL,
+			[updatedDate] [datetime] NULL, [updatedUser] [uniqueidentifier] NULL, 
+			[isClosed] [bit] NOT NULL, [closedDate] [datetime] NULL, [closedUser] [uniqueidentifier] NULL, 
+			[isDeleted] [bit] NOT NULL, [deletedDate] [datetime] NULL, [deletedUser] [uniqueidentifier] NULL, 
+			[parentDocGUID] [uniqueidentifier] NULL, [oldId] [nvarchar](50) NULL, 
+			CONSTRAINT [PK_'+@code+N'] PRIMARY KEY CLUSTERED 
+			(
+				[DocGUID] ASC
+			)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+			) ON [PRIMARY]
+
+			ALTER TABLE [doc].['+@code+N'] ADD  CONSTRAINT [DF_'+@code+N'_DocGUID]  DEFAULT (newid()) FOR [DocGUID]
+			ALTER TABLE [doc].['+@code+N'] ADD  CONSTRAINT [DF_'+@code+N'_Status]  DEFAULT ((0)) FOR [Status]
+			ALTER TABLE [doc].['+@code+N'] ADD  CONSTRAINT [DF_'+@code+N'_isClosed]  DEFAULT ((0)) FOR [isClosed]
+			ALTER TABLE [doc].['+@code+N'] ADD  CONSTRAINT [DF_'+@code+N'_isDeleted]  DEFAULT ((0)) FOR [isDeleted]
+			ALTER TABLE [doc].['+@code+N'] ADD  CONSTRAINT [DF_'+@code+N'_CreatedDate]  DEFAULT (getdate()) FOR [CreatedDate]
+		end
+		'
+		set @sqlstr=@sqlstr+N'
+		else begin
+			if not exists(select * from sys.objects o inner join sys.columns c on o.object_id=c.object_id where o.name='''+@code+N''' and c.name=''Status'') alter table doc.'+@code+N' add [StatusComment] nvarchar(500) NULL
+			if not exists(select * from sys.objects o inner join sys.columns c on o.object_id=c.object_id where o.name='''+@code+N''' and c.name=''CreatedUser'') alter table doc.'+@code+N' add [CreatedUser] uniqueidentifier NULL
+			if not exists(select * from sys.objects o inner join sys.columns c on o.object_id=c.object_id where o.name='''+@code+N''' and c.name=''updatedUser'') alter table doc.'+@code+N' add [updatedUser] uniqueidentifier NULL
+			if not exists(select * from sys.objects o inner join sys.columns c on o.object_id=c.object_id where o.name='''+@code+N''' and c.name=''isClosed'') alter table doc.'+@code+N' add [isClosed] bit NOT NULL
+			if not exists(select * from sys.objects o inner join sys.columns c on o.object_id=c.object_id where o.name='''+@code+N''' and c.name=''closedDate'') alter table doc.'+@code+N' add [closedDate] datetime NULL
+			if not exists(select * from sys.objects o inner join sys.columns c on o.object_id=c.object_id where o.name='''+@code+N''' and c.name=''closedUser'') alter table doc.'+@code+N' add [closedUser] uniqueidentifier NULL
+			if not exists(select * from sys.objects o inner join sys.columns c on o.object_id=c.object_id where o.name='''+@code+N''' and c.name=''deletedDate'') alter table doc.'+@code+N' add [deletedDate] datetime NULL
+			if not exists(select * from sys.objects o inner join sys.columns c on o.object_id=c.object_id where o.name='''+@code+N''' and c.name=''deletedUser'') alter table doc.'+@code+N' add [deletedUser] uniqueidentifier NULL
+			if not exists(select * from sys.objects o inner join sys.columns c on o.object_id=c.object_id where o.name='''+@code+N''' and c.name=''parentDocGUID'') alter table doc.'+@code+N' add [parentDocGUID] uniqueidentifier NULL
+			if not exists(select * from sys.objects o inner join sys.columns c on o.object_id=c.object_id where o.name='''+@code+N''' and c.name=''oldId'') alter table doc.'+@code+N' add [oldId] nvarchar(50) NULL
+		end		'
+
+		if @isdebug=1 print @sqlstr
+		exec sp_executesql @sqlstr
+
+		
+		if @settingmode=4 begin
+			set @sqlstr='
+			if not exists(select * from sys.objects where name='''+@code+N'APRV'') begin
+				CREATE TABLE [doc].['+@code+N'APRV](
+					[DocAprvGUID] [uniqueidentifier] NOT NULL,
+					[DocGUID] [uniqueidentifier] NULL,
+					[AprvUserGUID] [uniqueidentifier] NULL,
+					[AprvLevel] [int] NOT NULL,
+					[Status] [int] NOT NULL,
+					[DelegateUserGUID] [uniqueidentifier] NULL,
+					[UGroupGUID] [uniqueidentifier] NULL,
+					[AprvDate] [datetime] NOT NULL,
+					[Reason] [nvarchar](500) NULL,
+					[createdDate] [datetime] NOT NULL,
+					[updatedDate] [datetime] NULL,
+					CONSTRAINT [PK_'+@code+N'APRV] PRIMARY KEY CLUSTERED 
+				(
+					[DocAprvGUID] ASC
+				)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+				) ON [PRIMARY]
+
+				ALTER TABLE [dbo].['+@code+N'APRV] ADD  CONSTRAINT [DF_'+@code+N'APRV_DocAprvGUID]  DEFAULT (newid()) FOR [DocAprvGUID]
+				ALTER TABLE [dbo].['+@code+N'APRV] ADD  CONSTRAINT [DF_'+@code+N'APRV_DocAprvGUID]  DEFAULT ((0)) FOR [Status]
+				ALTER TABLE [dbo].['+@code+N'APRV] ADD  CONSTRAINT [DF_'+@code+N'APRV_DocAprvGUID]  DEFAULT (getdate()) FOR [AprvDate]
+				ALTER TABLE [dbo].['+@code+N'APRV] ADD  CONSTRAINT [DF_'+@code+N'APRV_DocAprvGUID]  DEFAULT (getdate()) FOR [createdDate]			
+			end		'
+
+		if @isdebug=1 print @sqlstr
+		--exec sp_executesql @sqlstr
+		exec gen.onetimejob @sqlstr, @v4DB
+
+	end
+
+	set @sqlstr='
+		declare @content nvarchar(max)=''
+				SET NOCOUNT ON;
+	
+				exec '+@dataDB+'.[gen].[timestamp_updatedDate] '''''+@code+N'''''
+
+				declare @c nvarchar(max)
+				set @c=(
+					select * 
+					FROM deleted
+					for xml path('''''+@code+N''''')
+				)
+				INSERT INTO evnt (EventGUID, AccountGUID, moduleGUID, DocGUID, timeRecord, Comment, CreatedDate, CreatedUser)
+				select newid(), null, '''''+cast(@moduleguid as nvarchar(50))+N''''', null, 0, @c, getdate(), null
+			''
+
+		declare @tgName nvarchar(50)=''tg_'+@code+N'_del''
+		declare @code nvarchar(50)='''+@code+N'''
+		declare @r nvarchar(max)
+		exec '+@dataDB+N'.gen.createTrigger @tgName, @code, 0,0,1, @content, ''doc'', 0, '''+@v4DB+N''', @r output
+		--print @r
+			'
+
+	if @isdebug=1 print @sqlstr
+	declare @xstr nvarchar(max)='
+		use '+@v4db+N'
+		if not exists(select * from sys.objects where name=''tg_'+@code+N'_del'') exec sp_executesql @sqlstr
+	'
+
+	exec sp_executesql @xstr, N'@sqlstr nvarchar(max)', @sqlstr
+
+	set @sqlstr='
+		declare @content nvarchar(max)=''
+				set nocount on
+
+				declare @guid nvarchar(max)=(
+				select cast(docGUID as nvarchar(50))+''''*''''
+				from inserted
+				for xml path(''''''''))
+
+				update x
+				set updatedDate=getdate()
+				--select * 
+				from inserted i inner join deleted d on i.docGUID=d.docGUID
+					inner join '+@code+N' x on x.docGUID=i.docGUID
+				where isnull(i.updatedDate, ''''1/1/2000'''') = isnull(d.updatedDate, ''''1/1/2000'''')
+
+				exec '+@dataDB+'.[gen].[timestamp_updatedDate] '''''+@code+N'''''
+
+				declare @c nvarchar(max)=''''update: '+@code+N', ''''+@GUID
+
+				INSERT INTO evnt (EventGUID, AccountGUID, moduleGUID, DocGUID, timeRecord, Comment, CreatedDate, CreatedUser)
+				select newid(), null, null, null, 0, @c, getdate(), null
+			''
+		declare @tgName nvarchar(50)=''tg_'+@code+N'_updatedDate''
+		declare @code nvarchar(50)='''+@code+N'''
+		declare @r nvarchar(max)
+		exec '+@dataDB+N'.gen.createTrigger @tgName, @code, 0,1,0, @content, ''doc'', 0, '''+@v4DB+N''', @r output
+		--print @r
+			'
+
+	if @isdebug=1 print @sqlstr
+	set @xstr ='
+		use '+@v4db+N'
+		if not exists(select * from sys.objects where name=''tg_'+@code+N'_updatedDate'') exec sp_executesql @sqlstr
+	'
+
+	exec sp_executesql @xstr, N'@sqlstr nvarchar(max)', @sqlstr
+
+
+	set @sqlstr='
+		declare @xstr nvarchar(max)=replace(
+			(
+			select ''
+				if not exists(
+					select * 
+					from sys.objects o inner join sys.columns c on o.object_id=c.object_id 
+					where o.name='''''+@code+N''''' 
+						and c.name=''''''+replace(cast(c.colkey as nvarchar(50)), ''-'', '''')+'''''') 
+				begin
+					alter table doc.['+@code+N'] 
+						add [''+replace(cast(c.colkey as nvarchar(50)), ''-'', '''')+''] ''+
+							case 
+								when c.coltype in (59,60,62,122,106) then ''money'' 
+								when c.coltype in (40,41,42,43,58,61,189) then ''datetime'' 
+								when c.coltype in (48,52,56,108,127) then ''bigint'' 
+								when c.coltype in (104) then ''bit'' 
+								when c.coltype in (36) then ''uniqueidentifier'' 
+								when c.coltype in (231) and c.colLength between 1 and 1000 then ''nvarchar(''+cast(c.colLength as nvarchar(5))+'')'' 
+								when c.coltype in (167,173,175,239) and c.colLength between 1 and 1000 then ''nvarchar(''+cast(c.colLength as nvarchar(5))+'')'' 
+								when c.coltype in (167,173,175,231,239) then ''nvarchar(max)'' 
+								else ''nvarchar(max)''
+							end+'' null
+
+				end''
+			--select *  
+			from '+@datadb+N'.dbo.modl m
+				inner join '+@datadb+N'.dbo.modlcolm c on m.moduleguid=c.moduleguid
+			where settingmode in (1,2,3,4) 
+				and colkey not in (''DocGUID'', ''AccountGUID'', ''ModuleGUID'', ''Status'', ''StatusComment'', ''CreatedDate'', ''CreatedUser'', 
+					''updatedDate'', ''updatedUser'', ''isClosed'', ''closedDate'', ''closedUser'', ''isDeleted'', ''deletedDate'', ''deletedUser'', 
+					''parentDocGUID'', ''oldId'')
+				and moduleid='''+@code+'''
+			for xml path('''')), ''&'+'#x0D;'', '''')
+
+		exec '+@v4DB+N'.dbo.sp_executesql @xstr
+		'
+
+	if @isdebug=1 print @sqlstr
+	exec sp_executesql @sqlstr
+
+
+	set @sqlstr='
+		if exists(select * from '+@v4DB+N'.sys.objects where name='''+@code+N''') begin
+			declare @content nvarchar(max)=''select ''+stuff((
+				select '', [''+c.name+'']'' 
+				from '+@v4DB+N'.sys.objects o 
+					inner join '+@v4DB+N'.sys.columns c on o.object_id=c.object_id
+				where o.name='''+@code+N'''
+				for xml path('''')), 1, 2, '''')+'' from '+@v4DB+N'.doc.'+@code+N'''
+		
+			declare @r nvarchar(max)
+			exec gen.createView '''+@code+N''', @content, ''doc'', 1, @r output
+			--print @r
+
+			'+
+			iif(@settingmode=4, '
+			set @content =''select ''+stuff((
+				select '', ''+c.name 
+				from '+@v4DB+N'.sys.objects o 
+					inner join '+@v4DB+N'.sys.columns c on o.object_id=c.object_id
+				where o.name='''+@code+N'APRV''
+				for xml path('''')), 1, 2, '''')+'' from '+@v4DB+N'.doc.'+@code+N'APRV''
+		
+			if isnull(@content, '''')<>'''' exec '+db_name()+'.gen.createView '''+@code+N'APRV'', @content, ''doc'', 1, @r output
+			--print @r
+			', '')+'
+		end
+		'
+	
+	if @isdebug=1 print @sqlstr
+	--RAISERROR (@sqlstr, 16, 1)
+	if @skipview=0 exec sp_executesql @sqlstr
+
+

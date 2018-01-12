@@ -1,0 +1,43 @@
+
+CREATE procedure [gen].[sendMail] @GUID uniqueidentifier, @hostGUID uniqueidentifier,
+	@profileName varchar(100),
+	@r varchar(max), @m varchar(max), @s varchar(max),
+	@a varchar(max)=null, @cc varchar(max)=null, @bcc varchar(max)=null, @debug bit=0
+as
+	--sandbox check
+	declare @isSandbox bit, @sandboxText varchar(100)
+	set @sandboxText=''
+	
+	select @isSandbox=isSandBox from coacct
+		
+	--bcc add	
+	declare @bcc1 varchar(max)
+	--select systemMail from coacct
+	select @bcc1=bcc from coMAIL where ProfileName=@profileName
+	 
+	set @bcc=isnull(@bcc,'')+isnull(@bcc1,'')
+
+	if @isSandbox=1 or @debug=1 begin
+		set @sandboxText='***DEMO ONLY - PLEASE IGNORE***'
+		set @s=@s +' '+@sandboxText+' (sent to:'+@r+')'
+		set @r=@bcc --only for develop if live remarks this
+		set @bcc=''
+		print @s
+		print @r
+	end
+
+	--sending
+	if isnull(@m,'')&lt;&gt;'' and isnull(@s,'')&lt;&gt;'' 	
+		exec msdb.dbo.sp_send_dbmail @profile_name=@profileName,	--'EFORM Profile',
+			@recipients=@r,
+			@body=@m,
+			@body_format='HTML',
+			@subject=@s,
+			@file_attachments=@a,
+			@blind_copy_recipients=@bcc
+			--print @a
+	else
+		print 'cannot send. mail blank'
+
+
+

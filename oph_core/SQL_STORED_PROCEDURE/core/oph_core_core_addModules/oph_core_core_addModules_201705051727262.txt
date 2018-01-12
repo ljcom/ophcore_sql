@@ -1,0 +1,54 @@
+CREATE PROCEDURE [core].[addModules] @accountid nvarchar(50)=null, @curV3DB nvarchar(50)=null, @isdebug bit=0
+--WITH ENCRYPTION
+as	--ModifiedBy eLs ON Apr, 2017
+
+	--no need
+	--declare @ver varchar(10), @curV3DB varchar(50), @typecode varchar(1)
+	--exec gen.getDBInfo @accountid, @curV3DBcore, @code, @ver output, @curV3DB output, @typecode output
+
+	--declare @accountid nvarchar(50)=null, @curV3DB nvarchar(50)=null, @isdebug bit=0
+
+	DECLARE #cur CURSOR READ_ONLY FOR
+		select 
+			a.DatabaseName, AccountId, [version], 
+			(select DatabaseName from acctdbse where version = '4.0' and isMaster = 1 and AccountGUID = b.AccountGUID)
+		from acctdbse a
+			inner join acct b on a.AccountGUID=b.AccountGUID
+		where isMaster=1 and AccountId = IIF(isNULL(@accountid, '') = '', AccountID, @accountid)
+			and a.DatabaseName = IIF(isNULL(@curV3DB, '') = '', a.DatabaseName, @curV3DB)
+
+		--select a.DatabaseName, b.AccountId, version, masterDB
+		--from acctdbse a
+		--	inner join (
+		--		select 
+		--			b.accountid, b.accountguid, a.DatabaseName
+		--		--select b.accountid, b.accountguid, max(a.DatabaseName) masterDB 
+		--		from acctdbse a
+		--			inner join acct b on a.AccountGUID=b.AccountGUID
+		--		where isMaster=1 and AccountId = IIF(isNULL(@accountid, '') = '', AccountID, @accountid)
+		--		--group by b.accountid, b.accountguid 
+		--		--having count(*)=1
+		--		) b on a.AccountGUID=b.AccountGUID
+		--where databasename = case when @curV3DB is null then DatabaseName else @curV3DB end
+	DECLARE @V3DB varchar(50), @curAcct varchar(50), @curVer varchar(10), @dataDB varchar(50)
+	OPEN #cur
+
+	FETCH NEXT FROM #cur INTO @V3DB, @curAcct, @curVer, @dataDB
+	WHILE (@@fetch_status = 0)
+	BEGIN
+			if @isdebug=1 select @curAcct, @V3DB, @dataDB
+			if @curVer='4.0' begin
+				exec core.addModule_v4 @curAcct, @V3DB, @isdebug
+				print 'exec core.addModule_v4 '''+@curAcct+''', '''+@V3DB+''', '''+@dataDB+''''
+			end
+			else begin
+				exec core.addModule_v3 @curAcct, @V3DB, @dataDB, @isdebug
+				print 'exec core.addModule_v3 '''+@curAcct+''', '''+@V3DB+''', '''+@dataDB+''''
+			end
+	FETCH NEXT FROM #cur INTO @V3DB, @curAcct, @curVer, @dataDB
+	END
+	CLOSE #cur DEALLOCATE #cur
+
+
+
+

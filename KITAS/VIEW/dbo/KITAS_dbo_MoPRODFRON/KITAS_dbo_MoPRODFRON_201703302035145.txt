@@ -1,0 +1,50 @@
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+CREATE view [dbo].[MoPRODFRON] 
+as
+	select
+		e2.EVENPSKUGUID, a.PRODGUID, a.code id, a.Name, a.Description, e1.name evenname 
+		, a.DIVNGUID, d.Name divisionName, a.SIGNGUID, a.SIGNBRANGUID, Tag, a.CTGRGUID, TokenCTGR, TokenBRAN,
+		(select top 1 replace(replace(attachment, 'D:\','http://104.199.130.13\') , '\', '/') attachment from moprodfoto a1 where a.PRODGUID = a1.PRODGUID order by CreatedDate asc) [productphotos],
+		(select name from Moctgr a2 where a.ctgrguid = a2.ctgrguid) [categoryname],
+		 isnull(b.priceb,0)-((isnull(b.priceb,0)*(isnull(convert(money,e1.discount),0)/'100'))) price, isnull(b.Availaibleb,0) Availaible, e1.discount
+		,  isnull(b.priceb,0)-((isnull(b.priceb,0)*(isnull(convert(money,e1.discount),0)/'100'))) priceDiscount,
+		null cartID, 
+		a.isDeleted, a.CreatedDate, a.CreatedUser, a.UpdatedDate, a.UpdatedUser, a.DeletedDate, a.DeletedUser
+	from MoEVEN e1
+		inner join MoEVENPSKU e2 
+			on e1.evenGUID = e2.evenGUID
+		inner join MoPROD a 
+			on a.PRODGUID = e2.PRODGUID
+		left join (select evenpskuGUID, ProdGUID ProdGUIDb, EvenGUID EvenGUIDb, price priceb, Availaible Availaibleb from MoEVENPSKU) b 
+			on e2.EVENPSKUGUID = b.EVENPSKUGUID
+		left join MoDIVN d 
+			on d.DIVNGUID = a.DIVNGUID
+	where a.isDeleted = 0 
+	and e1.EVENGUID not in ('9573DD6B-DB6F-4153-8A07-9B7CC8C0ADE7') /*regular shop*/
+	and e1.isDeleted =0
+
+
+
+
+
+
+
+
+
+
+
+
+

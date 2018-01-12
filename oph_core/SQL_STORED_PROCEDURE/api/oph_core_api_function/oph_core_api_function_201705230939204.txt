@@ -1,0 +1,61 @@
+CREATE procedure [api].[function] @accountid varchar(50), @dbcore  varchar(50),
+	@hostGUID uniqueidentifier, 
+	@mode varchar(20),
+	@code varchar(20),
+	@GUID uniqueidentifier,
+	@comment varchar(max),
+	@isDebug bit=0
+--WITH ENCRYPTION
+as
+
+	--declare @typecode nvarchar(1), @ver varchar(10)
+	--select @typecode = api.settingmode(settingmode), @ver=b.[version]--, @accountid=d.accountid
+	----select * 
+	--from modl a
+	--	inner join acctdbse	b 
+	--				on a.accountdbguid=b.accountdbguid
+	--	inner join acct d
+	--		on d.accountGUID=a.AccountGUID
+	--	inner join [user] e
+	--		on e.AccountGUID=d.AccountGUID
+	--	inner join userhost c
+	--		on c.userguid=e.UserGUID
+	--where ModuleID=@code and c.HostGUId=@hostGUID	
+	
+	--declare @db varchar(50)=api.fn_checkDB(@accountid, @code)
+	----declare @typecode nvarchar(1)
+
+		declare @ver varchar(10), @db varchar(50), @typecode varchar(1)
+	exec gen.getDBInfo @accountid, @dbcore, @code, @ver output, @db output, @typecode output
+
+	--check customized
+	declare @custom_proc nvarchar(max)=@code+'_'+@mode+'_custom'
+	declare @custom_par nvarchar(max)='@GUID uniqueidentifier, @hostGUID uniqueidentifier'
+	declare @isExists bit=0
+	exec gen.checkObject @custom_proc, 'dbo', @db, @isExists OUTPUT
+
+	if @isExists=1 begin
+		set @custom_proc='exec '+@db+'.dbo.'+@custom_proc+' '''+CAST(@GUID AS VARCHAR(50))+''', '''+CAST(@hostGUID AS VARCHAR(50))+''''
+		--set @custom_proc=@db+'.dbo'+@custom_proc
+		exec sp_executesql @custom_proc, @custom_par, @GUID, @hostGUID
+	end
+	else begin
+		--set @code=left(@code,1)+'o'+substring(@code,3,len(@code)-2)
+		print @mode
+		if @mode='delete' exec api.function_delete @accountid,  @dbcore, @hostGUID, @code, @GUID, @comment, @isDebug
+		else if @mode='restore' exec api.function_restore @accountid, @dbcore, @hostGUID, @code, @GUID, @comment, @isDebug
+		else if @mode='wipe' exec api.function_wipe @accountid, @dbcore, @hostGUID, @code, @GUID, @comment, @isDebug
+		else if @mode='force' exec api.function_force @accountid, @dbcore, @hostGUID, @code, @GUID, @comment, @isDebug
+		else if @mode='reopen' exec api.function_reopen @accountid, @dbcore, @hostGUID, @code, @GUID, @isDebug
+		else if @mode='execute' exec api.function_execute @accountid, @dbcore, @hostGUID, @code, @GUID, @comment, @isDebug
+
+	end
+
+	  
+
+
+
+
+
+
+

@@ -1,0 +1,9 @@
+
+CREATE procedure [gen].[createGuestID] @accountid nvarchar(50), @coreDB nvarchar(50), @hostGUID uniqueidentifier output
+as
+	declare @newHostGUID uniqueidentifier=newid()
+	insert into userhost (UserHostGUID, UserGUID, HostGUID, DelegateUserGUID, accountGUID, accountId, coreDB)
+	values (@newHostGUID, null, @newHostGUID, null, null, @accountid, @coredb)
+
+	set @hostGUID=@newHostGUID 
+

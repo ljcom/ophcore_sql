@@ -1,0 +1,44 @@
+
+
+
+CREATE procedure [api].[checkRecordExist] @accountid varchar(50), @dbcore varchar(50), 
+	@code varchar(50), @GUID uniqueidentifier, @result int OUTPUT
+--WITH ENCRYPTION
+AS
+BEGIN
+	declare @ver varchar(10), @db varchar(50), @typecode varchar(1)
+	exec gen.getDBInfo @accountid, @dbcore, @code, @ver output, @db output, @typecode output
+
+	declare @sqlstr nvarchar(max)
+	declare @sqlpar nvarchar(max)
+
+	if @ver='3.0' begin
+		print @ver
+		declare @colname varchar(50)
+		exec [api].[getPrimaryKey] @accountid, @dbcore, @code, @colname OUTPUT
+
+		set @code=left(@code,1)+'o'+substring(@code,3,len(@code)-2)
+
+		set @sqlpar ='@GUID uniqueidentifier, @result int OUTPUT'
+		set @sqlstr ='
+			select @result=Count(1) from '+@db+'.dbo.'+@code+'
+			where '+@colname+' = @GUID'		
+		exec sp_executesql @sqlstr, @sqlpar, @GUID, @result OUTPUT
+
+		print @sqlstr
+	end
+	else if @ver='4.0' and @typecode<>'C' begin
+		set @sqlpar ='@GUID uniqueidentifier, @result int OUTPUT'
+		set @sqlstr ='
+			select @result=Count(1) from '+@db+'.dbo.oph_form
+			where moduleid='''+@code+''' formGUID= @GUID'
+
+		exec sp_executesql @sqlstr, @sqlpar, @GUID, @result OUTPUT
+	end
+
+
+END
+
+
+
+

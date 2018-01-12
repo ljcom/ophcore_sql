@@ -1,0 +1,40 @@
+CREATE PROCEDURE [api].[theme] 
+	@hostGUID uniqueidentifier, @code varchar(50), @GUID uniqueidentifier, @isDebug bit=0
+--WITH ENCRYPTION
+as
+
+--declare @hostGUID uniqueidentifier = gen.gethost('ap\iman.satyagraha'), @code varchar(50) = 'profile', @GUID uniqueidentifier = NULL, @isDebug bit=0
+
+	declare @timestamp datetime=current_timestamp
+
+	declare @theme varchar(50), @company varchar(50), @accountid varchar(50), @coreDB varchar(50)
+	exec gen.getDBInfo @hostguid, @code, @themename=@theme output, @companyName=@company output,
+		@accountid=@accountid output, @coreDB=@coreDB output
+
+	declare @userGUID uniqueidentifier
+		select @userGUID=a.userGUID from userhost a 
+			inner join [user] b on a.userguid=b.userguid
+	where hostguid=@hostguid
+
+	declare @envId nvarchar(50)
+		
+	declare @headerXML xml
+	exec [api].[theme_header] @hostguid, @code, @headerXML output
+
+	if @code = 'profile' begin
+		declare @bodyContent xml
+		exec [api].[theme_profile] @hostGUID, @bodyContent OUTPUT
+
+		select @headerXML [header], @bodyContent [body], '' footer
+		for xml path('sqroot')
+	end
+	else begin
+		select @headerXML [header], '' footer
+		for xml path('sqroot')
+	end
+
+	declare @comment1 nvarchar(max)='api.theme'
+	exec gen.evnt_save @hostguid, @code, null, @timestamp, @comment1
+
+
+

@@ -1,0 +1,101 @@
+
+
+CREATE procedure [api].[theme_widget] @hostGUID uniqueidentifier, @code nvarchar(50), @isDebug bit=0
+--WITH ENCRYPTION
+as
+	declare @timestamp datetime=current_timestamp
+
+	declare @theme varchar(50), @company varchar(50), @accountid varchar(50), @coreDB varchar(50)
+	exec gen.getDBInfo @hostguid, @code, @themename=@theme output, @companyName=@company output,
+		@accountid=@accountid output, @coreDB=@coreDB output
+
+	declare @userGUID uniqueidentifier--, @accountGUID uniqueidentifier
+
+	select @userGUID=a.userGUID--, @accountGUID=b.accountGUID 
+	from userhost a 
+		inner join [user] b on a.userguid=b.userguid
+	where hostguid=@hostguid
+
+	select (
+		select 
+			pageNo.infovalue '@pageNo',
+			(
+				select sectionNo2.infovalue '@sectionNo', 
+					(
+						select colNo3.infovalue '@colNo', max(isnull(colWidth3.infovalue,12)) '@colWidth',
+							(
+								select 
+									max(widgetType4.infovalue) '@type', 
+									widgetNo4.infoValue '@widgetNo', 
+									max(widgetTitle4.infovalue) '@title', 
+									(
+										select fieldNo5.infovalue '@fieldNo', widgetCaption5.infoValue '@widgetCaption'
+										from modl m5
+											inner join modlcolm c5 on m5.ModuleGUID=c5.ModuleGUID
+											inner join modlcolminfo pageNo5 on c5.ColumnGUID=pageNo5.columnguid and pageNo5.InfoKey='pageNo'
+											inner join modlcolminfo sectionNo5 on c5.ColumnGUID=sectionNo5.columnguid and sectionNo5.InfoKey='sectionNo'
+											inner join modlcolminfo widgetType5 on c5.ColumnGUID=widgetType5.columnguid and widgetType5.InfoKey='widgetType'
+											inner join modlcolminfo widgetNo5 on c5.ColumnGUID=widgetNo5.columnguid and widgetNo5.InfoKey='widgetNo'
+											inner join modlcolminfo fieldNo5 on c5.ColumnGUID=fieldNo5.columnguid and fieldNo5.InfoKey='fieldNo'
+											left join modlcolminfo widgetCaption5 on c5.ColumnGUID=widgetCaption5.columnguid and widgetCaption5.InfoKey='widgetCaption'
+										where m2.moduleguid=m5.moduleguid	
+											and pageNo.InfoValue=pageNo5.infovalue
+											and sectionNo2.InfoValue=sectionNo5.infovalue
+											and widgetNo4.InfoValue=widgetNo5.infovalue
+										order by try_cast(fieldNo5.infovalue as int)
+										for xml path('subwidget'), type
+									) 'subwidgets'
+								from modl m4
+									inner join modlcolm c4 on m4.ModuleGUID=c4.ModuleGUID
+									inner join modlcolminfo pageNo4 on c4.ColumnGUID=pageNo4.columnguid and pageNo4.InfoKey='pageNo'
+									inner join modlcolminfo sectionNo4 on c4.ColumnGUID=sectionNo4.columnguid and sectionNo4.InfoKey='sectionNo'
+									inner join modlcolminfo widgetType4 on c4.ColumnGUID=widgetType4.columnguid and widgetType4.InfoKey='widgetType'
+									inner join modlcolminfo widgetNo4 on c4.ColumnGUID=widgetNo4.columnguid and widgetNo4.InfoKey='widgetNo'
+									left join modlcolminfo widgetTitle4 on c4.ColumnGUID=widgetTitle4.columnguid and widgetTitle4.InfoKey='widgetTitle'
+								where m2.moduleguid=m4.moduleguid	
+									and pageNo.InfoValue=pageNo4.infovalue
+									and sectionNo2.InfoValue=sectionNo4.infovalue
+								group by widgetNo4.infovalue
+								order by try_cast(widgetNo4.infovalue as int)
+								for xml path('widget'), type
+							) 
+						from modl m3
+							inner join modlcolm c3 on m3.ModuleGUID=c3.ModuleGUID
+							inner join modlcolminfo pageNo3 on c3.ColumnGUID=pageNo3.columnguid and pageNo3.InfoKey='pageNo'
+							inner join modlcolminfo sectionNo3 on c3.ColumnGUID=sectionNo3.columnguid and sectionNo3.InfoKey='sectionNo'
+							inner join modlcolminfo colNo3 on c3.ColumnGUID=colNo3.columnguid and colNo3.InfoKey='colNo'
+							left join modlcolminfo colWidth3 on c3.ColumnGUID=colWidth3.columnguid and colWidth3.InfoKey='colWidth'
+						where m.moduleguid=m3.moduleguid
+							and pageNo.infovalue=pageNo3.infovalue
+							and sectionNo2.infovalue=sectionNo3.infovalue
+						group by m3.moduleguid, sectionNo3.infovalue, colNo3.infovalue
+						order by try_cast(colNo3.infovalue as int)
+						for xml path('widgetColumn'), type
+					) widgetColumns
+				from modl m2
+					inner join modlcolm c2 on m2.ModuleGUID=c2.ModuleGUID
+					inner join modlcolminfo pageNo2 on c2.ColumnGUID=pageNo2.columnguid and pageNo2.InfoKey='pageNo'
+					inner join modlcolminfo sectionNo2 on c2.ColumnGUID=sectionNo2.columnguid and sectionNo2.InfoKey='sectionNo'
+				where m.moduleguid=m2.moduleguid
+					and pageNo.infovalue=pageNo2.infovalue
+				group by m2.moduleguid, sectionNo2.infovalue
+				order by try_cast(sectionNo2.infovalue as int)
+				for xml path('widgetSection'), type
+			) 'widgetSections'
+	 
+		from modl m
+			inner join modlcolm c on m.ModuleGUID=c.ModuleGUID
+			inner join modlcolminfo pageNo on c.ColumnGUID=pageNo.columnguid and pageNo.InfoKey='pageNo'
+			inner join modlcolminfo isWidget on c.ColumnGUID=isWidget.columnguid and isWidget.InfoKey='isWidget' and isWidget.infovalue='1'
+		where moduleid='dashboard'--@code
+		group by m.moduleguid, pageNo.infovalue--, sectionNo.infovalue, widgetType.infovalue, widgetNo.infoValue
+		order by try_cast(pageNo.infovalue as int)
+		for xml path('widgetPage'), type
+	) 'widgetPages'
+	for xml path('widgets'), root('sqroot')
+
+	declare @comment1 nvarchar(max)='api.theme_widget '+@code
+	exec gen.evnt_save @hostguid, @code, null, @timestamp, @comment1
+
+
+

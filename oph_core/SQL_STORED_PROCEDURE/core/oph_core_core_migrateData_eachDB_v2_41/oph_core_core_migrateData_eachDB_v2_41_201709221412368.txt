@@ -1,0 +1,235 @@
+
+
+
+
+CREATE procedure [core].[migrateData_eachDB_v2_41] @accountid nvarchar(50), @coreDB nvarchar(50), 
+	@dataDB nvarchar(50), @v4DB nvarchar(50), @svr nvarchar(50), @v3db nvarchar(50), @isdeldata bit=0, @isdebug bit=0
+as
+
+	declare @accountGUID uniqueidentifier
+	select @accountguid=AccountGUID 
+	from acct where accountid=@accountid
+	
+	declare @uGUID uniqueidentifier=newid()	
+	declare @sqlstr nvarchar(max)
+
+	set @svr=iif(@svr is null, @@SERVERNAME, @svr)
+
+	set @sqlstr=N'
+		create table ##tempInsert'+replace(cast(@uGUID as nvarchar(50)), '-', '')+N' (
+			tablename nvarchar(50), moduleGUID uniqueidentifier, fieldList nvarchar(max), docList nvarchar(max), docName nvarchar(50), oldid nvarchar(50), 
+			status nvarchar(50), statuscomment nvarchar(50), createddate nvarchar(50), updateddate nvarchar(50), isdeleted nvarchar(50))
+
+		insert into ##tempInsert'+replace(cast(@uGUID as nvarchar(50)), '-', '')+N' (tablename, moduleGUID, fieldList, docList, docname, oldid, 
+			status, statuscomment, createddate, updateddate, isdeleted)
+		select c.moduleid tablename, c.moduleGUID moduleGUID, 
+			--fieldlist
+			(
+				stuff(
+					(select '', [''+c1.colkey+'']'' 
+					from '+@dataDB+N'.dbo.modl m
+						inner join '+@dataDB+N'.dbo.modlcolm c1 on m.moduleguid=c1.moduleguid
+						inner join '+@svr+N'.'+@v3db+N'.sys.objects b1 on b1.name=m.moduleid
+						inner join '+@svr+N'.'+@v3db+N'.sys.columns b2 on b1.object_id=b2.object_id and c1.colkey=b2.name
+					where m.moduleid=''''+c.moduleid+''''
+						and colkey not in (''DocGUID'', ''AccountGUID'', ''ModuleGUID'', ''Status'', ''StatusComment'', ''CreatedDate'', ''CreatedUser'', 
+							''updatedDate'', ''updatedUser'', ''isClosed'', ''closedDate'', ''closedUser'', ''isDeleted'', ''deletedDate'', ''deletedUser'', ''parentDocGUID'', ''oldId'')
+						--and colkey <> d1.colkey
+					order by c1.colkey
+					for xml path('''')), 1, 2, '''')			
+			), 
+			--doclist
+			(
+				stuff(
+					(select '', [''+replace(cast(c1.colkey as nvarchar(50)), ''-'', '''')+'']''
+					from '+@dataDB+N'.dbo.modl m
+						inner join '+@dataDB+N'.dbo.modlcolm c1 on m.moduleguid=c1.moduleguid
+						inner join '+@svr+N'.'+@v3db+N'.sys.objects b1 on b1.name=m.moduleid
+						inner join '+@svr+N'.'+@v3db+N'.sys.columns b2 on b1.object_id=b2.object_id and c1.colkey=b2.name
+					where m.moduleid=''''+c.moduleid+''''
+						and colkey not in (''DocGUID'', ''AccountGUID'', ''ModuleGUID'', ''Status'', ''StatusComment'', ''CreatedDate'', ''CreatedUser'', 
+							''updatedDate'', ''updatedUser'', ''isClosed'', ''closedDate'', ''closedUser'', ''isDeleted'', ''deletedDate'', ''deletedUser'', ''parentDocGUID'', ''oldId'')
+						--and colkey <> d1.colkey
+					order by c1.colkey
+					for xml path('''')), 1, 2, '''')			
+			),
+
+			--docname
+			replace(cast(moduleid as nvarchar(50)), ''-'', ''''), 
+
+			--oldid
+			d1.colkey,
+
+			--status
+			status.colkey, 
+
+			--statuscomment
+			statuscomment.colkey,
+
+			--createddate
+			createddate.colkey, 
+
+			--updateddate
+			updateddate.colkey, 
+
+			--isdeleted
+			isDeleted.colkey
+		from (select * from '+@svr+N'.'+@v3db+N'.sys.objects x where x.type=''U'') a 
+			inner join '+@dataDB+N'.dbo.modl c on c.moduleid=a.name
+			inner join '+@dataDB+N'.dbo.modlcolm d1 on c.moduleguid=d1.ModuleGUID 
+				and d1.colkey=
+					(
+					select b2.name
+					from '+@svr+N'.'+@v3db+N'.sys.index_columns b 
+						inner join '+@svr+N'.'+@v3db+N'.sys.indexes b1 on b.index_id=b1.index_id and b1.object_id=b.object_id
+							and b1.is_primary_key=1
+						inner join '+@svr+N'.'+@v3db+N'.sys.columns b2 on b2.object_id=b.object_id and b.column_id=b2.column_id
+					where a.object_id=b.object_id)
+			left join '+@dataDB+'.dbo.modlcolm Status on c.moduleguid=Status.ModuleGUID and Status.colkey=''Status''
+			left join '+@dataDB+'.dbo.modlcolm StatusComment on c.moduleguid=StatusComment.ModuleGUID and StatusComment.colkey=''StatusComment''
+			left join '+@dataDB+'.dbo.modlcolm createdDate on c.moduleguid=createdDate.ModuleGUID and createdDate.colkey=''createdDate''
+			left join '+@dataDB+'.dbo.modlcolm updatedDate on c.moduleguid=updatedDate.ModuleGUID and updatedDate.colkey=''updatedDate''
+			left join '+@dataDB+'.dbo.modlcolm isDeleted on c.moduleguid=isDeleted.ModuleGUID and isDeleted.colkey=''isDeleted''
+		where left(a.name,1) not in (''C'', ''D'', ''P'')
+				
+	'
+	
+	if @isdebug=1 print @sqlstr
+	exec sp_executesql @sqlstr
+
+	set @sqlstr='
+		select tablename, moduleGUID, fieldList, docList, docname, oldid
+		from ##tempInsert'+replace(cast(@uGUID as nvarchar(50)), '-', '')+N'
+		order by tablename'
+
+	if @isdebug=1 print @sqlstr
+	exec sp_executesql @sqlstr
+
+	set @sqlstr='
+		DECLARE #cur CURSOR
+		READ_ONLY
+		FOR select tablename, moduleGUID, fieldList, docList, docname, oldid, status, statuscomment, createddate, updateddate, isdeleted
+			from ##tempInsert'+replace(cast(@uGUID as nvarchar(50)), '-', '')+N'
+			order by tablename
+
+		DECLARE @insertStr nvarchar(max), @tblName nvarchar(50), @aTblName nvarchar(50), @moduleGUID uniqueidentifier
+		declare @xstr nvarchar(max), @fieldList nvarchar(max), @docList nvarchar(max), @docName nvarchar(50), @oldid nvarchar(50),
+			@status nvarchar(50), @statuscomment nvarchar(50), @createddate nvarchar(50), @updateddate nvarchar(50), @isdeleted nvarchar(50)
+
+		OPEN #cur
+
+		FETCH NEXT FROM #cur INTO @tblName, @moduleGUID, @fieldList, @docList, @docname, @oldid, 
+			@status, @statuscomment, @createddate, @updateddate, @isdeleted
+		WHILE (@@fetch_status <> -1)
+		BEGIN
+			IF (@@fetch_status <> -2)
+			BEGIN
+				set @xstr=''
+					'+iif(@isdeldata=1, N'delete from '+@v4DB+N'.doc.[''+@docname+N'']', '')+'
+
+					insert into '+@v4DB+N'.doc.[''+@docname+N''] 
+						(DocGUID, AccountGUID, ModuleGUID, status, statuscomment, CreatedDate, updatedDate, isClosed, isDeleted, oldId, ''+@doclist+N'')
+					select newid(), '''''+cast(@accountguid as nvarchar(50))+N''''', 
+						''''''+isnull(cast(@moduleguid as nvarchar(50)),''null'')+N'''''', 
+						isnull(''+isnull(@Status,''0'')+N'',0)*100, ''+isnull(@Statuscomment,''null'')+N'', 
+						isnull(''+isnull(@createddate, ''getdate()'')+N'', getdate()), ''+isnull(@updateddate, ''null'')+N'', 0, isnull(''+isnull(@isdeleted, ''0'')+N'', 0), 
+						''+isnull(@oldid,''null'')+N'', ''+@fieldlist+N''  
+					from '+@svr+N'.'+@v3db+N'.dbo.''+@tblName+N'' a
+						left join (select docguid, oldid, moduleguid from '+@v4DB+N'.doc.[''+@docname+N'']) b 
+							on cast(a.''+isnull(cast(@oldid as nvarchar(50)),''null'')+N'' as nvarchar(50)) = b.oldid
+								and b.moduleguid=''''''+isnull(cast(@moduleguid as nvarchar(50)),''null'')+N''''''
+					where b.docGUID is null''
+
+				print @xstr
+				exec sp_executesql @xstr
+
+				--primarycol=1 dipakai untuk unique index
+				insert into '+@dataDB+N'.dbo.modlcolminfo (ColumnInfoGUID, ColumnGUID, InfoKey, InfoValue)
+				select newid(), c.columnGUID, ''primaryCol'', ''1'' 
+				from '+@dataDB+N'.dbo.modl m
+					inner join '+@dataDB+N'.dbo.modlcolm c
+						on m.moduleguid=c.moduleguid and c.colkey=''''+isnull(cast(@oldid as nvarchar(50)),''null'')+''''
+					left join '+@dataDB+N'.dbo.modlcolminfo i
+						on c.columnguid=i.columnguid and i.infokey=''primaryCol'' --and i.infokey=''1''
+				where m.moduleguid=''''+isnull(cast(c.moduleguid as nvarchar(50)),''null'')+''''
+					and i.columninfoguid is null
+
+
+				insert into '+@dataDB+N'.dbo.modlinfo (ModuleInfoGUID, ModuleGUID, InfoKey, InfoValue)
+				select newid(), m.moduleguid, ''unique_1'', 
+					(	select b3.name+'' ASC''
+						from '+@svr+N'.'+@v3db+N'.sys.index_columns b 
+							inner join '+@svr+N'.'+@v3db+N'.sys.indexes b1 on b.index_id=b1.index_id and b1.object_id=b.object_id
+							inner join '+@svr+N'.'+@v3db+N'.sys.objects b2 on b1.object_id=b2.object_id
+							inner join '+@svr+N'.'+@v3db+N'.sys.columns b3 on b2.object_id=b3.object_id and b3.column_id=b.column_id
+								and b1.is_primary_key=1
+						where m.moduleid=b2.name) 
+				from '+@dataDB+N'.dbo.modl m
+					left join '+@dataDB+N'.dbo.modlinfo i
+						on m.moduleguid=i.moduleguid and i.infokey=''unique_1'' 
+				where m.moduleguid=''''+cast(@moduleguid as nvarchar(50))+''''
+					and i.moduleinfoguid is null
+
+
+				exec sp_executesql @insertStr
+			END
+			FETCH NEXT FROM #cur INTO @tblName, @moduleGUID, @fieldList, @docList, @docname, @oldid,
+				@status, @statuscomment, @createddate, @updateddate, @isdeleted
+		END
+
+		CLOSE #cur
+		DEALLOCATE #cur
+
+
+	'
+	if @isdebug=1 print @sqlstr
+	exec sp_executesql @sqlstr
+
+	--update parentdocguid
+	set @sqlstr=N'
+	
+		DECLARE #cur5 CURSOR
+		READ_ONLY
+		FOR 
+			select 
+				''update c
+				set parentDocGUID=p.docguid
+				from '+@v4DB+N'.doc.[''+replace(cast(p.moduleid as nvarchar(50)), ''-'', '''')+''] p 
+					inner join '+@v4DB+N'.doc.[''+replace(cast(c.moduleid as nvarchar(50)), ''-'', '''')+''] c 
+					on p.[''+replace(cast(pc.colkey as nvarchar(50)), ''-'', '''')+'']=c.[''+replace(cast(cc.colkey as nvarchar(50)), ''-'', '''')+'']
+				
+				''
+			from '+@dataDB+N'.dbo.modl c 
+				inner join '+@dataDB+N'.dbo.modlcolm cc on c.moduleguid=cc.ModuleGUID 
+				inner join '+@dataDB+N'.dbo.modlcolminfo cc1 on cc.ColumnGUID=cc1.ColumnGUID 
+					and cc1.InfoKey=''isparentkey'' and cc1.InfoValue=''1''
+				inner join '+@dataDB+N'.dbo.modl p on c.ParentModuleGUID=p.moduleguid
+				inner join '+@dataDB+N'.dbo.modlcolm pc on p.moduleguid=pc.ModuleGUID 
+				inner join '+@dataDB+N'.dbo.modlcolminfo pc1 on pc.ColumnGUID=pc1.ColumnGUID 
+					and pc1.InfoKey=''primaryCol'' and pc1.InfoValue=''1''
+				inner join '+@coredb+N'.dbo.acctdbse ad on c.AccountDBGUID=ad.AccountDBGUID
+			where c.ParentModuleGUID is not null AND migratedb='''+@v4DB+N'''
+
+
+		DECLARE @sqlstrx nvarchar(max)
+		OPEN #cur5
+
+		FETCH NEXT FROM #cur5 INTO @sqlstrx
+		WHILE (@@fetch_status <> -1)
+		BEGIN
+			IF (@@fetch_status <> -2)
+			BEGIN
+				print @sqlstrx		
+				exec sp_executesql @sqlstrx
+			END
+			FETCH NEXT FROM #cur5 INTO @sqlstrx
+		END
+
+		CLOSE #cur5
+		DEALLOCATE #cur5'
+
+	if @isdebug=1 print @sqlstr
+	exec sp_executesql @sqlstr
+
+
+

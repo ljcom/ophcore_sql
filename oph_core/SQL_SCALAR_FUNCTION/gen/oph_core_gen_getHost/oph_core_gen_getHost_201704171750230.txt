@@ -1,0 +1,14 @@
+CREATE FUNCTION [gen].[getHost](@UserID varchar(100))
+RETURNS uniqueidentifier
+--WITH ENCRYPTION
+as	--CreatedBy eLs ON Dec, 2016
+BEGIN
+	Declare @HostGUID uniqueidentifier
+
+	select @HostGUID = HostGUID from [user] a
+		inner join userhost b ON a.UserGUID = b.UserGUID
+	where UserID = @UserID or cast(a.UserGUID as varchar(50))= @UserID
+
+	return @HostGUID
+END
+

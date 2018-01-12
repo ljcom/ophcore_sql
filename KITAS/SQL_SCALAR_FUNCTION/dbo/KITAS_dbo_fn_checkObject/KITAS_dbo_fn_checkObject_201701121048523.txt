@@ -1,0 +1,20 @@
+
+CREATE FUNCTION [dbo].[fn_checkObject] (@schema nvarchar(10), @object nvarchar(50))
+RETURNS bit
+AS
+BEGIN
+	-- Declare the return variable here
+	declare @isExist bit
+	set @isExist=0
+	
+	if exists(	
+		select * from sys.objects a
+			inner join sys.schemas b
+				on a.schema_id=b.schema_id
+		where b.name=@schema and a.name=@object) 	set @isExist=1
+
+	return @isExist
+END
+
+
+

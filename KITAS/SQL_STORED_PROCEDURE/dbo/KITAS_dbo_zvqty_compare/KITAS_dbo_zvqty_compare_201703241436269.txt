@@ -1,0 +1,81 @@
+CREATE PROCEDURE [dbo].[zvqty_compare]
+as	--CreatedBy eLs ON Feb, 2017
+
+	SET NOCOUNT ON
+
+	if OBJECT_ID('tempdb..#zmr') is not null drop table #zmr
+	create table #zmr(
+		H varchar, Plant varchar(20), StLoc varchar(5), SalesOrg varchar(5), MatType varchar(5), MatGroup int,--varchar(5),
+		matCode varchar(20), MatDesc varchar(250), UnrestrictedQty float, StockDate varchar(6), VendorMatCode varchar(50),
+		AvailableQty float, graduate varchar(5), TotalQty varchar(50), SubConStock float, ConsignmentQty varchar(50), T varchar(2)
+	)
+
+	BULK INSERT #zmr FROM '\\idcorpidfs20\SAPTransfer\H\ZMR19.txt' WITH (FIELDTERMINATOR ='|', ROWTERMINATOR ='|\n')
+
+	if OBJECT_ID('tempdb..#zv') is not null drop table #zv
+	create table #zv(
+		SalesOrg varchar(5), DChannelId varchar(20), Division int, SoldToPartyNo varchar(20), SoldToPartyName varchar(150),
+		SalesEmployeeId varchar(20), SalesEmployeeName varchar(150), OrderType varchar(5), SOCreateDate varchar(255), SONo varchar(20),
+		SoLineItemNo varchar(20), MatNo varchar(20), MatDesc varchar(50), SOQty varchar(20), SOValue varchar(50), DOCreateDate varchar(255), 
+		DONo int, DOLineItemNo varchar(20), DOQty varchar(20), SODODiffQty varchar(255), SODODiffAmount money, DOChangedQty int, 
+		DOPGIDiffQty varchar(255), DOPGIDiffAmount varchar(255), DOChangedBy varchar(50), DOChangedDate varchar(50), DOChangedTime time, 
+		DOBillQty varchar(20), DOBillPrice money, DOBillVal varchar(50), BillNo varchar(20), BillDate varchar(255),
+		Ref varchar(20), YourRef varchar(20), ReasonReject varchar(50), RejectDesc varchar(50), CustomerPONo varchar(200),
+		X varchar(max)  
+		--RequestDelDate varchar(255), OrderReason varchar(50), OrderReasonDesc varchar(50), RecieveDate date, ActualDelDate date, 
+		--ReasonSubstitution varchar(50), MatEntered varchar(50), ReceivePoint int, CustomerAccNo varchar(20), 
+		--SalesDocItemCat varchar(50), EANUPC varchar(20), BillMat varchar(50), DOMat varchar(50), BusWorkplace varchar(50),
+		--BillCreateDate time(0), MatDChainStatus varchar(20), 
+		--productcode varchar(50), Plant varchar(5), total money,
+		--ShipToPartyNo varchar(50), ShipToPartyName varchar(100),F59 varchar(5),PGIDate varchar(10)
+	)
+
+	BULK INSERT #zv FROM '\\idcorpidfs20\SAPTransfer\H\ZV14_CPD.txt' WITH (FIELDTERMINATOR ='|', ROWTERMINATOR ='\n')
+	BULK INSERT #zv FROM '\\idcorpidfs20\SAPTransfer\ZV14_LPD.txt' WITH (FIELDTERMINATOR ='|', ROWTERMINATOR ='\n')
+	BULK INSERT #zv FROM '\\idcorpidfs20\SAPTransfer\ZV14_PPD.txt' WITH (FIELDTERMINATOR ='|', ROWTERMINATOR ='\n')
+
+	if OBJECT_ID('tempdb..#qtycompare') is not null drop table #qtycompare
+	select 
+		EVENGUID, DIVNGUID, matCode, AvailableQty [QtyStock], Qty
+	into #qtycompare
+	from (
+		select 
+			case StLoc
+				when 'IX02' then '9573DD6B-DB6F-4153-8A07-9B7CC8C0ADE7'
+				when 'IX03' then '6A293D44-E76E-4979-BAD6-A598988FB61B'
+				else NULL 
+			end EVENGUID, DIVNGUID,
+			matCode, cast(isNULL(AvailableQty, 0) as int) [AvailableQty], cast(isNULL(convert(money, b.Qty), 0) as int) [Qty]
+		from #zmr a
+			left join (
+				select 
+					PRODGUIDcbId [code], c.MatNo, BillDate, IIF(ISNULL(LEFT(BillDate, 2), '00') = '00', b.Qty,'0') [Qty]
+				from oph.TcPCSO a
+					inner join oph.TaPCSODETA b ON a.PCSOGUID = b.PCSOGUID
+					left join #zv c ON b.PRODGUIDcbId = c.MatNo AND SUBSTRING(a.DocRefNo, 3, 6) = SUBSTRING(c.CustomerPONo, 3, 6)
+			) b ON a.matCode = b.code
+			inner join MoDIVN d ON a.SalesOrg = d.SalesID
+	) compare
+
+	-- for regular &amp; online only
+	update a set 
+		a.Qty = c.QtyStock, a.Used = isnull(c.qty,0)
+	--select a.EVENGUID, b.ID, b.Name, c.*
+	from MoEVENPSKU a
+		inner join MoPROD b ON a.PRODGUID = b.PRODGUID
+		inner join #qtycompare c ON a.EVENGUID = c.EVENGUID
+	where b.code = c.matCode AND a.EVENGUID in('9573DD6B-DB6F-4153-8A07-9B7CC8C0ADE7', '6A293D44-E76E-4979-BAD6-A598988FB61B')
+	
+	--for bazaar only
+	update a set a.Qty = d.QtyStock, a.Used = isnull(d.qty,0)
+	--select b.Name, b.DIVNGUID, c.ID, c.Name, d.*
+	from MoEVENPSKU a
+		inner join oph.MaEVEN b ON a.EVENGUID = b.EVENGUID
+		inner join MoPROD c ON a.PRODGUID = c.PRODGUID
+		inner join #qtycompare d ON d.EVENGUID is NULL AND c.code = d.matCode AND b.DIVNGUID = d.DIVNGUID
+	where b.EVENGUID not in('9573DD6B-DB6F-4153-8A07-9B7CC8C0ADE7', '6A293D44-E76E-4979-BAD6-A598988FB61B')
+		AND cast(GETDATE() as date) between StartDate and EndDate
+
+	drop table #zmr
+	drop table #zv
+	drop table #qtycompare

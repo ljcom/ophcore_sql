@@ -1,0 +1,16 @@
+create procedure dbo.jobDeleteAutoPCSO
+as
+
+declare @datenow datetime
+set @datenow = getdate()
+
+delete a
+from kitas.dbo.ToPCSODETA a
+inner join kitas.dbo.ToPCSO b on b.pcsoGUID = a.pcsoGUID 
+where datediff(hh, a.UpdatedDate, @datenow) &gt;= 1 and status = 0
+
+delete a
+from ToPCSO a
+left join ToPCSODETA b on b.PCSOGUID = a.PCSOGUID
+where b.PCSOGUID is null
+		and datediff(hh, a.UpdatedDate, @datenow) &gt;= 1 and status = 0

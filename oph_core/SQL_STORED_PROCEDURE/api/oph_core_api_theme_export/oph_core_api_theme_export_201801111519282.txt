@@ -1,0 +1,121 @@
+CREATE PROCEDURE api.theme_export @hostGUID uniqueidentifier, @code nvarchar(50)
+as	--CreatedBy eLs ON Nov, 2017
+
+	--declare @hostGUID uniqueidentifier = gen.gethost('els'), @code nvarchar(50) = 'MaSEPHO'
+
+	set nocount on
+	declare @ModuleGUID uniqueidentifier, @desc varchar(255), @allowExport varchar
+	select @ModuleGUID = ModuleGUID, @desc = IIF(len(ModuleDescription) < 1, ModuleID, ModuleDescription) from modl where ModuleID = @code
+	select @allowExport = allowExport from gen.authModl(@hostGUID, NULL) where ModuleId = @code
+
+	declare @exportMode bit
+		select @exportMode = b.infovalue from modl a
+			inner join modlinfo b on a.moduleguid=b.moduleguid and b.infokey='exportMode'
+		where a.moduleid = @code 
+	set @exportMode = ISNULL(@exportMode, 1)
+
+	declare @xmlInfo xml = (
+		select 
+			@code [code], @desc [description], @exportMode [exportMode],
+			@allowExport [permission/allowExport]		
+		for xml path(''), type
+	) 
+
+	declare @xmlParameter xml = STUFF((
+		select
+			','+colKey
+		from modlcolm a
+			inner join modlcolminfo b ON a.ColumnGUID = b.ColumnGUID AND b.InfoKey = 'exportParameter' AND b.InfoValue = '1'
+			left join modlcolminfo c ON a.ColumnGUID = c.ColumnGUID AND c.InfoKey = 'exportOrder' AND c.InfoValue is not null
+		where moduleguid = @ModuleGUID
+		for xml path('')
+	),1,1,'')
+
+	declare @xmlParameterXML xml = (
+		select '<sqroot>' + (
+			select
+				'<field id="'+colKey+'"><value>#'+colKey+'#</value></field>'
+			from modlcolm a
+				inner join modlcolminfo b ON a.ColumnGUID = b.ColumnGUID AND b.InfoKey = 'exportParameter' AND b.InfoValue = '1'
+				left join modlcolminfo c ON a.ColumnGUID = c.ColumnGUID AND c.InfoKey = 'exportOrder' AND c.InfoValue is not null
+			where moduleguid = @ModuleGUID
+			for xml path('')
+		) + '</sqroot>'
+		for xml path('')
+	)
+
+	declare @xmlForm xml = (
+		select 
+			exportOrder [@rowNo], colKey [fields/field/@fieldName], 
+			CONVERT(xml, (case 
+				when x.colTypeX in (31) then
+					'<checkBox>'+'
+						<titleCaption>'+isNULL(titleCaption, colKey)+'</titleCaption>'+
+					'</checkBox>'
+				when x.colTypeX in (32) then
+					'<comboBox>'+
+						'<titleCaption>'+isNULL(titleCaption, colKey)+'</titleCaption>'+
+						'<comboId>'+isNULL(ComboFieldId, '')+'</comboId>' + 
+						'<comboKey>'+isNULL(ComboFieldKey, '')+'</comboKey>'+
+						'<comboName>'+isNULL(ComboFieldName, '')+'</comboName>' + 
+						'<comboTable>'+isNULL(ComboTable, '')+'</comboTable>' + 
+					'</comboBox>' 
+				when x.colTypeX in (41,42,43,44) then 
+					'<dateBox>'+
+						'<titleCaption>'+isNULL(titleCaption, colKey)+'</titleCaption>'+
+						'<dateType>'+cast(colType as varchar(5))+'</dateType>' + 
+						--'<value>'+CONVERT(varchar(50), GETDATE(), 101)+'</value>' + 
+					'</dateBox>'
+			end)) [fields/field]
+		from (
+			select titleCaption, colKey, colType, coltype.infovalue coltypeX, 
+				ComboFieldId.infovalue ComboFieldId, ComboFieldKey.infovalue ComboFieldKey, ComboFieldName.infovalue ComboFieldName, 
+				ComboTable.infovalue ComboTable, ISNULL(c.InfoValue, 0) [exportOrder]
+			from modlcolm a
+				inner join modlcolminfo b ON a.ColumnGUID = b.ColumnGUID AND b.InfoKey = 'exportParameter' AND b.InfoValue = '1'
+				left join modlcolminfo c ON a.ColumnGUID = c.ColumnGUID AND c.InfoKey = 'exportOrder' AND c.InfoValue is not null
+				left join modlcolminfo coltype ON a.ColumnGUID = coltype.ColumnGUID and coltype.infokey='coltype'
+				left join modlcolminfo ComboFieldId ON a.ColumnGUID = ComboFieldId.ColumnGUID and ComboFieldId.infokey='ComboFieldId'
+				left join modlcolminfo ComboFieldKey ON a.ColumnGUID = ComboFieldKey.ColumnGUID and ComboFieldKey.infokey='ComboFieldKey'
+				left join modlcolminfo ComboFieldName ON a.ColumnGUID = ComboFieldName.ColumnGUID and ComboFieldName.infokey='ComboFieldName'
+				left join modlcolminfo ComboTable ON a.ColumnGUID = ComboTable.ColumnGUID and ComboTable.infokey='ComboTable'
+			where moduleguid = @ModuleGUID
+		) x
+		order by [exportOrder]
+		for xml path('row'), type, root('rows')
+	) 
+
+	declare @xmlTable xml = (
+		select top 20 
+			ROW_NUMBER() over(order by CreatedDate DESC) [@no], eventGUID [@GUID],
+			CONVERT(varchar(20), CreatedDate, 113) [dates], 
+			case 
+				when substring(Comment, charindex('status:', Comment)+6, 12) like '%failure%' then 'failure'
+				when substring(Comment, charindex('status:', Comment)+6, 12) like '%error%' then 'error'
+				when substring(Comment, charindex('status:', Comment)+6, 12) like '%warning%' then 'warning'
+				when substring(Comment, charindex('status:', Comment)+6, 12) like '%attention%' then 'attention'
+				else 'success'
+			end [status],
+			substring(Comment, IIF(CHARINDEX('comment:', Comment)=0, '', 
+				CHARINDEX('comment:', Comment)+9), len(Comment)-CHARINDEX('comment:', Comment)
+			) [comment]
+		from evnt 
+		where CreatedUser = gen.getUserHost(@hostGUID) 
+			AND moduleGUID in (select moduleGUID from modl where ModuleID in (@code)) 
+			AND Comment like '%mode:upload%'
+		order by CreatedDate DESC
+		for xml path('row'), type, root('table')
+	)
+
+	declare @headerXML xml
+	--exec [api].[theme_header] @hostguid, @code, @headerXML output
+	
+	select 
+		@headerXML [header], 
+		@xmlInfo [body/bodyContent/info], 
+		@xmlParameter [body/bodyContent/parameters/parameter], 
+		@xmlParameterXML [body/bodyContent/parameters/xmlParameter], 
+		@xmlForm [body/bodyContent/form],
+		@xmlTable [body/bodyContent/tables]
+	for xml path('sqroot'), type
+

@@ -1,0 +1,49 @@
+
+CREATE procedure [core].[migrateData] @accountid nvarchar(50), @isdeldata bit=0, @isdebug bit=0
+as
+	declare @coreDB nvarchar(50)=db_name()
+	declare @dataDB nvarchar(50)
+
+	select @dataDB=DatabaseName
+	from acct a 
+		inner join acctdbse b on a.AccountGUID=b.AccountGUID
+	where isMaster=1 and b.version='4.0' and AccountId=@accountid 
+
+	DECLARE #cur1 CURSOR
+	READ_ONLY
+	FOR select servername, DatabaseName, [version], migrateDB  
+	from acct a 
+			inner join acctdbse b on a.AccountGUID=b.AccountGUID
+		where b.version<>'4.0' and AccountId=@accountid
+
+
+	DECLARE @svr nvarchar(50), @v3DB nvarchar(50), @ver nvarchar(10), @V4DB nvarchar(50)
+	OPEN #cur1
+
+	FETCH NEXT FROM #cur1 INTO @svr, @v3DB, @ver, @V4DB
+	WHILE (@@fetch_status <> -1)
+	BEGIN
+		IF (@@fetch_status <> -2)
+		BEGIN
+			select @v3DB
+			if @ver='2.0' exec [core].[migrateData_eachDB_v2_41] @accountid, @coreDB, @dataDB, @V4DB, @svr, @v3DB, @isdeldata, @isdebug
+			if @ver='2.1' exec [core].[migrateData_eachDB_v2_1_41] @accountid, @coreDB, @dataDB, @V4DB, @svr, @v3DB, @isdeldata, @isdebug
+			if @ver='3.0' exec [core].[migrateData_eachDB_v3_41] @accountid, @coreDB, @dataDB, @V4DB, @svr, @v3DB, @isdebug
+			--if @ver='3.0' exec [core].[migrateData_eachDB_v3] @accountid, @coreDB, @dataDB, @svr, @v3DB, isdebug
+		END
+		FETCH NEXT FROM #cur1 INTO @svr, @v3DB, @ver, @V4DB
+	END
+
+	CLOSE #cur1
+	DEALLOCATE #cur1
+
+	declare @sqlstr nvarchar(max)
+
+	set @sqlstr='
+		use '+@dataDB+'
+		if exists(select * from sys.objects where name=''migrateData_custom'') exec migrateData_custom'
+
+	exec sp_executesql @sqlstr
+
+
+

@@ -1,0 +1,23 @@
+
+
+-- Batch submitted through debugger: SQLQuery44.sql|5|0|C:\Users\ADMINI~1.LIB\AppData\Local\Temp\2\~vsEA58.sql
+CREATE procedure [gen].[acctinfo_save] @accountguid uniqueidentifier, @key nvarchar(50), @value nvarchar(max)
+as
+	if exists(select * from acctinfo where accountguid=@accountguid and infokey=@key)
+	begin
+		--update
+		update acctinfo
+		set Infovalue=@value
+		where accountguid=@accountguid and infokey=@key
+	end
+	else
+	begin
+		--insert
+		insert into acctinfo (accountguid, infokey, infovalue)
+		values (@accountguid, @key, @value)
+	end
+
+
+
+
+

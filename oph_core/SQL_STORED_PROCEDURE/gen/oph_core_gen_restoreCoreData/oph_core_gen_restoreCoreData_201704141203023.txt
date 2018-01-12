@@ -1,0 +1,413 @@
+CREATE procedure [gen].[restoreCoreData] @file nvarchar(1000), @isdebug bit=0
+as	
+	declare @sqlstr nvarchar(max), @sqlpar nvarchar(max)='@xmlData xml OUTPUT'
+	DECLARE @xmlData XML
+	set @sqlstr='
+		SET @xmlData = (
+		  SELECT * FROM OPENROWSET (
+			BULK '''+@file+''', SINGLE_CLOB
+		  ) AS xmlData
+		)'
+	exec sp_executesql @sqlstr, @sqlpar, @xmlData OUTPUT
+
+	if @isdebug=1 select @xmldata
+
+	--acct
+	insert acct 
+	select a.*
+	from (
+		SELECT 
+		  ref.value('AccountGUID[1]', 'uniqueidentifier') AS accountGUID ,
+		  ref.value('AccountId[1]', 'NVARCHAR(50)') AS accountid
+		FROM @xmlData.nodes('sqroot/tables/acct/rows') xmlData( ref )) a
+		left join acct b
+			on a.accountGUID=b.AccountGUID
+	where b.AccountGUID is null
+
+	--acctdbse
+	insert acctdbse
+	select a.*
+	from (
+		SELECT 
+		  ref.value('AccountDBGUID[1]', 'uniqueidentifier') AS accountDBGUID ,
+		  ref.value('AccountGUID[1]', 'NVARCHAR(50)') AS accountGUID,
+		  ref.value('DatabaseName[1]', 'NVARCHAR(50)') AS DatabaseName,
+		  ref.value('ODBC[1]', 'NVARCHAR(50)') AS ODBC,
+		  ref.value('isMaster[1]', 'NVARCHAR(50)') AS isMaster,
+		  ref.value('version[1]', 'NVARCHAR(50)') AS [version]
+		FROM @xmlData.nodes('sqroot/tables/acctdbse/rows') xmlData( ref )) a
+		left join acctdbse b
+			on a.accountDBGUID=b.AccountDBGUID
+	where b.AccountDBGUID is null
+
+	--acctinfo
+	insert acctinfo
+	select a.*
+	from (
+		SELECT 
+		  ref.value('AccountInfoGUID[1]', 'uniqueidentifier') AS AccountInfoGUID,
+		  ref.value('AccountGUID[1]', 'uniqueidentifier') AS accountGUID,
+		  ref.value('InfoKey[1]', 'NVARCHAR(50)') AS InfoKey,
+		  ref.value('InfoValue[1]', 'NVARCHAR(max)') AS InfoValue
+		FROM @xmlData.nodes('sqroot/tables/acctinfo/rows') xmlData( ref )) a
+		left join acctinfo b
+			on a.AccountInfoGUID=b.AccountInfoGUID
+	where b.AccountInfoGUID is null
+
+	--menu
+	insert menu
+	select a.*
+	from (
+		SELECT 
+		  ref.value('MenuGUID[1]', 'uniqueidentifier') AS MenuGUID,
+		  ref.value('AccountGUID[1]', 'uniqueidentifier') AS accountGUID,
+		  ref.value('MenuID[1]', 'int') AS MenuID,
+		  ref.value('MenuCode[1]', 'VARCHAR(50)') AS MenuCode,
+		  ref.value('MenuDescription[1]', 'NVARCHAR(50)') AS MenuDescription
+		FROM @xmlData.nodes('sqroot/tables/menu/rows') xmlData( ref )) a
+		left join menu b
+			on a.MenuGUID=b.MenuGUID
+	where b.MenuGUID is null
+
+	--menusmnu
+	insert menusmnu
+	select a.*
+	from (
+		SELECT 
+		  ref.value('MenuDetailGUID[1]', 'uniqueidentifier') AS MenuDetailGUID,
+		  ref.value('MenuGUID[1]', 'uniqueidentifier') AS MenuGUID,
+		  ref.value('SubMenuDescription[1]', 'VARCHAR(50)') AS SubMenuDescription,
+		  ref.value('Tag[1]', 'NVARCHAR(50)') AS Tag,
+		  ref.value('URL[1]', 'NVARCHAR(500)') AS URL,
+		  ref.value('OrderNo[1]', 'int') AS OrderNo,
+		  ref.value('caption[1]', 'NVARCHAR(50)') AS caption,
+		  ref.value('type[1]', 'NVARCHAR(20)') AS [type],
+		  ref.value('upperSubmenuGUID[1]', 'uniqueidentifier') AS upperSubmenuGUID,
+		  ref.value('icon_fa[1]', 'NVARCHAR(50)') AS icon_fa,
+		  ref.value('icon_url[1]', 'NVARCHAR(50)') AS icon_url
+		FROM @xmlData.nodes('sqroot/tables/menusmnu/rows') xmlData( ref )) a
+		left join menusmnu b
+			on a.MenuDetailGUID=b.MenuDetailGUID
+	where b.MenuDetailGUID is null
+
+			
+		--modg
+		insert modg
+		select a.*
+		from (
+			SELECT 
+			  ref.value('ModuleGroupGUID[1]', 'uniqueidentifier') AS ModuleGroupGUID, ref.value('AccountGUID[1]', 'NVARCHAR(max)') AS AccountGUID, ref.value('ModuleGroupID[1]', 'NVARCHAR(max)') AS ModuleGroupID, ref.value('ModuleGroupName[1]', 'NVARCHAR(max)') AS ModuleGroupName, ref.value('ModuleGroupDescription[1]', 'NVARCHAR(max)') AS ModuleGroupDescription, ref.value('AccountDBGUID[1]', 'NVARCHAR(max)') AS AccountDBGUID, ref.value('ImagePath[1]', 'NVARCHAR(max)') AS ImagePath, ref.value('SortOrder[1]', 'NVARCHAR(max)') AS SortOrder, ref.value('isDefault[1]', 'NVARCHAR(max)') AS isDefault
+			FROM @xmlData.nodes('sqroot/tables/modg/rows') xmlData( ref )) a
+			left join modg b
+				on a.ModuleGroupGUID=b.ModuleGroupGUID
+		where b.ModuleGroupGUID is null
+			
+		--modginfo
+		insert modginfo
+		select a.*
+		from (
+			SELECT 
+			  ref.value('EnvInfoGUID[1]', 'uniqueidentifier') AS EnvInfoGUID, ref.value('AccountGUID[1]', 'NVARCHAR(max)') AS AccountGUID, ref.value('EnvGUID[1]', 'NVARCHAR(max)') AS EnvGUID, ref.value('InfoKey[1]', 'NVARCHAR(max)') AS InfoKey, ref.value('InfoValue[1]', 'NVARCHAR(max)') AS InfoValue
+			FROM @xmlData.nodes('sqroot/tables/modginfo/rows') xmlData( ref )) a
+			left join modginfo b
+				on a.EnvInfoGUID=b.EnvInfoGUID
+		where b.EnvInfoGUID is null
+			
+		--modgmodl
+		insert modgmodl
+		select a.*
+		from (
+			SELECT 
+			  ref.value('ModuleGroupMODLGUID[1]', 'uniqueidentifier') AS ModuleGroupMODLGUID, ref.value('ModuleGroupGUID[1]', 'NVARCHAR(max)') AS ModuleGroupGUID, ref.value('ModuleGUID[1]', 'NVARCHAR(max)') AS ModuleGUID, ref.value('PageURL[1]', 'NVARCHAR(max)') AS PageURL, ref.value('OrderNumber[1]', 'NVARCHAR(max)') AS OrderNumber, ref.value('SectionName[1]', 'NVARCHAR(max)') AS SectionName, ref.value('CountAccess[1]', 'NVARCHAR(max)') AS CountAccess, ref.value('isHeader[1]', 'NVARCHAR(max)') AS isHeader
+			FROM @xmlData.nodes('sqroot/tables/modgmodl/rows') xmlData( ref )) a
+			left join modgmodl b
+				on a.ModuleGroupMODLGUID=b.ModuleGroupMODLGUID
+		where b.ModuleGroupMODLGUID is null
+			
+		--modl
+		insert modl
+		select a.*
+		from (
+			SELECT 
+			  ref.value('ModuleGUID[1]', 'uniqueidentifier') AS ModuleGUID, ref.value('AccountGUID[1]', 'NVARCHAR(max)') AS AccountGUID, ref.value('ModuleID[1]', 'NVARCHAR(max)') AS ModuleID, ref.value('ModuleDescription[1]', 'NVARCHAR(max)') AS ModuleDescription, ref.value('settingMode[1]', 'NVARCHAR(max)') AS settingMode, ref.value('AccountDBGUID[1]', 'NVARCHAR(max)') AS AccountDBGUID, ref.value('ParentModuleGUID[1]', 'NVARCHAR(max)') AS ParentModuleGUID, ref.value('OrderNo[1]', 'NVARCHAR(max)') AS OrderNo, ref.value('needLogin[1]', 'NVARCHAR(max)') AS needLogin, ref.value('ThemePageGUID[1]', 'NVARCHAR(max)') AS ThemePageGUID
+			FROM @xmlData.nodes('sqroot/tables/modl/rows') xmlData( ref )) a
+			left join modl b
+				on a.ModuleGUID=b.ModuleGUID
+		where b.ModuleGUID is null
+			
+		--modlappr
+		insert modlappr
+		select a.*
+		from (
+			SELECT 
+			  ref.value('ApprovalGUID[1]', 'uniqueidentifier') AS ApprovalGUID, ref.value('ModuleGUID[1]', 'NVARCHAR(max)') AS ModuleGUID, ref.value('ApprovalGroupGUID[1]', 'NVARCHAR(max)') AS ApprovalGroupGUID, ref.value('UpperGroupGUID[1]', 'NVARCHAR(max)') AS UpperGroupGUID, ref.value('BottomGroupGUID[1]', 'NVARCHAR(max)') AS BottomGroupGUID, ref.value('Lvl[1]', 'NVARCHAR(max)') AS Lvl, ref.value('SQLfilter[1]', 'NVARCHAR(max)') AS SQLfilter, ref.value('ZoneGroup[1]', 'NVARCHAR(max)') AS ZoneGroup
+			FROM @xmlData.nodes('sqroot/tables/modlappr/rows') xmlData( ref )) a
+			left join modlappr b
+				on a.ApprovalGUID=b.ApprovalGUID
+		where b.ApprovalGUID is null
+			
+		--modlcolm
+		insert modlcolm
+		select a.*
+		from (
+			SELECT 
+			  ref.value('ColumnGUID[1]', 'uniqueidentifier') AS ColumnGUID, ref.value('ModuleGUID[1]', 'NVARCHAR(max)') AS ModuleGUID, ref.value('colKey[1]', 'NVARCHAR(max)') AS colKey, ref.value('colType[1]', 'NVARCHAR(max)') AS colType, ref.value('colOrder[1]', 'NVARCHAR(max)') AS colOrder, ref.value('titlecaption[1]', 'NVARCHAR(max)') AS titlecaption
+			FROM @xmlData.nodes('sqroot/tables/modlcolm/rows') xmlData( ref )) a
+			left join modlcolm b
+				on a.ColumnGUID=b.ColumnGUID
+		where b.ColumnGUID is null
+			
+		--modlcolminfo
+		insert modlcolminfo
+		select a.*
+		from (
+			SELECT 
+			  ref.value('ColumnInfoGUID[1]', 'uniqueidentifier') AS ColumnInfoGUID, ref.value('ColumnGUID[1]', 'NVARCHAR(max)') AS ColumnGUID, ref.value('InfoKey[1]', 'NVARCHAR(max)') AS InfoKey, ref.value('InfoValue[1]', 'NVARCHAR(max)') AS InfoValue
+			FROM @xmlData.nodes('sqroot/tables/modlcolminfo/rows') xmlData( ref )) a
+			left join modlcolminfo b
+				on a.ColumnInfoGUID=b.ColumnInfoGUID
+		where b.ColumnInfoGUID is null
+			
+		--modldocn
+		insert modldocn
+		select a.*
+		from (
+			SELECT 
+			  ref.value('DocNumberGUID[1]', 'uniqueidentifier') AS DocNumberGUID, ref.value('ModuleGUID[1]', 'NVARCHAR(max)') AS ModuleGUID, ref.value('Format[1]', 'NVARCHAR(max)') AS Format, ref.value('Month[1]', 'NVARCHAR(max)') AS Month, ref.value('No[1]', 'NVARCHAR(max)') AS No
+			FROM @xmlData.nodes('sqroot/tables/modldocn/rows') xmlData( ref )) a
+			left join modldocn b
+				on a.DocNumberGUID=b.DocNumberGUID
+		where b.DocNumberGUID is null
+			
+		--modlinfo
+		insert modlinfo
+		select a.*
+		from (
+			SELECT 
+			  ref.value('ModuleInfoGUID[1]', 'uniqueidentifier') AS ModuleInfoGUID, ref.value('ModuleGUID[1]', 'NVARCHAR(max)') AS ModuleGUID, ref.value('InfoKey[1]', 'NVARCHAR(max)') AS InfoKey, ref.value('InfoValue[1]', 'NVARCHAR(max)') AS InfoValue
+			FROM @xmlData.nodes('sqroot/tables/modlinfo/rows') xmlData( ref )) a
+			left join modlinfo b
+				on a.ModuleInfoGUID=b.ModuleInfoGUID
+		where b.ModuleInfoGUID is null
+			
+		--modlqury
+		insert modlqury
+		select a.*
+		from (
+			SELECT 
+			  ref.value('QueryGUID[1]', 'uniqueidentifier') AS QueryGUID, ref.value('ModuleGUID[1]', 'NVARCHAR(max)') AS ModuleGUID, ref.value('QueryTypeFlag[1]', 'NVARCHAR(max)') AS QueryTypeFlag, ref.value('AllowPDF[1]', 'NVARCHAR(max)') AS AllowPDF, ref.value('PDFTitleName[1]', 'NVARCHAR(max)') AS PDFTitleName, ref.value('AllowXLS[1]', 'NVARCHAR(max)') AS AllowXLS, ref.value('XLSTitleName[1]', 'NVARCHAR(max)') AS XLSTitleName, ref.value('AllowUpload[1]', 'NVARCHAR(max)') AS AllowUpload, ref.value('UploadFolder[1]', 'NVARCHAR(max)') AS UploadFolder, ref.value('QuerySQL[1]', 'NVARCHAR(max)') AS QuerySQL, ref.value('templateCode[1]', 'NVARCHAR(max)') AS templateCode
+			FROM @xmlData.nodes('sqroot/tables/modlqury/rows') xmlData( ref )) a
+			left join modlqury b
+				on a.QueryGUID=b.QueryGUID
+		where b.QueryGUID is null
+			
+		--modlstat
+		insert modlstat
+		select a.*
+		from (
+			SELECT 
+			  ref.value('ModuleStatusGUID[1]', 'uniqueidentifier') AS ModuleStatusGUID, ref.value('ModuleGUID[1]', 'NVARCHAR(max)') AS ModuleGUID, ref.value('StateID[1]', 'NVARCHAR(max)') AS StateID, ref.value('StateCode[1]', 'NVARCHAR(max)') AS StateCode, ref.value('StateDesc[1]', 'NVARCHAR(max)') AS StateDesc, ref.value('StateName[1]', 'NVARCHAR(max)') AS StateName, ref.value('isDefault[1]', 'NVARCHAR(max)') AS isDefault
+			FROM @xmlData.nodes('sqroot/tables/modlstat/rows') xmlData( ref )) a
+			left join modlstat b
+				on a.ModuleStatusGUID=b.ModuleStatusGUID
+		where b.ModuleStatusGUID is null
+		
+		--qury
+		insert qury
+		select a.*
+		from (
+			SELECT 
+			  ref.value('QueryGUID[1]', 'uniqueidentifier') AS QueryGUID, ref.value('AccountGUID[1]', 'NVARCHAR(max)') AS AccountGUID, ref.value('ModuleGUID[1]', 'NVARCHAR(max)') AS ModuleGUID, ref.value('QueryTypeFlag[1]', 'NVARCHAR(max)') AS QueryTypeFlag, ref.value('AllowPDF[1]', 'NVARCHAR(max)') AS AllowPDF, ref.value('PDFTitleName[1]', 'NVARCHAR(max)') AS PDFTitleName, ref.value('AllowXLS[1]', 'NVARCHAR(max)') AS AllowXLS, ref.value('XLSTitleName[1]', 'NVARCHAR(max)') AS XLSTitleName, ref.value('AllowUpload[1]', 'NVARCHAR(max)') AS AllowUpload, ref.value('UploadFolder[1]', 'NVARCHAR(max)') AS UploadFolder, ref.value('QuerySQL[1]', 'NVARCHAR(max)') AS QuerySQL, ref.value('templateCode[1]', 'NVARCHAR(max)') AS templateCode
+			FROM @xmlData.nodes('sqroot/tables/qury/rows') xmlData( ref )) a
+			left join qury b
+				on a.QueryGUID=b.QueryGUID
+		where b.QueryGUID is null
+			
+		--quryinfo
+		insert quryinfo
+		select a.*
+		from (
+			SELECT 
+			  ref.value('QueryInfoGUID[1]', 'uniqueidentifier') AS QueryInfoGUID, ref.value('QueryGUID[1]', 'NVARCHAR(max)') AS QueryGUID, ref.value('InfoKey[1]', 'NVARCHAR(max)') AS InfoKey, ref.value('InfoValue[1]', 'NVARCHAR(max)') AS InfoValue
+			FROM @xmlData.nodes('sqroot/tables/quryinfo/rows') xmlData( ref )) a
+			left join quryinfo b
+				on a.QueryInfoGUID=b.QueryInfoGUID
+		where b.QueryInfoGUID is null
+			
+		--qurypara
+		insert qurypara
+		select a.*
+		from (
+			SELECT 
+			  ref.value('QueryParameterGUID[1]', 'uniqueidentifier') AS QueryParameterGUID, ref.value('QueryGUID[1]', 'NVARCHAR(max)') AS QueryGUID, ref.value('ID[1]', 'NVARCHAR(max)') AS ID, ref.value('OrderNo[1]', 'NVARCHAR(max)') AS OrderNo, ref.value('QueryParName[1]', 'NVARCHAR(max)') AS QueryParName, ref.value('QueryParCaption[1]', 'NVARCHAR(max)') AS QueryParCaption, ref.value('QueryParWidth[1]', 'NVARCHAR(max)') AS QueryParWidth, ref.value('QueryParTypeFlag[1]', 'NVARCHAR(max)') AS QueryParTypeFlag, ref.value('isText[1]', 'NVARCHAR(max)') AS isText, ref.value('isDate[1]', 'NVARCHAR(max)') AS isDate, ref.value('isYear[1]', 'NVARCHAR(max)') AS isYear, ref.value('isMonth[1]', 'NVARCHAR(max)') AS isMonth, ref.value('isDay[1]', 'NVARCHAR(max)') AS isDay, ref.value('isCheckBox[1]', 'NVARCHAR(max)') AS isCheckBox, ref.value('isSuggestBox[1]', 'NVARCHAR(max)') AS isSuggestBox, ref.value('SuggestBoxFieldKey[1]', 'NVARCHAR(max)') AS SuggestBoxFieldKey, ref.value('SuggestBoxFieldId[1]', 'NVARCHAR(max)') AS SuggestBoxFieldId, ref.value('SuggestBoxFieldDesc[1]', 'NVARCHAR(max)') AS SuggestBoxFieldDesc, ref.value('SuggestBoxSQL[1]', 'NVARCHAR(max)') AS SuggestBoxSQL, ref.value('TableName[1]', 'NVARCHAR(max)') AS TableName, ref.value('whereField[1]', 'NVARCHAR(max)') AS whereField, ref.value('whereField2[1]', 'NVARCHAR(max)') AS whereField2
+			FROM @xmlData.nodes('sqroot/tables/qurypara/rows') xmlData( ref )) a
+			left join qurypara b
+				on a.QueryParameterGUID=b.QueryParameterGUID
+		where b.QueryParameterGUID is null
+		
+		--thme
+		insert thme
+		select a.*
+		from (
+			SELECT 
+			  ref.value('ThemeGUID[1]', 'uniqueidentifier') AS ThemeGUID, ref.value('AccountGUID[1]', 'NVARCHAR(max)') AS AccountGUID, ref.value('ThemeCode[1]', 'NVARCHAR(max)') AS ThemeCode, ref.value('ThemeName[1]', 'NVARCHAR(max)') AS ThemeName, ref.value('ThemeFolder[1]', 'NVARCHAR(max)') AS ThemeFolder
+			FROM @xmlData.nodes('sqroot/tables/thme/rows') xmlData( ref )) a
+			left join thme b
+				on a.ThemeGUID=b.ThemeGUID
+		where b.ThemeGUID is null
+			
+		--thmepage
+		insert thmepage
+		select a.*
+		from (
+			SELECT 
+			  ref.value('ThemePageGUID[1]', 'uniqueidentifier') AS ThemePageGUID, ref.value('ThemeGUID[1]', 'NVARCHAR(max)') AS ThemeGUID, ref.value('pageXML[1]', 'NVARCHAR(max)') AS pageXML, ref.value('pageURL[1]', 'NVARCHAR(max)') AS pageURL, ref.value('isDefault[1]', 'NVARCHAR(max)') AS isDefault
+			FROM @xmlData.nodes('sqroot/tables/thmepage/rows') xmlData( ref )) a
+			left join thmepage b
+				on a.ThemePageGUID=b.ThemePageGUID
+		where b.ThemePageGUID is null
+			
+		--ugrp
+		insert ugrp
+		select a.*
+		from (
+			SELECT 
+			  ref.value('UGroupGUID[1]', 'uniqueidentifier') AS UGroupGUID, ref.value('AccountGUID[1]', 'NVARCHAR(max)') AS AccountGUID, ref.value('GroupID[1]', 'NVARCHAR(max)') AS GroupID, ref.value('GroupDescription[1]', 'NVARCHAR(max)') AS GroupDescription, ref.value('TokenUser[1]', 'NVARCHAR(max)') AS TokenUser
+			FROM @xmlData.nodes('sqroot/tables/ugrp/rows') xmlData( ref )) a
+			left join ugrp b
+				on a.UGroupGUID=b.UGroupGUID
+		where b.UGroupGUID is null
+			
+		--ugrpinfo
+		insert ugrpinfo
+		select a.*
+		from (
+			SELECT 
+			  ref.value('UGroupInfoGUID[1]', 'uniqueidentifier') AS UGroupInfoGUID, 
+			  ref.value('UGroupGUID[1]', 'NVARCHAR(max)') AS UGroupGUID, ref.value('InfoKey[1]', 'NVARCHAR(max)') AS InfoKey, 
+			  ref.value('InfoValue[1]', 'NVARCHAR(max)') AS InfoValue
+			FROM @xmlData.nodes('sqroot/tables/ugrpinfo/rows') xmlData( ref )) a
+			left join ugrpinfo b
+				on a.UGroupInfoGUID=b.UGroupInfoGUID
+		where b.UGroupInfoGUID is null
+			
+		--ugrpmodg
+		insert ugrpmodg
+		select a.*
+		from (
+			SELECT 
+			  ref.value('AccessMGGUID[1]', 'uniqueidentifier') AS AccessMGGUID, ref.value('UGroupGUID[1]', 'NVARCHAR(max)') AS UGroupGUID, ref.value('ModuleGroupGUID[1]', 'NVARCHAR(max)') AS ModuleGroupGUID, ref.value('AllowAccess[1]', 'NVARCHAR(max)') AS AllowAccess
+			FROM @xmlData.nodes('sqroot/tables/ugrpmodg/rows') xmlData( ref )) a
+			left join ugrpmodg b
+				on a.AccessMGGUID=b.AccessMGGUID
+		where b.AccessMGGUID is null
+			
+		--ugrpmodl
+		insert ugrpmodl
+		select a.*
+		from (
+			SELECT 
+			  ref.value('AccessGUID[1]', 'uniqueidentifier') AS AccessGUID, ref.value('UGroupGUID[1]', 'NVARCHAR(max)') AS UGroupGUID, ref.value('ModuleGUID[1]', 'NVARCHAR(max)') AS ModuleGUID, ref.value('AllowBrowse[1]', 'NVARCHAR(max)') AS AllowBrowse, ref.value('AllowAdd[1]', 'NVARCHAR(max)') AS AllowAdd, ref.value('AllowEdit[1]', 'NVARCHAR(max)') AS AllowEdit
+			FROM @xmlData.nodes('sqroot/tables/ugrpmodl/rows') xmlData( ref )) a
+			left join ugrpmodl b
+				on a.AccessGUID=b.AccessGUID
+		where b.AccessGUID is null
+			
+		--ugrpuser
+		insert ugrpuser
+		select a.*
+		from (
+			SELECT 
+			  ref.value('UserUGroupGUID[1]', 'uniqueidentifier') AS UserUGroupGUID, ref.value('UGroupGUID[1]', 'NVARCHAR(max)') AS UGroupGUID, ref.value('MemberFlag[1]', 'NVARCHAR(max)') AS MemberFlag, ref.value('isUser[1]', 'NVARCHAR(max)') AS isUser, ref.value('MemberUserGUID[1]', 'NVARCHAR(max)') AS MemberUserGUID, ref.value('isGroup[1]', 'NVARCHAR(max)') AS isGroup, ref.value('MemberGroupGUID[1]', 'NVARCHAR(max)') AS MemberGroupGUID
+			FROM @xmlData.nodes('sqroot/tables/ugrpuser/rows') xmlData( ref )) a
+			left join ugrpuser b
+				on a.UserUGroupGUID=b.UserUGroupGUID
+		where b.UserUGroupGUID is null
+			
+		--ugrpuserallu
+		--insert ugrpuserallu
+		--select a.*
+		--from (
+		--	SELECT 
+		--	  ref.value('UserUGroupGUID[1]', 'uniqueidentifier') AS UserUGroupGUID, ref.value('UGroupGUID[1]', 'NVARCHAR(max)') AS UGroupGUID, ref.value('MemberUserGUID[1]', 'NVARCHAR(max)') AS MemberUserGUID
+		--	FROM @xmlData.nodes('sqroot/tables/ugrpuserallu/rows') xmlData( ref )) a
+
+		--	left join ugrpuserallu b
+		--		on a.UserUGroupGUID=b.UserUGroupGUID
+		--where b.UserUGroupGUID is null
+			
+		--user
+		insert [user] (UserGUID, AccountGUID, UserID, UserName, Email, AutoLogin, LastLogin)
+		select a.*
+		from (
+			SELECT 
+			  ref.value('UserGUID[1]', 'uniqueidentifier') AS UserGUID, ref.value('AccountGUID[1]', 'NVARCHAR(max)') AS AccountGUID, ref.value('UserID[1]', 'NVARCHAR(max)') AS UserID, ref.value('UserName[1]', 'NVARCHAR(max)') AS UserName, ref.value('Email[1]', 'NVARCHAR(max)') AS Email, 
+			  ref.value('AutoLogin[1]', 'NVARCHAR(max)') AS AutoLogin, ref.value('LastLogin[1]', 'NVARCHAR(max)') AS LastLogin
+			FROM @xmlData.nodes('sqroot/tables/user/rows') xmlData( ref )) a
+			left join [user] b
+				on a.UserGUID=b.UserGUID
+		where b.UserGUID is null
+			
+		--userdele
+		insert userdele
+		select a.*
+		from (
+			SELECT 
+			  ref.value('UserDelegateGUID[1]', 'uniqueidentifier') AS UserDelegateGUID, ref.value('UserGUID[1]', 'NVARCHAR(max)') AS UserGUID, ref.value('DelegateGUID[1]', 'NVARCHAR(max)') AS DelegateGUID, ref.value('EnvironmentGUID[1]', 'NVARCHAR(max)') AS EnvironmentGUID, ref.value('ModuleGUID[1]', 'NVARCHAR(max)') AS ModuleGUID
+			FROM @xmlData.nodes('sqroot/tables/userdele/rows') xmlData( ref )) a
+			left join userdele b
+				on a.UserDelegateGUID=b.UserDelegateGUID
+		where b.UserDelegateGUID is null
+			
+		--userhost
+		--insert userhost
+		--select a.*
+		--from (
+		--	SELECT 
+		--	  ref.value('UserHostGUID[1]', 'uniqueidentifier') AS UserHostGUID, ref.value('UserGUID[1]', 'NVARCHAR(max)') AS UserGUID, ref.value('HostGUID[1]', 'NVARCHAR(max)') AS HostGUID, ref.value('DelegateUserGUID[1]', 'NVARCHAR(max)') AS DelegateUserGUID, ref.value('accountGUID[1]', 'NVARCHAR(max)') AS accountGUID
+		--	FROM @xmlData.nodes('sqroot/tables/userhost/rows') xmlData( ref )) a
+		--	left join userhost b
+		--		on a.UserHostGUID=b.UserHostGUID
+		--where b.UserHostGUID is null
+			
+		--userinfo
+		insert userinfo
+		select a.*
+		from (
+			SELECT 
+			  ref.value('UserInfoGUID[1]', 'uniqueidentifier') AS UserInfoGUID, ref.value('UserGUID[1]', 'NVARCHAR(max)') AS UserGUID, ref.value('InfoKey[1]', 'NVARCHAR(max)') AS InfoKey, ref.value('InfoValue[1]', 'NVARCHAR(max)') AS InfoValue
+			FROM @xmlData.nodes('sqroot/tables/userinfo/rows') xmlData( ref )) a
+			left join userinfo b
+				on a.UserInfoGUID=b.UserInfoGUID
+		where b.UserInfoGUID is null
+
+	--creator insert 
+	--select '	
+	--	--'+a.name+'
+	--	--insert '+a.name+'
+	--	select a.*
+	--	from (
+	--		SELECT 
+	--		  ref.value('''+b.name+'[1]'', ''uniqueidentifier'') AS '+b.name,
+	--		(	select ', ref.value('''+c.name+'[1]'', ''NVARCHAR(max)'') AS '+c.name
+	--			from sys.columns c
+	--			where c.object_id=a.object_id and c.column_id&amp;gt;1
+	--			for xml path('')
+	--		),
+	--		'
+	--		FROM @xmlData.nodes(''sqroot/tables/'+a.name+'/rows'') xmlData( ref )) a
+	--		left join '+a.name+' b
+	--			on a.'+b.name+'=b.'+b.name+'
+	--	--where b.'+b.name+' is null
+	--	'
+	--from sys.objects a
+	--	inner join sys.columns b 
+	--		on a.object_id=b.object_id and b.column_id=1	
+	--where type='U'
+	--order by a.name
+	--for xml path('')
+
+		
+
+
+

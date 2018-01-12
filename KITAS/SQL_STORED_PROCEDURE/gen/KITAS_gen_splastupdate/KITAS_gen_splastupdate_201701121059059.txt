@@ -1,0 +1,19 @@
+
+
+
+CREATE procedure [gen].[splastupdate]
+as
+	--select * from sysobjects
+	select CHARINDEX('--automatic', text), * 
+	from sys.objects a
+		inner join syscomments b
+			on a.object_id=b.id
+	where type='P'
+		and CHARINDEX('--automatic', text)=0
+		and colid=1
+	order by modify_date desc
+
+
+
+
+

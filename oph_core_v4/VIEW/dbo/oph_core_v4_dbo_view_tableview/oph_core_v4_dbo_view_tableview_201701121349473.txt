@@ -1,0 +1,6 @@
+CREATE VIEW dbo.view_tableview
+AS
+SELECT        b.InfoKey, b.InfoValue, a.ColumnGUID, a.ModuleGUID, a.colNo, a.colKey, a.colType, a.colOrder
+FROM            dbo.modlcolm AS a LEFT OUTER JOIN
+                         dbo.modlcolminfo AS b ON a.ColumnGUID = b.ColumnGUID
+

@@ -1,0 +1,84 @@
+CREATE procedure [api].[save_insert] @hostGUID uniqueidentifier, @code varchar(50), @GUID uniqueidentifier, @saveList as api.fieldList READONLY, @msg varchar(max) OUTPUT, @isDebug bit=0
+as
+
+	declare @ver varchar(10), @settingMode nvarchar(1)='', @accountid varchar(50)
+	select @settingmode = api.settingmode(settingmode), @ver=b.[version], @accountid=d.accountid
+	--select * 
+	from modl a
+		inner join acctdbse	b 
+					on a.accountdbguid=b.accountdbguid
+		inner join acct d
+			on d.accountGUID=a.AccountGUID
+		inner join [user] e
+			on e.AccountGUID=d.AccountGUID
+		inner join userhost c
+			on c.userguid=e.UserGUID
+	where ModuleID=@code and c.HostGUId=@hostGUID
+
+	declare @db varchar(50)=api.fn_checkDB(@accountid, @code)
+	declare @dbcode varchar(100)=@code
+	if @ver='3.0' set @dbcode=@db+'.dbo.'+@settingMode+'o'+substring(@code,3,len(@code)-2)
+
+	declare @primaryCol varchar(50)
+	exec [api].[getPrimaryKey] @accountid, @code, @primaryCol OUTPUT
+
+	declare @userGUID uniqueidentifier
+	--select @userGUID=isnull(userGUID,dbo.ZeroGUID()) from userhost where hostguid=@hostguid
+
+	--set @userguid = isnull(@userGUID,dbo.ZeroGUID())
+		
+	set @userGUID  = isnull(gen.getUserHost(@HostGUID), dbo.OPHGUID())
+
+	if @isdebug = 1 select stuff((select ', '''+fieldValue+''''from @saveList	where fieldid<>'cid' order by fieldid for xml  path('')), 1, 2, '')+', '''+cast(@userGUID as varchar(50))+''')'
+
+	declare @docno nvarchar(max)
+	declare @sqlstr nvarchar(max) ='exec '+@db+'.gen.getNumber '''+@code+''','''+convert(nvarchar(max),getdate())+''', 0, @docno output'
+	exec sp_executesql @sqlstr,N'@docno nvarchar(max) output',@docno output
+
+	declare @docNoName nvarchar(max)
+	exec [api].[getPrimaryCol] @accountid, @code, 3, @docNoName OUTPUT
+
+	set @sqlstr = N'insert into '+@dbcode+' ('+@primaryCol+ case when isnull(@docNoName, '') != '' then + ', '+ @docNoName+', 'else ', ' end + 
+		stuff(
+			(select ', '+fieldid
+			from @saveList
+			where  fieldValue is not null
+			order by fieldid
+			for xml  path('')), 1, 2, '')+', createdUser) '+
+			
+		'values ('''+convert(nvarchar(max),@guid)+''''+case when isnull(@docNoName, '') != '' then +', '''+@docno+''', ' else ', ' end +
+		stuff(
+			(select case when fieldValue<>'' then ', '''+fieldValue+'''' else ', NULL' end
+			from @saveList
+			
+			order by fieldid		
+			for xml  path('')), 1, 2, '')+', '''+cast(@userGUID as varchar(50))+''')'
+
+		if @isdebug=1 print @sqlstr
+
+	declare @sqlpar nvarchar(max) = N'@msg varchar(max) OUTPUT'
+	set @sqlstr='
+		begin try
+		'+@sqlstr+'
+		end try
+		begin catch
+			set @msg=error_message()
+		end catch'		
+		
+	if @isDebug=1 select @dbcode,@primaryCol, @docNoName, @docno, @GUID, @sqlstr,@sqlpar
+	exec sp_executesql @sqlstr, @sqlpar, @msg OUTPUT
+	
+	if @isdebug=1 print @sqlstr
+	
+
+	if @msg=''
+	set @msg =convert(nvarchar(max),@GUID)
+
+
+
+
+
+
+
+
+

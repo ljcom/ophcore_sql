@@ -1,0 +1,64 @@
+
+
+CREATE procedure [gen].[storeTableViewType]
+--WITH ENCRPYTION
+as
+	declare @xml xml
+	set @xml=(
+		select (
+			select name, 
+				(
+					select name, system_type_id, max_length 
+					from sys.columns b
+					where a.type_table_object_id=b.object_id
+					for xml path('column'), type
+				) columns 
+			from sys.table_types a
+			for xml path('type'), type) types,
+				(
+			select name, 
+				(
+					select name, system_type_id, max_length 
+					from sys.columns b
+					where a.object_id=b.object_id
+					for xml path('column'), type
+				) columns 
+			from sys.objects a
+			where type='U'
+			for xml path('table'), type) tables,
+				(
+			select name, 
+				(
+					select name, system_type_id, max_length 
+					from sys.columns b
+					where a.object_id=b.object_id
+					for xml path('column'), type
+				) columns 
+			from sys.objects a
+			where type='V'
+			for xml path('view'), type) views
+		for xml path('sqroot')
+	)
+
+	if exists(select * from tempdb.sys.objects where name='##script') drop table ##script
+
+	select @xml sqlData into ##script
+	
+	declare @folder varchar(100), @file varchar(100), @cmd nvarchar(1000)
+
+	set @folder='D:\vsOnline\OPERAHOUSE\scripts\'+DB_NAME()+'\TABLES\'+DB_NAME()+'_tables'
+	set @file=DB_NAME()+'_tables_'+replace(convert(varchar(10), getdate(),102),'.','')+replace(convert(varchar(10), getdate(),114),':','')+'.xml'
+
+	exec gen.cmdCreateFolders @folder
+
+	if dbo.fn_checkFile(@folder+'\'+@file)=0
+	begin
+		--select @cmd = 'osql -E -d'+db_name()+' -Q"select sqltext ''--script'' from ##script" -o"'+@folder+'\'+@file+'" -w500'
+		select @cmd = 'bcp "select sqldata from ##script" queryout "'+@folder+'\'+@file+'" -c -T -d'+db_name()
+		print @cmd
+		exec master..xp_cmdshell @cmd
+	end
+
+
+
+

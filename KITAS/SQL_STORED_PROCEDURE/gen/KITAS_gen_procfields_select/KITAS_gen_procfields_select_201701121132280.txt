@@ -1,0 +1,137 @@
+
+CREATE procedure [gen].[procfields_select] @tableName varchar(50), @selectstr varchar(8000) OUTPUT, 
+	@newstr varchar(8000) OUTPUT, @liststr varchar(8000) OUTPUT
+as
+--b 20111122
+
+	declare @colName varchar(50), @colOrder int, @isbrowsable bit, @comboType int, @comboFieldName varchar(50), 
+		@comboFieldNameEx1 varchar(50), @comboFieldNameEx2 varchar(50), @comboFieldId varchar(50),
+		@colTitle varchar(50), @colWidth int, @colWidthText varchar(5), @colAlign tinyint, @searchable bit
+	declare @viewable bit, @iseditable int
+
+	set @selectstr = ''
+	set @liststr = ''
+	set @newstr = ''
+		
+	DECLARE curD CURSOR
+	   FOR 	select a.colname, a.colOrder, 
+			isBrowsable, comboType, ComboFieldName, ComboFieldNameEx1, ComboFieldNameEx2, ComboFieldId, 
+			case when len(isnull(TitleShort, ''))&gt;0 then TitleShort when len(isnull(TitleCaption, ''))&gt;0 then TitleCaption else ColName end, 
+			case when ViewColWidth &lt; 50 then ViewColWidth else 50 end, ViewcolAlign, 
+			case when a.xtype in (175, 239, 231, 167) then 1 else 0 end Searchable, isViewable, iseditable
+		--from sysobjects
+		--	inner join syscolumns
+		--		on sysobjects.id = syscolumns.id
+		--	inner join systypes 
+		--		on syscolumns.xtype =  systypes.xtype 
+		--		and syscolumns.xusertype =  systypes.xusertype 
+		--	inner join systypes x
+		--		on x.xtype = systypes.xtype
+		--		and x.xtype = x.xusertype 				
+		from gen.cotabl b
+			--	on sysobjects.name=b.tablename
+			inner join gen.cotablfiel a
+				--on gen.cotablfiel.colname = syscolumns.name
+				on a.tableGUID = b.tableGUID
+		where b.tablename = @TableName and isViewable&gt;=1
+		order by viewpageno, viewrowno, viewcolno, vieworderno
+
+	OPEN curD
+	FETCH NEXT FROM curD
+	into @colName, @colOrder, @isBrowsable, @comboType, @comboFieldName, @comboFieldNameEx1, @comboFieldNameEx2, @comboFieldId, @colTitle, @colWidth, @colAlign, @searchable, @viewable, @iseditable
+
+	
+	WHILE @@FETCH_STATUS = 0
+	BEGIN	
+		if (@colOrder &gt;= 1 and @colname not in ('userGUID')) 
+		begin
+			set @colWidthText = right('0' + convert(varchar(1), isnull(@colAlign,0)),1) + right('0000' + convert(varchar(4), @colWidth),4)
+			if @viewable&gt;=1 begin
+				
+				if  @colName='CreatedUser'  or  @colName='DeletedUser' or  @colName='UpdatedUser'  or  @colName='InitiatorGUID' 
+					set @colname= @colname					
+				else
+					set @colname=@TableName+ '.' + @colname		
+			
+				set @selectstr = @selectstr + ', ' + @colName
+				set @newstr = @newstr + ', ' + 'null'
+				if not (isnull(@combotype,0)=3 or isnull(@combotype,0)=1 or isnull(@combotype,0)=10 or isnull(@combotype,0)=12) 
+					and @iseditable&lt;90
+					set @liststr = @liststr + ', ' + @colName
+			end
+			--old combo
+			/*if (isnull(@combotype,0) = 3 and @viewable = 1)
+			begin
+				set @selectstr = @selectstr + ', ' +@tableName+ '.' + @comboFieldId 
+				set	@newstr = @newstr + ', ' + 'null'
+				set @liststr = @liststr + ', ' +@tableName+ '.' + @comboFieldId 
+
+				if @comboFieldId &lt;&gt; @comboFieldName and @comboFieldName &lt;&gt; '' begin
+					if @viewable = 1 begin
+						set @selectstr = @selectstr + ', ' +@tableName+ '.' + @comboFieldName 
+						set @newstr = @newstr + ', ' + 'null'
+						set @liststr = @liststr + ', ' +@tableName+ '.' + @comboFieldName 
+					end
+				end
+			end		*/		
+			--combo
+			if (isnull(@combotype,0) in (12) and @viewable = 1) begin
+				set @selectstr = @selectstr + ', ' + @colName+'cbId'
+				set @newstr = @newstr + ', ' + 'null'
+				set @liststr = @liststr + ', ' + @colName+'cbId'
+
+				--edit by rijal
+				set @selectstr = @selectstr + ', ' + @colName+'cbNm'
+				set @newstr = @newstr + ', ' + 'null'
+				set @liststr = @liststr + ', ' + @colName+'cbNm'
+
+
+				--if @comboFieldId &lt;&gt; @comboFieldName and @comboFieldName &lt;&gt; '' begin
+				--	if @viewable = 1 begin
+				--		set @selectstr = @selectstr + ', ' + @colName+'cbNm'
+				--		set @newstr = @newstr + ', ' + 'null'
+				--		set @liststr = @liststr + ', ' + @colName+'cbNm'
+				--	end
+				--end
+			end				
+			--par
+			if ((isnull(@combotype,0)=11 or isnull(@combotype,0)=2) and @viewable = 1) begin
+					set @selectstr = @selectstr + ', ' + @colName+'parId'
+					set @newstr = @newstr + ', ' + 'null'
+					set @liststr = @liststr + ', ' + @colName+'parId'
+
+					set @selectstr = @selectstr + ', ' + @colName+'parVal'
+					set @newstr = @newstr + ', ' + 'null'
+					set @liststr = @liststr + ', ' + @colName+'parVal'
+			end
+
+		end
+
+		FETCH NEXT FROM curD
+		into @colName, @colOrder, @isBrowsable, @comboType, @comboFieldName, @comboFieldNameEx1, @comboFieldNameEx2, @comboFieldId, @colTitle, @colWidth, @colAlign, @searchable, @viewable, @iseditable
+	end
+	CLOSE curD
+	DEALLOCATE curD
+print '--select'
+print len(@selectstr)
+
+	if len(@selectstr)&gt;2 set @selectstr = substring(@selectstr, 3, len(@selectstr) - 2)
+	if len(@newstr)&gt;2 set @newstr = substring(@newstr, 3, len(@newstr) - 2)
+	if len(@liststr)&gt;2 set @liststr = substring(@liststr, 3, len(@liststr) - 2)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

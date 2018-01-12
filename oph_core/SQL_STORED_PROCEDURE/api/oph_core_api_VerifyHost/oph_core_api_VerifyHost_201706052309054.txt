@@ -1,0 +1,16 @@
+
+
+CREATE procedure [api].[VerifyHost] @hostGUID uniqueidentifier
+as
+	
+	select userguid from userhost where hostguid=@hostguid
+
+
+
+
+
+
+
+
+
+

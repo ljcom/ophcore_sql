@@ -1,0 +1,116 @@
+
+CREATE procedure [api].[autosuggest] @hostguid uniqueidentifier,
+	@code nvarchar(50), @fieldKey nvarchar(50)='', @fieldId nvarchar(50)='', @fieldName nvarchar(50)='', @searchtext nvarchar(max)='',
+	@wf1 nvarchar(max)='', @wf1value nvarchar(max)='', @wf2 nvarchar(max)='', @wf2value nvarchar(max)='', @isdebug bit=0
+--WITH ENCRYPTION 
+AS
+	declare @timestamp datetime=current_timestamp
+	
+	declare @ver varchar(10), @db varchar(50), @typecode varchar(1), @accountid varchar(50), @coreDB varchar(50)
+
+	exec gen.getDBInfo @hostguid, @code, @ver output, @db output, @typecode output, 
+		@accountid=@accountid output, @coreDB=@coreDB output
+	
+	if @ver='2.0' begin
+		set @ver='4.0'
+		set @db=DB_NAME()
+	end
+
+	if @isdebug=1 print 'db =' +@db
+	if @isdebug=1 print 'code =' +@code
+	if @isdebug=1 print 'name =' +@fieldName
+	if @isdebug=1 print 'id =' +@fieldId
+	if @isdebug=1 print 'value =' +@fieldKey
+	if @isdebug=1 print 'ver =' +@ver
+
+	if @fieldName=@fieldId set @fieldName =''''''
+	declare @sqlstr nvarchar(max) =''
+	declare @schema nvarchar(10)
+	if @ver=3.0 set @schema='oph'
+	if @ver=4.0 set @schema='dbo'
+
+	declare @sx varchar(max)
+	declare @sxx varchar(max)
+	set @searchtext=ltrim(rtrim(@searchtext))
+	set @sx=replace(@searchText, '*', '%'' or value like ''%')
+	set @sxx='value like ''%'+@sx+'%'''
+
+	set @sx=replace(@searchText, '*', '%'' or (id+'' ''+name+'' '' + id) like ''%')
+	set @sxx=@sxx+' or (id+'' ''+name+'' '' + id) like ''%'+@sx+'%'''
+
+	if @ver=4.0 and @typecode<>'C' begin
+		--set @code='docm'
+		set @sqlstr = iif(isnull(@db,'')='', '', 'use '+@db)+'
+	
+			select 
+				isnull((	
+					select top 10 value,caption 
+					from (
+						select isnull(fieldKey.colValue,'''')+isnull(fieldKey.colValueMoney,'''') value, 
+							isnull(fieldId.colValue,'''') + case when fieldId.colValue is not null and fieldName.colValue is not null then '' - ''+ fieldName.colValue else '''' end caption,
+							fieldId.colValue id, fieldName.colValue name 
+						from dbo.docm d
+							inner join modl m on d.ModuleGUID=m.moduleguid and m.moduleid='''+@code+'''
+							left join dbo.docmcolm fieldKey on fieldKey.docguid=d.docguid and fieldKey.colkey='''+@fieldKey+'''
+							left join dbo.docmcolm fieldId on fieldId.docguid=d.docguid and fieldId.colkey='''+@fieldId+'''
+							left join dbo.docmcolm fieldName on fieldName.docguid=d.docguid and fieldName.colkey='''+@fieldName+'''
+							left join dbo.docmcolm wf1 on wf1.docguid=d.docguid and wf1.colkey='''+@wf1+''' and isnull(wf1.colValue,'''')+isnull(wf1.colValueMoney,'''')='''+@wf1value+'''
+							left join dbo.docmcolm wf2 on wf2.docguid=d.docguid and wf2.colkey='''+@wf2+''' and isnull(wf2.colValue,'')+isnull(wf2.colValueMoney,'')='''+@wf2value+'''
+						where 1=1 '+iif(isnull(@wf1,'')='', '', ' and wf1.colkey is not null')+iif(isnull(@wf2,'')='', '', ' and wf2.colkey is not null')+'
+						) OPT
+					order by id
+					for xml path(''option''), type, root(''sqroot'')
+					),
+					''<sqroot><option><value>NULL</value> <caption>No Result Found</caption></option></sqroot>'')'
+	end
+	else begin
+		if charindex('par(', @code)>0 begin
+			set @code=replace(@code, 'par(', 'getPara('''+@coreDB+''', ''')
+			set @code=replace(@code, ')', ''')')
+			set @schema='gen'
+			set @fieldKey='ParameterValueGUID'
+			set @fieldId='ParameterValue'
+			set @fieldName='ParameterDescription'
+			set @wf1=''
+		end
+		else
+		begin
+			set @code='['+@code+']'
+		end
+
+
+		set @sqlstr = iif(isnull(@db,'')='', '', 'use '+@db)+'
+	
+			select 
+				isnull((	
+					select top 10 value,caption 
+					from (
+						select '+@fieldKey+' value, 
+							isnull('+@fieldId+','''')'+
+							case when isnull(@fieldName,'') ='' then '' 
+								else ' + case when '+@fieldId+' is not null and '+isnull(@fieldName,'')+' is not null then '' - ''+ '+ @fieldName +' else '''' end' end + ' as caption,
+							isnull('+@fieldId+','''') id, '+case when isnull(@fieldName,'')='' then '''''' else ' '+isnull(@fieldName,'') end+ ' name 
+							'+case when @wf1 !='' then ', '+@wf1 else '' end+case when @wf2 !='' then ','+@wf2 else '' end +'
+						from '+@schema+'.'+@code +'
+						) OPT
+					where ('+@sxx+') '+
+						case when @wf1 !='' then '
+							and '+@wf1+' = '+''''+@wf1value+'''' else '' end+
+						case when @wf2 !='' then '
+							and '+@wf2+' = '+''''+@wf2value+'''' else '' end +'  
+					order by id
+					for xml path(''option''), type, root(''sqroot'')
+					),
+					''<sqroot><option><value>NULL</value> <caption>No Result Found</caption></option></sqroot>'')'
+	end
+
+	if @isdebug=1 print @sqlstr
+	exec (@sqlstr)
+
+	--declare @timestamp datetime=current_timestamp
+	declare @comment1 nvarchar(max)='api.autosuggest @fieldKey:'+isnull(cast(@fieldKey as nvarchar(20)), '')+' @fieldId:'+isnull(cast(@fieldId as nvarchar(max)), '')+' @fieldName:'+isnull(cast(@fieldName as nvarchar(max)), '')+' @searchText:'+isnull(cast(@searchText as nvarchar(max)), '')+' @wf1:'+isnull(cast(@wf1 as nvarchar(max)), '')+' @wf1value:'+isnull(cast(@wf1value as nvarchar(max)), '')+' @wf2:'+isnull(cast(@wf2 as nvarchar(max)), '')+' @wf2value:'+isnull(cast(@wf2value as nvarchar(max)), '')
+	exec gen.evnt_save @hostguid, @code, null, @timestamp, @comment1
+
+
+
+

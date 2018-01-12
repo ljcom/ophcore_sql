@@ -1,0 +1,80 @@
+CREATE PROCEDURE [api].[theme_profile]
+	@hostGUID uniqueidentifier, @bodyContent xml OUTPUT
+--WITH ENCRYPTION
+as	--CreatedBy eLs ON June, 16
+
+--declare @hostGUID uniqueidentifier = gen.gethost('ap\fatimah'), @bodyContent xml
+
+	declare @userGUID uniqueidentifier, @userName varchar(150)
+		select @userGUID=a.userGUID, @userName = UserName from userhost a 
+			inner join [user] b on a.userguid=b.userguid
+	where hostguid=@hostguid
+
+	declare @xmlInfo xml = (
+		select (
+			select
+				UserGUID [GUID], userId [id], userName [name], email, userProfilePath [foto]
+			from [user] where UserGUID = @userGUID
+			for xml path(''), type
+		), (
+			select CONVERT(xml, '<'+LOWER(InfoKey)+'>'+InfoValue+'</'+LOWER(InfoKey)+'>')
+			from userinfo where UserGUID = @userGUID
+				AND InfoKey in ('CarolID', 'Position', 'HomeAddress', 'HomePhone', 'MobilePhone')
+			for xml path(''), type
+		) for xml path(''), type
+	) --select @xmlInfo
+
+	declare @xmlJournal xml = (
+		select --TOP 25
+			orderNo [@no], IIF(label > 1, 0, 1) [@label], eventDate [@date], eventTime [@time], 
+			IIF(ModuleID = 'user' AND mode = 'sign', 'profile', ModuleId) [code], mode, DocGUID [GUID], comment
+		from (
+			select 
+				ROW_NUMBER() OVER(partition by cast(a.CreatedDate as date) order by a.CreatedDate Desc) [label], 
+				ROW_NUMBER() OVER(Order by a.CreatedDate Desc) [orderNo],
+				ModuleID, DocGUID, 
+				case	
+					when Comment like '%save%' then 'save'
+					when Comment like '%browse%' then 'browse'
+					when Comment like '%password%' then 'sign'
+					when Comment like '%dashboard%' then 'dashboard'
+				end [mode], 
+				case	
+					when Comment like '%save%' AND DocGUID = gen.ZeroGUID() then 'Creating New Document in Module #' + ModuleDescription + '#'
+					when Comment like '%save%' AND DocGUID != gen.ZeroGUID() then 'Saving Module <a href="?code='+ModuleID+'&GUID='+cast(DocGUID as varchar(50))+'">'+ ModuleDescription + '</a>'
+					when Comment like '%browse%' then 'Browsing Module <a href="?code='+ModuleID+'">'+ ModuleDescription + '</a>'
+					when Comment like '%password%' then 'Signing in into system. Welcome, <a href="?code=profile">'+ @userName +'</a>'
+					when Comment like '%dashboard%' then 'Browsing <a href="?code='+ModuleID+'">'+ ModuleDescription + '</a>'
+				end +'. (' + cast(timeRecord / 100 as varchar(5)) + ' s.)' [comment], 
+				convert(varchar(20), a.CreatedDate, 107) [eventDate], CONVERT(time(0), a.CreatedDate) [eventTime]
+			from evnt a
+				inner join modl b ON a.moduleGUID = b.ModuleGUID
+			where CreatedUser = @userGUID AND a.CreatedDate is Not NULL AND Comment not in('api.theme', 'api.theme_form')
+		) e where mode is Not NULL
+		order by orderNo asc
+		offset 0 rows fetch next 10 rows only
+		for xml path('item'), type
+	) --select @xmlJournal
+
+	set @bodyContent = (
+		select @xmlInfo [info], @xmlJournal [journal]
+		for xml path('bodyContent'), type
+	) --select @bodyContent 
+
+ --   <bodyContent>
+	--	<info>
+	--	<profile>
+	--		<form>
+	--			<formRow>
+	--				<fields>
+	--					<field>
+	--	<journal>	** order by date desc
+	--		<item no="1" label="1" date="Jun 6" time="10:53:31">	** order by time desc
+	--			<code>Tadedu
+	--			<GUID>asdsd1e123e12
+	--			<msg>Submit Module Finance No. #docNo#
+	--		<item no="2" label="0" date="Jun 6" time="12:59">	** order by time desc
+	--			<code>Tadedu
+	--			<GUID>asdsd1e123e12
+	--			<msg>Saving Module Finance No. #docNo#
+

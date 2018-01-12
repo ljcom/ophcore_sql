@@ -1,0 +1,29 @@
+
+CREATE PROCEDURE [api].[function_delete_v4]
+	@accountid varchar(50), @dbcore varchar(50), 
+	@hostGUID uniqueidentifier, @code varchar(20), @GUID uniqueidentifier, @comment varchar(max), @isDebug bit=0
+--WITH ENCRYPTION
+as	--Createdby eLs ON Apr, 2017
+
+	--declare @accountid varchar(50) = 'KITASHOP', @hostGUID uniqueidentifier, @code varchar(20) = 'acctinfo', 
+	--	@GUID uniqueidentifier = 'D139B14C-E4FB-4E54-81A0-B900F565BD0D', @comment varchar(max), @isDebug bit=1
+	--set @HostGUID = gen.getHost('oph')
+
+	print '[api].[function_delete_v4]'
+	declare @isUpdateDelete bit, @PrimaryKey nvarchar(50), @sqlstr nvarchar(4000)
+
+	exec gen.[checkIsDeleted] @accountid, @dbcore, @code, @isUpdateDelete OUTPUT
+
+	--set @PrimaryKey = api.fn_PrimaryKey (@code)
+	exec api.getPrimaryKey @accountid, @dbcore, @code, @PrimaryKey OUTPUT
+
+	if @isUpdateDelete = 1 begin
+		set @sqlstr = 'update ' + QUOTENAME(@code) + ' set isDeleted = 1 where ' + @PrimaryKey + ' = ''' + CAST(@GUID as varchar(50)) + ''''
+	end
+	else begin
+		set @sqlstr = 'delete from ' + quotename(@code) + ' where ' + @PrimaryKey + ' = ''' + CAST(@GUID as varchar(50)) + ''''
+	end
+
+	if @isDebug = 0 exec(@sqlstr)
+	else print @sqlstr
+

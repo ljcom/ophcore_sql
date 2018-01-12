@@ -1,0 +1,7 @@
+create procedure [gen].[ugrpinfo_load] @ugroupguid uniqueidentifier, @key nvarchar(50), @value nvarchar(max)=null output
+as
+	if exists(select * from ugrpinfo where ugroupguid=@ugroupguid and infokey=@key)
+	begin
+		select @value=infovalue from ugrpinfo where ugroupguid=@ugroupguid and InfoKey=@key
+	end
+

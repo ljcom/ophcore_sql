@@ -1,0 +1,71 @@
+CREATE procedure oph.MaPRODFRON_save
+	@GUID uniqueidentifier, @hostGUID uniqueidentifier, @Availaible int, @price money, @preview int = 0
+as --automatic creation by system, you have to remove this comment to customize this procedure
+ 
+	if @preview &gt; 0 begin
+		if dbo.fn_checkObject('dbo','MaPRODFRON_save_preview')=1 exec dbo.MaPRODFRON_save_preview @GUID, @hostGUID,@Availaible, @price, @preview
+	end
+
+	else if dbo.fn_checkObject('dbo','MaPRODFRON_save_custom')=1 exec dbo.MaPRODFRON_save_custom @GUID, @hostGUID, @Availaible, @price
+
+	else begin
+		declare @userGUID1 uniqueidentifier, @site uniqueidentifier, @msg nvarchar(max), @iscancel bit=0
+		
+		select @userGUID1=userguid, @site=siteguid
+		from coUSERHOST
+		where hostGUID=@hostGUID
+		
+		set @msg=''
+		
+		
+		if 1=1 begin
+		
+			if 1=1			begin
+				if exists(select * from MoPRODFRON
+					where EVENPSKUGUID = @GUID) begin
+
+					if dbo.fn_checkObject('dbo','MaPRODFRON_save_update_before')=1 exec dbo.MaPRODFRON_save_update_before @GUID, @hostGUID, @Availaible OUTPUT, @price OUTPUT, @isCancel OUTPUT, @msg OUTPUT
+					if @iscancel=0 begin
+						begin try
+
+							update MoPRODFRON
+							set Availaible = @Availaible, price = dbo.fn_round(@price), 
+								UpdatedDate = getdate(), UpdatedUser = @userGUID1 
+							where EVENPSKUGUID = @GUID
+
+
+							if dbo.fn_checkObject('dbo','MaPRODFRON_save_update_after')=1 exec dbo.MaPRODFRON_save_update_after @GUID, @hostGUID, 1
+
+						end try
+						begin catch
+							set @msg=error_message()
+						end catch
+
+					end
+				end
+				else begin
+					if dbo.fn_checkObject('dbo','MaPRODFRON_save_update_before')=1 exec dbo.MaPRODFRON_save_update_before @GUID, @hostGUID, @Availaible OUTPUT, @price OUTPUT, @isCancel OUTPUT, @msg OUTPUT
+					if @iscancel=0 begin
+						if @GUID is null set @GUID = newid()
+
+						begin try
+			
+			
+							insert into MoPRODFRON
+								(EVENPSKUGUID, Availaible, price, createdUser)
+								values
+									(@GUID, @Availaible, dbo.fn_round(@price), @userGUID1)
+
+			
+							if dbo.fn_checkObject('dbo','MaPRODFRON_save_update_after')=1 exec dbo.MaPRODFRON_save_update_after @GUID, @hostGUID, 0
+			
+						end try
+						begin catch
+							set @msg=error_message()
+						end catch
+					end
+				end
+			end
+		end
+		select @msg saved
+	end

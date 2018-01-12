@@ -1,0 +1,27 @@
+create procedure oph.MeEVENPSKU_delete
+	@GUID uniqueidentifier, @hostGUID uniqueidentifier
+as --automatic creation by system, you have to remove this comment to customize this procedure
+ 	if dbo.fn_checkObject('dbo','MeEVENPSKU_delete_custom')=0 begin
+		declare @userGUID uniqueidentifier
+		declare @isCancel bit = 0, @msg nvarchar(MAX) =''
+		
+		select @userGUID=userguid from coUSERHOST where hostGUID=@hostGUID
+		
+		if dbo.fn_checkObject('dbo','MeEVENPSKU_delete_before')=1 exec dbo.MeEVENPSKU_delete_before @GUID, @hostGUID, @isCancel OUTPUT, @msg OUTPUT
+		
+		if @isCancel = 0 
+			delete from MoEVENPSKU where EVENPSKUGUID = @GUID
+		
+		if dbo.fn_checkObject('dbo','MeEVENPSKU_delete_after')=1 exec dbo.MeEVENPSKU_delete_after @GUID, @hostGUID
+		
+		if exists(select * from oph.MeEVENPSKU
+			where EVENPSKUGUID = @GUID) begin
+			set @msg='This record cannot be deleted. You might don''t have any authority to do this.'
+		end
+		else begin
+			if dbo.fn_checkObject('dbo','MeEVENPSKU_delete_after')=1 exec dbo.MeEVENPSKU_delete_after_success @GUID, @hostGUID
+		end
+		
+		select @msg deleted	end else
+		exec dbo.MeEVENPSKU_delete_custom @GUID, @hostGUID
+

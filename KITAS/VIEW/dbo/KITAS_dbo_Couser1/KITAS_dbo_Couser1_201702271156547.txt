@@ -1,0 +1,7 @@
+CREATE view dbo.user1
+as
+
+select UserGUID, CarolId, UserId, UserName, SignInitial, Password, ConfirmPassword, Position, DIVNGUID, HomeAddress, HomePhone, MobilePhone, PersonalEmail, DefaultWorkstation, FirstPage, skinGUID, AutoLogin, profileAttachment, TypeOffice, isField, isNonField, DelegationFlag, isDelegate, isNotDelegate, isDeleted, CreatedDate, CreatedUser, UpdatedDate, UpdatedUser, DeletedDate, DeletedUser, ExpiryPwd
+ from Couser
+
+

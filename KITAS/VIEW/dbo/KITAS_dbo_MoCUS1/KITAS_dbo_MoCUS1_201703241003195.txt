@@ -1,0 +1,11 @@
+
+
+CREATE VIEW [dbo].[MoCUS1]
+as
+	select 
+		UserGUID, a.CarolId, b.CustomerId, b.CustomerName, b.CustomerAddress, b.PostalCode, b.Fax, b.phone, b.City 
+	from CoUSER a
+		inner join MoCUST b ON a.CarolId = ISNULL(OldId, b.Address2)
+	group by a.UserGUID, a.CarolId, b.CustomerId, b.CustomerName, b.CustomerAddress, b.PostalCode, b.Fax, b.phone, b.City
+
+

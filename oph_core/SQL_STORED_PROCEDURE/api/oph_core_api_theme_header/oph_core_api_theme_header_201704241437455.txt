@@ -1,0 +1,57 @@
+
+
+
+CREATE procedure [api].[theme_header] @Accountid varchar(50), @dbcore varchar(50), 
+	@hostguid uniqueidentifier, @code varchar(50),
+	@UserGUID uniqueidentifier, @ModuleGUID uniqueidentifier, @MenuID int = 0, @xmlHeader xml OUTPUT, @debug int=0
+--WITH ENCRYPTION
+as	
+	declare @ver varchar(10), @db varchar(50), @typecode varchar(1), @theme varchar(50)
+	exec gen.getDBInfo @accountid, @dbcore, @code, @ver output, @db output, @typecode output, @theme output
+
+	declare @info nvarchar(MAX) = (
+		select 
+			@accountid account, 
+			@theme [themeFolder],
+			isNULL(f.ModuleDescription, f.ModuleID) [title], 
+			(
+				select f.moduleid id, f.ModuleDescription name, @typecode as settingMode for xml path(''), type) code, 
+			(select @hostGUID hostGUID, userid, UserName username, userid [oriUserid], UserName [oriUsername] 
+			from [user] a inner join userhost b on a.UserGUID=b.UserGUID where hostguid=@hostguid for xml path(''), type) [user]
+		from --[user] a
+		--	inner join [userinfo] b ON a.UserGUID = b.UserGUID AND b.InfoKey in ('SkinGUID') AND gen.isGUID(b.InfoValue) = 1
+		--	inner join [userhost] c ON a.UserGUID = c.UserGUID
+		--	left join [user] d ON c.DelegateUserGUID = d.UserGUID
+		[modl] f --ON ModuleGUID = @ModuleGUID
+		--where a.UserGUID = @UserGUID
+		where moduleid=@code
+		for xml path('info')
+	) 
+
+	declare @menu nvarchar(MAX) = (
+		select convert(xml, (
+			select 
+				OrderNo [@rowNo], a.MenuCode + '_' + LOWER(left(MenuDetailGUID, 6)) [@code], 
+				isNULL(b.SubMenuDescription, '') [name], isNULL(Tag, '') [tag], isNULL(URL, '') [url]
+			from menu a
+				inner join menusmnu b ON a.MenuGUID = b.MenuGUID
+			where a.MenuID = @MenuID
+			order by OrderNo ASC
+			for xml path('menu')
+		))
+		for xml path('menus')
+	) 
+	
+	if @debug = 1 
+		select 'header' [xml], @UserGUID [UserGUID], @ModuleGUID [ModuleGUID], 
+			convert(xml, @info) [header_info], convert(xml, @menu) [header_menu]
+	else
+		set @xmlHeader = convert(xml, (isNULL(@info, '<info/>') + isNULL(@menu, '<menus/>')))
+	
+
+
+
+
+
+
+

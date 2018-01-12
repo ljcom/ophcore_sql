@@ -1,0 +1,763 @@
+
+
+CREATE PROCEDURE [api].[theme_form] 
+	@hostGUID uniqueidentifier, @code varchar(50), @GUID uniqueidentifier, @isDebug bit=0
+--WITH ENCRYPTION
+as
+--declare --@accountid varchar(50) = 'eform', @coreDB varchar(50) = 'oph_core', 
+--	@hostGUID uniqueidentifier = gen.gethost('AP\iman.satyagraha'), @code varchar(50) = 'tapreq', 
+--	@GUID uniqueidentifier = gen.zeroGUID(), @isDebug bit=0
+
+	declare @timestamp datetime=current_timestamp
+
+	declare @ver varchar(10), @db varchar(50), @typecode varchar(1), @accountid varchar(50), @coreDB varchar(50), @migrateDB nvarchar(50)
+	
+	declare @userGUID uniqueidentifier
+	select @userguid=userguid from userhost where hostguid=@hostguid
+
+	exec gen.getDBInfo @hostguid, @code, @ver output, @db output, @typecode output, 
+		@accountid=@accountid output, @coreDB=@coreDB output, @migrateDB=@migrateDB output
+
+	declare @sqlstr nvarchar(max), @sqlstr2 nvarchar(max), @tblCode nvarchar(50)
+
+	declare @moduleguid uniqueidentifier
+	select @moduleguid=a.ModuleGUID
+	from modl a
+	where ModuleID=@code
+
+	--get authorization
+	declare --@code nvarchar(10)='tafass', @HostGUID uniqueidentifier='A301DDF2-763B-42C3-BB8C-799091ADB6FD', 
+	@allowadd bit, @allowAccess bit, @allowEdit bit, @allowDelete bit, @allowWipe bit, @allowForce bit, @allowExport bit
+
+	--exec gen.verifyAuth @code, @HostGUID, 
+	--	@allowadd output, @allowBrowse output, @allowEdit output, @allowDelete output, @allowWipe output, @allowForce output, @allowExport output
+
+	select @allowadd=allowadd, @allowAccess=allowAccess, @allowEdit=allowEdit, @allowDelete=allowDelete, @allowWipe=allowWipe, 
+		@allowForce=allowForce, @allowExport=allowExport
+	from gen.authmodl(@hostguid, null)
+	where moduleid=@code
+
+	declare @fieldkey varchar(50)
+	select @fieldkey=colkey
+	from modl a
+		inner join modlcolm b on a.moduleguid=b.moduleguid
+	--where a.moduleid='menu'
+	where a.moduleguid=@moduleguid
+		and colorder=(
+			select min(colorder)
+			from modl a
+				inner join modlcolm b on a.moduleguid=b.moduleguid
+			where a.moduleguid=@moduleguid
+		)
+
+
+	declare @child xml, @xmlApprovals xml, @xmlQuery xml, @xmltalk xml
+
+	--exec api.[theme_header] @hostguid, @code, null, @moduleguid, 0, @xmlheader output
+
+	declare @colinfo api.[type]
+	declare @primaryinfo api.[type]
+
+	declare @docDate varchar(50), @docNo varchar(50), @refNo varchar(50), @id varchar(50)
+	exec [api].[getPrimaryCol] @hostguid, @code, 2, @docDate OUTPUT
+	exec [api].[getPrimaryCol] @hostguid, @code, 3, @docNo OUTPUT
+	exec [api].[getPrimaryCol] @hostguid, @code, 4, @refNo OUTPUT
+	exec [api].[getPrimaryCol] @hostguid, @code, 5, @id OUTPUT
+
+	--if @ver='3.0' and exists(select * from docm where moduleguid=@moduleguid) begin
+	--	set @ver='4.0'
+	--	set @db=db_name()
+	--end
+	if @ver='2.0' or (@ver='3.0' and isnull(@migrateDB, '')<>'') begin
+		set @ver='4.0'
+		set @db=db_name()
+	end
+
+	print 'Version : ' + isNULL(@ver, 'NULL')
+	if @ver='3.0'
+	begin
+		declare @status int=0, @ocode nvarchar(50)
+		set @ocode=stuff(@code, 2,1,'o')
+
+		declare @isDeletedField bit
+		exec [gen].[checkIsDeleted] @hostguid, @code, @isDeletedField output
+		if @isDeletedField=1 begin
+			set @sqlstr= N'
+				if exists(select * from '+@db+'.dbo.'+@ocode+' where isdeleted=1 and '+@fieldkey+' = '''+convert(varchar(50), @GUID)+''') set @status=999
+			'
+		end
+
+		if @isdebug=1 print @sqlstr
+		exec sp_executesql @sqlstr, N'@status int output', @status output
+
+		if @status=0 and @typecode='T' begin
+			set @sqlstr= N'
+				select @status=status from '+@db+'.dbo.'+@ocode+ ' where 1 = 1 and '+@fieldkey+' = '''+convert(varchar(50), @GUID)+''''
+		end		
+		
+		if @isdebug=1 print @sqlstr
+		exec sp_executesql @sqlstr, N'@status int output', @status output
+
+		if @status=999 set @tblCode=stuff(@code, 2,1,'d')
+		else if @status>=500 set @tblCode=stuff(@code, 2,1,'c')
+		else if @status>=400 set @tblCode=stuff(@code, 2,1,'e')
+		else set @tblCode=stuff(@code, 2,1,'a')
+
+		--with primary
+		--if @isdebug = 1 select 'exec api.theme_form_v3_transition '''+@accountid+''','''+@tblCode+''','''+convert(nvarchar(max),@guid)+''','''+@db+''', 0, '''+convert(nvarchar(max),@isdebug)+'''' as v3Query
+		--if @isdebug = 1 select 'exec api.theme_form_v3_transition '''+@accountid+''','''+@tblCode+''','''+convert(nvarchar(max),@guid)+''','''+@db+''', 1, '''+convert(nvarchar(max),@isdebug)+'''' as v3Query
+		
+		insert into @colinfo
+		--exec api.theme_form_v3 @guid, @db, @typecode, 0, @isdebug
+		exec api.theme_form_v3_transition @hostGUID, @code, @guid, @db, 0, @isdebug	--@typecode, 0, @isdebug
+
+		insert into @primaryinfo
+		--exec api.theme_form_v3 @hostGUID, @code, @guid, @db, @typecode, 1, @isdebug
+		exec api.theme_form_v3_transition @hostGUID, @code, @guid, @db, 1, @isdebug	--, @typecode, 1, @isdebug
+
+		insert into @colinfo
+		values (null, null, 'colvalue', null, null, null)
+
+		--if @isdebug=1 select * from @colinfo where infokey='coltype'
+		--if @isdebug=1 select * from @colinfo where TypeGUID='5F0A5C16-6048-4631-A25C-8CFD40587C0A'
+		if @isdebug=1 select * from @primaryinfo where infovalue='moduleid'
+		if @isdebug=1 select * from @primaryinfo where infokey='coltype'
+
+		exec api.theme_form_child_v3_transition @hostGUID, @code, @GUID, @db, @typecode, @child output
+
+		exec api.theme_form_query @hostguid, @code, @GUID, @xmlQuery OUTPUT
+
+		exec api.theme_form_aprv @hostguid, @code, @GUID, @xmlApprovals OUTPUT
+
+	end
+	else if @ver='4.0' begin
+		insert into @colinfo
+		exec api.theme_form_v4 @hostGUID, @code, @guid, @db, 0, @isdebug
+
+		insert into @primaryinfo
+		exec api.theme_form_v4 @hostGUID, @code, @guid, @db, 0, @isdebug
+
+		--pindah ke luar
+		exec api.theme_form_child_v4 @hostguid, @code, @db, @typecode, @child output
+
+	end
+	-- belum dapat pindah keluar karena v4 menggunakan parentdocguid
+	--exec api.theme_form_child_v4 @hostGUID, @code, @db, @typecode, @child output, @isdebug=1
+
+	--talk
+	exec api.theme_talk @hostGUID, @GUID, @xmlTalk output, @isdebug
+
+	if @isdebug=1 select * from @colinfo where InfoKey='colkey'
+	if @isdebug=1 select * from @primaryinfo where InfoKey='colkey'
+	if @isdebug=1 select * from @primaryinfo where infovalue='moduleid'
+
+	declare @fields nvarchar(max)
+	
+	--select @fields = convert(nvarchar(max),(
+	--select '['+infokey+'],'  from (select distinct infokey from @colinfo) as a
+	--for xml path('') ))
+	--set @fields = left(@fields,len(@fields)-1)
+
+	set @fields='[ActivateField],[colkey],[colNo],[ColOrder],[cols],[coltype],[colvalue],[CreatedDate],[CreatedUser],[DefaultValue],[DeletedDate],[DeletedUser],[ComboWhereField1],[ComboWhereField2],[fieldno],[groupCheckBox],[HiddenZone],[id],[isApproval],[isBrowsable],[isEditable],[isNullable],[isSumable],[isViewable],[length],[pageNo],[PrefixCaption],[preview],[PrimaryCol],[rowNo],[rowTitle],[ROZone],[sectionNo],[SuffixCaption],[SumField],[titlecaption],[TitleShort],[TriggerDate],[TriggerDate2],[UniqueKeys],[UpdatedDate],[UpdatedUser],[UpdateScript],[ViewColAlign],[ViewColDigit],[ViewColWidth],[RadioNo],[RadioOrder],[xType],[specialCharacter],[radioOptions]'
+
+	declare @primary nvarchar(max), @parentKey nvarchar(max)
+
+
+	--if @ver = '3.0'
+	--begin
+	--	if @isdebug=1 print 'part 1A'
+
+	--	set @sqlstr = '
+	--		--use '+@db+' 
+			
+	--		--select @prim = colname 
+	--		--from gen.cotablfiel a 
+	--		--	join gen.cotabl b 
+	--		--		on a.tableguid = b.tableguid 
+	--		--where primarycol= 1 and tablename = ''' + @code+'''
+	--		'
+
+	--	EXECUTE sp_executesql @sqlstr, N'@prim nvarchar(max) output', @prim = @primary output
+
+	--	if @isdebug=1 print 'part 1B'
+
+	--	set @sqlstr = '
+	--		use '+@db+' 
+			
+	--		select @prntkey = colname 
+	--		from gen.cotablfiel a 
+	--			join gen.cotabl b 
+	--				on a.tableguid = b.tableguid 
+	--		where iseditable= 3 and tablename = ''' + @code+''''
+
+	--	EXECUTE sp_executesql @sqlstr, N'@prntkey nvarchar(max) output', @prntkey = @parentKey output
+	--end
+	--else
+	--begin
+			--use '+@db+' 
+			
+	--select @primary=colkey 
+	--from modl a
+	--	inner join modl b on a.parentmoduleguid=b.moduleguid
+	--	inner join modlcolm c on b.moduleguid=c.moduleguid and c.colorder=1
+	--where a.moduleid=@code
+	exec [api].[getPrimaryKey] @hostguid, @code, @primary output
+
+	if @ver='4.0' and @typecode<>'C' begin
+		select @parentKey='docGUID'
+	end
+	else
+		select @parentKey=colkey 
+		from modl a
+			inner join modlcolm c on a.moduleguid=c.moduleguid --and c.colorder=1
+			inner join modlcolminfo d on c.columnguid=d.columnguid and d.infokey='isParentKey' and d.infovalue='1'
+		where a.moduleid=@code
+
+		--EXECUTE sp_executesql @sqlstr, N'@prntkey nvarchar(max) output', @prntkey = @parentKey output
+
+	--end
+
+	--Zoning by eLs
+	declare @userZone varchar(5), @userid nvarchar(50)
+	if @ver = '3.0' begin
+		select @userID = UserID from [user] where UserGUID = gen.getUserHost(@hostGUID)
+		set @sqlstr = 'use ' + QUOTENAME(@db) + CHAR(10) + '
+		select @zg = ZoneGroup from (
+			select ZoneGroup, ROW_NUMBER() OVER(order by lvl desc) [id] from CoAPPR a
+				inner join CoAPPRLVEL b ON a.ApprovalGUID = b.ApprovalGUID
+				inner join CoMODL c ON a.ModuleGUID = c.ModuleGUID AND c.ModuleId = '''+@code+'''
+				inner join (
+					select a.UGroupGUID from CoUGRP a
+						inner join CoUSER b ON a.TokenUser like ''%'' + cast(b.UserGUID as varchar(50)) + ''%''
+					where UserId = '''+@userid+'''
+				) d ON b.ApprovalGroupGUID = d.UGroupGUID
+		) z where id = 1 '
+
+		exec sp_executesql @sqlstr, N'@zg varchar(5) OUTPUT', @zg=@userZone OUTPUT
+		set @userZone = IIF(ISNULL(@userZone, '') = '', '0', @userZone)
+		print char(10) + 'zoning ver.3'
+		print @sqlstr
+		print 'userzone : ' + @userzone
+	end 
+	else begin
+		select @userZone = ZoneGroup from (
+			select ZoneGroup, ROW_NUMBER() OVER(order by lvl desc) [id] from modl a
+				inner join modlappr b ON a.ModuleGUID = b.ModuleGUID 
+				inner join ugrp c ON b.ApprovalGroupGUID = c.UGroupGUID
+			where a.ModuleId = @code AND c.TokenUser like '%' + cast(gen.getuserHost(@HostGUID) as varchar(50)) + '%'
+		) z where id = 1 
+		set @userZone = IIF(ISNULL(@userZone, '') = '', '0', @userZone)
+
+		print char(10) + 'zoning ver.4' + char(10) + @sqlstr
+		print 'userzone : ' + @userzone
+	end
+
+	declare @form xml
+
+	if @isdebug=1 print 'part 2'
+
+	set @sqlstr = '
+		select *'--+case when @guid = '00000000-0000-0000-0000-000000000000' then ','''' as colvalue' else ','''' as colvalue' end 
+	set @sqlstr = @sqlstr + N'	 
+		into #mi 
+		from (
+			select 
+				TypeGUID, ParentGUID, InfoKey, isNULL(InfoValue, isNULL(convert(varchar(20), InfoDate, 101), cast(InfoMoney as varchar(20)))) [InfoValue]
+			from @moduleinfo
+		) xSource
+		pivot (
+			max(infovalue) for infokey in('+@fields+')
+		) as pvt
+		where colkey is Not NULL
+
+		--if object_id(''tempdb..##xmd'') is Not NULL drop table ##xmd
+		--select * into ##xmd from @moduleinfo
+
+		--if object_id(''tempdb..##xmi'') is Not NULL drop table ##xmi
+		--SELECT * into ##xmi FROM #mi 
+
+		select @formxml = (
+			select pageNo as ''@pageNo'',
+				(
+				select sectionno ''@sectionNo'',rowtitle ''@rowTitle'',
+					(
+					select colno ''@colNo'',
+						(
+						select rowno ''@rowNo'',
+							(
+							select colkey ''@fieldName'', case when CHARINDEX('''+isnull(@userZone,'')+''', rozone) > 0 then 0 else isEditable end ''@isEditable'',isNullable ''@isNullable'', fieldNo ''@fieldNo'',
+				
+								case 
+								when coltype=11 --textbox
+								then
+									(
+									select colvalue value, titlecaption, prefixCaption, suffixCaption, preview, defaultvalue, viewColDigit digit, viewColAlign align,
+										(
+										select cols,0 ''rows'',[length] from #mi t6
+										where t6.typeguid = t5.typeguid
+										for xml path(''width''),type
+										) 
+									from #mi as t5
+									where
+										t5.typeguid = t4.typeguid
+									for xml path(''textBox''),type
+									)
+
+								when coltype =12 --password
+								then
+									(
+									select titlecaption, prefixCaption, suffixCaption, preview, specialCharacter,
+									(
+										select cols,0''rows'',[length] from #mi t6
+										where t6.typeguid = t5.typeguid
+										for xml path(''width''),type
+									) 
+									from #mi t5
+									where 
+										t5.typeguid = t4.typeguid
+									for xml path(''passwordBox''),type
+									)
+
+								when coltype=13 --texteditor
+								then
+									(
+									select colvalue value, titlecaption, prefixCaption, suffixCaption, preview, defaultvalue
+									--, viewColDigit digit, viewColAlign align, (
+									--	select cols,0 ''rows'',[length] from #mi t6
+									--	where t6.typeguid = t5.typeguid
+									--	for xml path(''width''),type
+									--) 
+									from #mi as t5
+									where
+										t5.typeguid = t4.typeguid
+									for xml path(''textEditor''),type
+									)
+						
+								when coltype =31 --checkbox
+								then
+									(
+									select isnull(colvalue,0) value, titlecaption, prefixCaption, suffixCaption, radioNo, rowtitle, preview,
+										(
+										select cols,0''rows'',[length] from #mi t6
+										where t6.typeguid = t5.typeguid
+										for xml path(''width''),type
+										)
+									from #mi t5
+									where
+										t5.typeguid = t4.typeguid
+									for xml path(''checkBox''),type
+									)
+
+								when coltype =32 --autosuggestbox
+								then
+									(
+									select colvalue value, titlecaption, prefixCaption, suffixCaption, preview,
+										(
+											select cols,0''rows'',[length] from #mi t6
+											where t6.typeguid = t5.typeguid
+											for xml path(''width''),type
+										),
+										(
+											select combowhereField1 wf1,combowhereField2 wf2 from #mi t6
+											where t6.typeguid = t5.typeguid
+											for xml path(''whereFields''), type
+										)
+									from #mi t5
+									where t5.typeguid = t4.typeguid
+									for xml path(''autoSuggestBox''), type)
+								when coltype =33 --token
+								then
+									(
+									select iif(colvalue='''', null, colvalue) value, titlecaption, prefixCaption, suffixCaption, preview,
+										(
+											select cols,0''rows'',[length] from #mi t6
+											where t6.typeguid = t5.typeguid
+											for xml path(''width''),type
+										),
+										(
+											select combowhereField1 wf1,combowhereField2 wf2 from #mi t6
+											where t6.typeguid = t5.typeguid
+											for xml path(''whereFields''), type
+										)
+									from #mi t5
+									where t5.typeguid = t4.typeguid
+									for xml path(''tokenBox''), type)
+									'		
+	print @sqlstr															
+	set @sqlstr = @sqlstr + N'	 
+
+								when coltype =34 --radio
+								then
+									(
+									select colvalue value, titlecaption, prefixCaption, suffixCaption, preview,
+										(
+											select id ''@radioNo'', caption ''@radioRowTitle'',
+												colkey ''@fieldName'', (
+											--select radioNo ''@radioNo'', rowTitle ''@radioRowTitle'', colKey ''@fieldName'', (
+												select rowNo ''@rowNo'', (
+													select colkey ''@fieldName'', case when CHARINDEX('''+isnull(@userZone,'')+''', rozone) > 0 then 0 else isEditable end ''@isEditable'',isNullable ''@isNullable'', fieldNo ''@fieldNo'', 
+													(
+														case 
+														when coltype =11 --textbox
+														then
+															(
+															select colvalue value, titlecaption, prefixCaption, suffixCaption, preview, defaultvalue, viewColDigit digit, viewColAlign align,
+																(
+																select cols,0 ''rows'',[length] from #mi r6
+																where r6.typeguid = r5.typeguid
+																for xml path(''width''),type
+																) 
+															from #mi as r5
+															where
+																r5.typeguid = t8.typeguid
+															for xml path(''textBox''),type
+															)
+														when coltype =12 --password
+														then
+															(
+															select colvalue value,titlecaption,prefixCaption, suffixCaption, preview,
+															(
+																select cols,0''rows'',[length] from #mi r6
+																where r6.typeguid = r5.typeguid
+																for xml path(''width''),type
+															) 
+															from #mi r5
+															where 
+																r5.typeguid = t8.typeguid
+															for xml path(''password''),type
+															)
+'		
+										
+	set @sqlstr = @sqlstr + N'	 						
+														when coltype =31 --checkbox
+														then
+															(
+															select colvalue value, titlecaption, prefixCaption, suffixCaption, radioNo, rowtitle, preview,
+																(
+																select cols,0''rows'',[length] from #mi r6
+																where r6.typeguid = r5.typeguid
+																for xml path(''width''),type
+																)
+															from #mi r5
+															where
+																r5.typeguid = t8.typeguid
+															for xml path(''checkBox''),type
+															)
+														when coltype =32 --autosuggestbox
+														then
+															(
+															select colvalue value, titlecaption, prefixCaption, suffixCaption, preview,
+																(
+																	select cols,0''rows'',[length] from #mi r6
+																	where r6.typeguid = r5.typeguid
+																	for xml path(''width''),type
+																),
+																(
+																	select combowhereField1 wf1,combowhereField2 wf2 from #mi r6
+																	where r6.typeguid = r5.typeguid
+																	for xml path(''whereFields''), type
+																)
+															from #mi r5
+															where r5.typeguid = t8.typeguid
+															for xml path(''autoSuggestBox''), type)
+														when coltype =33 --token
+														then
+															(
+															select iif(colvalue='''', null, colvalue) value, titlecaption, prefixCaption, suffixCaption, preview,
+																(
+																	select cols,0''rows'',[length] from #mi r6
+																	where r6.typeguid = r5.typeguid
+																	for xml path(''width''),type
+																),
+																(
+																	select combowhereField1 wf1,combowhereField2 wf2 from #mi r6
+																	where r6.typeguid = r5.typeguid
+																	for xml path(''whereFields''), type
+																)
+															from #mi r5
+															where r5.typeguid = t8.typeguid
+															for xml path(''tokenBox''), type)
+														when coltype =41 --datebox
+														then
+																(
+																	select CONVERT(varchar(50), try_convert(date, colvalue), 101) value,titlecaption,prefixCaption, suffixCaption, preview,
+																	(
+																		select cols,0''rows'',[length] from #mi r6
+																		where r6.typeguid = r5.typeguid
+																		for xml path(''width''),type
+																	) 
+																	from #mi r5
+																	where r5.typeguid = t8.typeguid
+																	for xml path(''dateBox''),type
+																)
+														when coltype =42 --timebox
+														then
+																(
+																	select CONVERT(varchar(50), try_convert(time, colvalue), 108) value,titlecaption,prefixCaption, suffixCaption, preview,
+																	(
+																		select cols,0''rows'',[length] from #mi r6
+																		where r6.typeguid = r5.typeguid
+																		for xml path(''width''),type
+																	) 
+																	from #mi r5
+																	where r5.typeguid = t8.typeguid
+																	for xml path(''timeBox''),type
+																)
+														when coltype =43 --dateTimebox
+														then
+																(
+																	select CONVERT(varchar(50), try_convert(date, colvalue), 101) + '' '' +  CONVERT(varchar(50), try_convert(time, colvalue), 108) value,titlecaption,prefixCaption, suffixCaption, preview,
+																	(
+																		select cols,0''rows'',[length] from #mi r6
+																		where r6.typeguid = r5.typeguid
+																		for xml path(''width''),type
+																	) 
+																	from #mi r5
+																	where r5.typeguid = t8.typeguid
+																	for xml path(''dateTimeBox''),type
+																)				
+														end
+																												
+													)
+													from #mi t8
+													where t8.RadioNo=x7.RadioNo 
+														and isnull(t8.rowTitle,'''')='''' 
+														and t8.RadioOrder=x7.RadioOrder
+														and t8.rowNo=x7.rowNo
+														and t8.sectionno = satu.sectionno
+													--order by fieldNo
+													for xml path(''field''), root(''fields''), type) 
+												from (
+													select rowNo, RadioNo, RadioOrder, 
+														case when CHARINDEX('''+isnull(@userZone,'')+''', hiddenzone) > 0 then 1 else 0 end [hidden]
+													from #mi t7
+													where t7.RadioNo=t5.RadioNo and isnull(t7.rowTitle,'''')='''' and t7.RadioOrder=t5.RadioOrder
+														and t7.sectionno = satu.sectionno
+												) x7 where x7.hidden = 0
+												order by rowNo
+												for xml path(''radioRow''), root(''radioRows''), type
+											) 
+											from (
+											SELECT 
+												Replace(Parsename(Replace(Replace(Rtrim(Ltrim(Split.a.value(''.'', ''VARCHAR(100)''))), ''.'', '';''), '','', ''.''), 3), '';'', ''.'') id,
+												Replace(Parsename(Replace(Replace(Rtrim(Ltrim(Split.a.value(''.'', ''VARCHAR(100)''))), ''.'', '';''), '','', ''.''), 2), '';'', ''.'') colKey,
+												Replace(Parsename(Replace(Replace(Rtrim(Ltrim(Split.a.value(''.'', ''VARCHAR(100)''))), ''.'', '';''), '','', ''.''), 1), '';'', ''.'') caption
+											
+											FROM (
+												SELECT Cast (''<M>'' + Replace((
+													select radioOptions 
+													from #mi t6 where t6.RadioNo=t5.RadioNo and isnull(t6.RadioOrder,0)=0), '';'', ''</M><M>'') + ''</M>'' AS XML) Data) A
+												CROSS APPLY Data.nodes (''/M'') AS Split(a)) a
+										--from ##xmi t6
+										--where t6.RadioNo=t5.RadioNo and isnull(t6.rowTitle,'''')<>'''' and isnull(t6.RadioOrder,0)>0
+										--	AND t6.sectionno = satu.sectionno AND t5.rowno = t6.rowno
+										--order by RadioOrder
+										for xml path(''radioSection''), root(''radioSections''), type
+										)
+									from #mi t5
+									where t5.typeguid = t4.typeguid
+									for xml path(''radio''), type)
+																		
+									'		
+															
+	set @sqlstr = @sqlstr + N'	 
+								when coltype =41 --datebox
+								then
+									(
+										select CONVERT(varchar(50), try_convert(date, colvalue), 101) value,titlecaption,prefixCaption, suffixCaption, preview,
+										(
+											select cols,0''rows'',[length] from #mi t6
+											where t6.typeguid = t5.typeguid
+											for xml path(''width''),type
+										) 
+										from #mi t5
+										where t5.typeguid = t4.typeguid
+										for xml path(''dateBox''),type
+									)	
+								when coltype =42 --timebox
+								then
+									(
+										select CONVERT(varchar(50), try_convert(time, colvalue), 108) value,titlecaption,prefixCaption, suffixCaption, preview,
+										(
+											select cols,0''rows'',[length] from #mi t6
+											where t6.typeguid = t5.typeguid
+											for xml path(''width''),type
+										) 
+										from #mi t5
+										where t5.typeguid = t4.typeguid
+										for xml path(''timeBox''),type
+									)
+								when coltype =43 --datetimebox
+								then
+									(
+										select CONVERT(varchar(50), try_convert(date, colvalue), 101) + '' '' + CONVERT(varchar(50), try_convert(time, colvalue), 108) value,titlecaption,prefixCaption, suffixCaption, preview,
+										(
+											select cols,0''rows'',[length] from #mi t6
+											where t6.typeguid = t5.typeguid
+											for xml path(''width''),type
+										) 
+										from #mi t5
+										where t5.typeguid = t4.typeguid
+										for xml path(''dateTimeBox''),type
+									)											
+								when coltype = 51 --attach
+								then
+									(
+										select colvalue value, titlecaption, prefixCaption, suffixCaption, preview
+										--,(
+										--	select cols, 0''rows'', [length] from #mi t6
+										--	where t6.typeguid = t5.typeguid
+										--	for xml path(''width''),type
+										--) 
+										from #mi t5
+										where t5.typeguid = t4.typeguid
+										for xml path(''mediaBox''), type
+									)
+								end
+							from #mi t4
+							where t4.rowno = t3.rowno and t4.colno = dua.colno and t4.sectionno = satu.sectionno and t4.pageNo=pg.pageNo
+								and isnull(t4.RadioOrder,0)=0
+							order by convert(int, fieldno)
+							for xml path(''field''),root(''fields''),type
+							) 
+						from (
+							select distinct rowno, colno, sectionno, pageNo,
+								case when CHARINDEX('''+isnull(@userZone,'')+''', hiddenzone) > 0 then 1 else 0 end [hidden]
+							from #mi where colno = dua.colno and sectionno=satu.sectionno and pageNo=pg.pageNo and isnull(RadioOrder,0)=0
+						) t3 where t3.hidden = 0
+						order by convert(int,rowno)
+						for xml path(''formRow''),root(''formRows''),type
+						)
+
+					From (select distinct colno, sectionno, pageNo from #mi where satu.sectionno = sectionno and pageNo=pg.pageNo) dua
+					order by convert(int,colno)
+					for xml path(''formCol''),root(''formCols''),type
+					) 
+				from (
+					select distinct pageNo, sectionno, 
+						(
+						select top 1 rowtitle from #mi 
+						where rowno=1 and s1.sectionno = sectionno and s1.pageno = pageno 
+							--and rowtitle !='''' AND ROWTITLE IS NOT NULL
+						order by sectionno, RadioOrder
+						) rowtitle 
+					from #mi s1
+				) satu
+				where satu.pageno=pg.pageno 
+				order by convert(int,sectionno)
+				for xml path(''formSection''), root(''formSections''),type
+			)
+		from (select distinct pageno from #mi) pg
+		for xml path(''formPage''),type, root(''formPages''))
+
+		--select distinct pageno from #mi
+			'
+	print 'ttt'
+	if @isdebug = 1 select @SQLstr as [processing-instruction(x)] FOR XML PATH 
+	if @isdebug = 1 print len(@sqlstr)
+	--if @isdebug = 1 
+	if @isdebug = 1 select b.infovalue 
+						from @primaryinfo a inner join @primaryinfo b on a.typeguid=b.typeguid
+						where a.infokey='colkey' and a.infovalue=@id and b.infokey='colvalue'
+
+	EXECUTE sp_executesql @sqlstr, N'@moduleinfo api.[type] readonly, @formxml xml output', @moduleinfo = @colinfo, @formxml = @form output
+
+	if @isdebug = 1 select @form
+
+	if @isdebug=1 print 'part 3'
+
+	set @sqlstr = '
+		declare @docDate varchar(50), @docNo varchar(50), @refNo varchar(50), @id varchar(50)
+
+		declare @xmlheader xml
+		exec [api].[theme_header] '''+cast(@hostguid as varchar(50))+''', '''+@code+''', @xmlheader output
+
+		select (@xmlheader) header, (
+			select (
+				select 
+				(
+					select 
+					'''+lower(@code)+''' ''code'',
+					moduledescription ''Description'',
+					'''+isnull(@parentkey,'')+''' ''parentKey'',
+
+					'''+convert(nvarchar(max),@guid)+''' ''GUID'',
+					'+isnull(''''+(	
+						select b.infovalue 
+						from @primaryinfo a inner join @primaryinfo b on a.typeguid=b.typeguid
+						where a.infokey='colkey' and a.infovalue=@docdate and b.infokey='colvalue'
+						)+'''', 'null')+' ''docDate'',
+					'+isnull(''''+(	
+						select b.infovalue 
+						from @primaryinfo a inner join @primaryinfo b on a.typeguid=b.typeguid
+						where a.infokey='colkey' and a.infovalue=@docno and b.infokey='colvalue'
+						)+'''', 'null')+' ''docNo'',
+					'+isnull(''''+(	
+						select b.infovalue 
+						from @primaryinfo a inner join @primaryinfo b on a.typeguid=b.typeguid
+						where a.infokey='colkey' and a.infovalue=@refno and b.infokey='colvalue'
+						)+'''', 'null')+' ''refNo'',
+					'+isnull(''''+(	
+						select b.infovalue 
+						from @primaryinfo a inner join @primaryinfo b on a.typeguid=b.typeguid
+						where a.infokey='colkey' and a.infovalue=@id and b.infokey='colvalue'
+						)+'''', 'null')+' ''id'',
+					'''+@typecode+''' settingMode,
+					(
+						select '''+lower(@code)+''' code'+
+						case when @typecode = 'T' and exists(select * from modl where moduleid=@code and ParentModuleGUID is null)
+						then
+						case 
+							when @ver = '4.0' then ', b.Status, b.StatusComment'
+							--when @ver = '3.0' then ',status,statuscomment from '+@db+'.dbo.'+@settingmode+'o'+@code+' where '+@Primary+'='''+convert(nvarchar(max),@guid)+''''
+							when @ver = '3.0' then ',status, statuscomment from '+@db+'.oph.'+@tblCode+' where '+@Primary+'='''+convert(nvarchar(max),@guid)+''''
+							end
+						else ''
+						end	
+						+				'
+						for xml path(''state''),type
+					) ,
+					''1'' isRequester,
+					(
+						select 
+							'+iif(isnull(@allowAdd,0)=1,'1','0')+' ''allowAdd'',
+							'+iif(isnull(@allowAccess,0)=1,'1','0')+' ''allowAccess'',
+							'+iif(isnull(@allowDelete,0)=1,'1','0')+' ''allowDelete'', 
+							'+iif(isnull(@allowEdit,0)=1,'1','0')+' ''allowEdit'', 
+							'+iif(isnull(@allowForce,0)=1,'1','0')+' ''allowForce'', 
+							'+iif(isnull(@allowWipe,0)=1,'1','0')+' ''allowWipe''
+						for xml path(''permission''),type
+					)
+					from 
+						'+ case 
+							when @ver = '4.0' and @typecode='C'  then 'modl a where moduleid='''+@code+''''
+							when @ver = '4.0' and @typecode<>'C' then 'modl a left join '+@db+'.dbo.docm b on a.ModuleGUID = b.ModuleGUID and docguid ='''+convert(nvarchar(max),@guid)+''' where moduleid='''+@code+'''' 
+							when @ver = '3.0' then @db+'.dbo.comodl a where moduleid= ''' + @code+''''
+							end 
+						 +'
+					for xml path(''info''),type
+				) ,
+				@formxml, 
+				@childxml, 
+				@aprvxml,
+				@queryxml,
+				@talkxml
+			for xml path(''form''),root(''bodyContent''),type
+			)
+			for xml path (''body''),type
+			) for xml path(''sqroot'')'
+
+	if @isdebug = 1 select @sqlstr, 'declare @moduleinfo api.[type], @modguid uniqueidentifier'
+
+	EXECUTE sp_executesql @sqlstr, 
+		N'@moduleinfo api.[type] readonly, @modguid uniqueidentifier, @childxml xml, @formxml xml, @queryxml xml, @aprvxml xml, @talkxml xml', 
+		@moduleinfo = @colinfo,@modguid = @moduleguid, @childxml = @child, @formxml=@form, @queryxml=@xmlQuery, @aprvxml=@xmlApprovals, @talkxml=@xmltalk
+
+	--declare @timestamp datetime=current_timestamp
+	declare @comment nvarchar(max)='api.theme_form'
+	exec gen.evnt_save @hostguid, @code, @GUID, @timestamp, @comment
+
+
+
+
+

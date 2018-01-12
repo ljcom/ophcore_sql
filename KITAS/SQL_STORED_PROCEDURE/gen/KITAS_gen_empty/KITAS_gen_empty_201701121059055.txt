@@ -1,0 +1,177 @@
+
+
+
+
+
+
+
+CREATE procedure [gen].[empty]
+as 
+
+	delete from dbo.MoAGRPACCT
+	delete from dbo.MoAGRP
+
+	delete from dbo.MoBANK
+	
+	delete from dbo.MoCHANCHAI
+	delete from dbo.MoCHAN
+
+	delete from dbo.MoCNTRPROD
+	delete from dbo.MoCNTR
+
+	delete from dbo.MoCONT
+	
+	delete from dbo.MoCUSTSHIP
+	delete from dbo.MoCUSTBANK
+	delete from dbo.MoCUST
+
+	delete from dbo.MoDISCCNTR
+	delete from dbo.MoDOCN
+	delete from dbo.MoPERI
+
+	delete from dbo.MoPGRFFAMISFAM
+	delete from dbo.MoPGRFFAMIDTGT
+	delete from dbo.MoPGRFFAMIBRCK
+	delete from dbo.MoPGRFFAMI
+	delete from dbo.MoPGRF
+
+	delete from dbo.MoPOTL
+	
+	delete from dbo.MoPRICPRODPOTL
+	delete from dbo.MoPRICPRODBRCK
+	delete from dbo.MoPRICPROD
+	delete from dbo.MoPRICPOTL
+	delete from dbo.MoPRICCNTR
+	delete from dbo.MoPRIC
+	
+	delete from dbo.MoPRODISKU
+	delete from dbo.MoPROD
+	
+	delete from dbo.MoPSGNPBRDPSBR
+	delete from dbo.MoPSGNPBRD
+	delete from dbo.MoPSGN
+
+	delete from dbo.MoREGNBRCK
+	delete from dbo.MoREGN
+
+	delete from dbo.MoSITEWHSERACK
+	delete from dbo.MoSITEWHSE
+	delete from dbo.MoSITE where SiteType&lt;&gt;'INT'
+
+	delete from dbo.MoSUPPBANK
+	delete from dbo.MoSUPP
+
+	delete from dbo.RoCONTISKU
+	delete from dbo.RoCURRRATE
+	delete from dbo.RoUSERCUST
+	delete from dbo.RoUSERISKU
+	delete from dbo.RoUSERSITEMODL
+	delete from dbo.RoUSERSUPP
+
+	delete from dbo.SoINVT
+
+	delete from dbo.ToBNPYPYMTBLNC
+	delete from dbo.ToBNPYPYMT
+	delete from dbo.ToBNPYAPRV
+	delete from dbo.ToBNPY
+
+	delete from dbo.ToBNRCPYMTBLNC
+	delete from dbo.ToBNRCPYMT
+	delete from dbo.ToBNRCAPRV
+	delete from dbo.ToBNRC
+
+	delete from dbo.ToBNTRAPRV
+	delete from dbo.ToBNTR
+	
+	delete from dbo.ToCUORPYMT
+	delete from dbo.ToCUORAPRV
+	delete from dbo.ToCUOR
+
+	delete from dbo.ToCUPRPYMTBLNC
+	delete from dbo.ToCUPR
+	delete from dbo.ToCUPRAPRV
+	delete from dbo.ToCUPRPYMT
+
+	delete from dbo.ToDORDISKU
+	delete from dbo.ToDORD
+	
+	delete from dbo.ToDSALISKU
+	delete from dbo.ToDSALAPRV
+	delete from dbo.ToDSAL
+	
+	delete from dbo.ToJOUR
+	delete from dbo.ToJOURACCT
+	
+	delete from dbo.ToMEMO
+	delete from dbo.ToMEMORATE
+	
+	delete from dbo.ToPINVRATE
+	delete from dbo.ToPCNTPROD
+	delete from dbo.ToPCNTAPRV
+	delete from dbo.ToPCNT
+
+	delete from dbo.ToPORDISKU
+	delete from dbo.ToPORDAPRV
+	delete from dbo.ToPORDRATE
+	delete from dbo.ToPORD
+	
+	delete from dbo.ToPRETISKU
+	delete from dbo.ToPRETAPRV
+	delete from dbo.ToPRETRATE
+	delete from dbo.ToPRET
+	
+	delete from dbo.ToRORDISKU
+	delete from dbo.ToRORD
+	
+	delete from dbo.ToRRCPISKU
+	delete from dbo.ToRRCPAPRV
+	delete from dbo.ToRRCP
+	
+	delete from dbo.ToSCNTAPRV
+	delete from dbo.ToSCNT
+	
+	delete from dbo.ToSORDISKU
+	delete from dbo.ToSORDAPRV
+	delete from dbo.ToSORD
+	
+	delete from dbo.ToSORDISKUPORDISKU
+	delete from dbo.ToSORDRATE
+
+	delete from dbo.ToSRETRATE
+	delete from dbo.ToSRETISKU
+	delete from dbo.ToSRETAPRV
+	delete from dbo.ToSRET
+
+	delete from dbo.toSTCK
+
+	delete from dbo.ToSUOPPYMT
+
+	delete from dbo.ToSUOPAPRV
+	delete from dbo.ToSUOP
+
+	delete from dbo.ToSURR	
+	delete from dbo.ToSURRAPRV	
+	delete from dbo.ToSURRPYMT
+	delete from dbo.ToSURRPYMTBLNC
+
+	delete from dbo.ToTDELISKU
+	delete from dbo.ToTDEL
+	
+	delete from dbo.ToTORDISKU
+	delete from dbo.ToTORD
+	
+	delete from dbo.ToTRCPISKU
+	
+	delete from dbo.ToWADJISKU
+	delete from dbo.ToWADJ
+		
+	delete from dbo.ToWTRFISKU
+	delete from dbo.ToWTRF
+
+
+
+
+
+
+
+

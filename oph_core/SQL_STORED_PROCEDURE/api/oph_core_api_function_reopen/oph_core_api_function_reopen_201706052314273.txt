@@ -1,0 +1,109 @@
+
+
+
+
+CREATE procedure [api].[function_reopen] 
+	@hostGUID uniqueidentifier, 
+	@code varchar(20),
+	@GUID uniqueidentifier, @isDebug bit=0
+--WITH ENCRYPTION
+as
+	declare @ver varchar(10), @db varchar(50), @typecode varchar(1)
+	exec gen.getDBInfo @hostguid, @code, @ver output, @db output, @typecode output
+
+	declare @moduleGUID uniqueidentifier
+	select @moduleguid=ModuleGUID from modl where moduleid=@code
+
+	declare @dbcode varchar(100)=@code
+	declare @primaryCol varchar(50)
+
+	if @ver='3.0' and exists(select * from docm where moduleguid=@moduleguid) begin
+		set @ver='4.0'
+		set @db=db_name()
+		set @dbcode='docm'
+		set @primaryCol='docGUID'
+	end
+	else begin
+		if @ver='3.0' set @dbcode=@db+'.dbo.'+stuff(@code,2,1,'o')
+		exec api.getPrimaryKey @hostguid, @code, @primaryCol OUTPUT
+	end
+
+	--check customized
+	declare @custom_proc nvarchar(max)=@code+'_reopen_custom'
+	declare @custom_par nvarchar(max)='@GUID uniqueidentifier, @hostGUID uniqueidentifier'
+
+	declare @isExists bit=0
+	exec gen.checkObject @custom_proc, 'dbo', @db, @isExists OUTPUT
+
+	if @isExists=1 begin
+		set @custom_proc='exec '+@db+'.dbo.'+@custom_proc+' '''+CAST(@GUID AS VARCHAR(50))+''', '''+CAST(@hostGUID AS VARCHAR(50))+''''
+		--set @custom_proc=@db+'.dbo'+@custom_proc
+		exec sp_executesql @custom_proc, @custom_par, @GUID, @hostGUID
+	end
+	else begin
+		--run standard
+		declare @userGUID uniqueidentifier
+		declare @msg nvarchar(100)='', @isCancel bit=0
+				
+		--check additional before reopen
+		declare @before_proc nvarchar(max)=@code+'_reopen_before'
+		declare @before_par nvarchar(max)='@GUID uniqueidentifier, @hostGUID uniqueidentifier, @isCancel OUTPUT, @msg OUTPUT'
+
+		set @isExists=0
+		exec gen.checkObject @before_proc, 'dbo', @db, @isExists OUTPUT
+
+		if @isExists=1 begin
+			set @before_proc='exec '+@db+'.dbo.'+@before_proc+' '''+CAST(@GUID AS VARCHAR(50))+''', '''+CAST(@hostGUID AS VARCHAR(50))+''', @isCancel OUTPUT, @msg OUTPUT'
+			--set @before_proc=@db+'.dbo.'+@before_proc
+			exec sp_executesql @before_proc, @before_par, @GUID, @hostGUID, @isCancel OUTPUT, @msg OUTPUT
+		end
+				
+		--get user information
+		select @userGUID=userguid from USERHOST where hostGUID=@hostGUID
+		
+		-- put check process to make sure this user allow to reopen --
+	
+		if @isCancel=0 begin
+			--run if only not cancelled
+			declare @sqlstr nvarchar(max)
+			set @sqlstr='
+				if @userGUID is not null 
+				begin
+					declare @username varchar(200)
+					select @username=username
+					from [user]
+					where userguid=@userguid
+				
+					update '+@dbcode+' 
+					set status=400, statuscomment = ''Reopened by ''+@username
+					where '+@primaryCol+' = @GUID and status in (300, 500)
+
+					--if exists(select * from '+@dbcode+' where '+@primaryCol+' = @GUID and status in(400)) begin 
+					--	--exec api.function_mail @hostGUID, @code, @GUID, ''reopen''
+					--	--if gen.checkObject('''+@code+'_mail_send'', ''dbo'', '''+@db+''')=1 exec '+@dbcode+'_mail_send @GUID, @hostGUID
+					--end
+				end'
+
+			declare @sqlpar nvarchar(max)='@hostGUID uniqueidentifier, @code varchar(20), @GUID uniqueidentifier, @userGUID uniqueidentifier, @msg varchar(max) OUTPUT'
+			exec sp_executesql @sqlstr, @sqlpar, @hostGUID, @code, @GUID, @userGUID, @msg OUTPUT
+			if @isdebug=1 print @sqlstr
+			if @isdebug=1 print @sqlpar
+
+			--additional procedure after execution
+			declare @after_proc nvarchar(max)=@code+'_reopen_after'
+			declare @after_par nvarchar(max)='@GUID uniqueidentifier, @hostGUID uniqueidentifier'
+
+			set @isExists=0
+			exec gen.checkObject @after_proc, 'dbo', @db, @isExists OUTPUT
+
+			if @isExists=1 begin
+				set @after_proc='exec '+@db+'.dbo.'+@after_proc+' '''+CAST(@GUID AS VARCHAR(50))+''', '''+CAST(@hostGUID AS VARCHAR(50))+''''
+				--set @after_proc=@db+'.dbo.'+@after_proc
+				exec sp_executesql @after_proc, @after_par, @GUID, @hostGUID
+			end
+		end
+		
+		select @msg reopened
+	end 
+
+

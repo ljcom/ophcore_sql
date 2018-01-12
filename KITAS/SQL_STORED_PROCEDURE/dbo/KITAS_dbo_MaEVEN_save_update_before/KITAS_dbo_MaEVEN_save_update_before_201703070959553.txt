@@ -1,0 +1,4 @@
+CREATE PROCEDURE [dbo].[MaEVEN_save_update_before]	@GUID uniqueidentifier, @hostGUID uniqueidentifier, @Name nvarchar(250) OUTPUT, @EVGRGUID uniqueidentifier OUTPUT, @DIVNGUID uniqueidentifier OUTPUT, @SIGNGUID uniqueidentifier OUTPUT, @StartDate date OUTPUT, @EndDate date OUTPUT, @Discount int OUTPUT, @MaxQty int OUTPUT, @MaxSales money OUTPUT, @Remarks nvarchar(450) OUTPUT, @isCancel bit = 0 OUTPUT, @msg nvarchar(1000) = '' OUTPUT--Automatic Parameters by OPH. Do Not Modify This Parameters Intentionally.
+
+as	--CreatedBy eLs ON Jan, 2017
+

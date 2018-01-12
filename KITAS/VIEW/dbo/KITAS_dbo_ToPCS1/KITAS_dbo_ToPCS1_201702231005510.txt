@@ -1,0 +1,8 @@
+
+
+CREATE view [dbo].[ToPCS1]
+as
+select PCSOGUID, DocNo, DocRefNo, DocDate, CarolGUID, Address, EVGRGUID, PAYMGUID, isPickedUp, TotalQty, TotalSales, Status, StatusComment, isDeleted, CreatedDate, CreatedUser, UpdatedDate, UpdatedUser, DeletedDate, DeletedUser, ClosedDate
+from toPCSO
+
+

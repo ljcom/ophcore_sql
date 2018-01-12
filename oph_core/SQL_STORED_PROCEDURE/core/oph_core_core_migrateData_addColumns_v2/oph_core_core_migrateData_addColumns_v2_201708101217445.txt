@@ -1,0 +1,102 @@
+
+
+
+
+CREATE procedure [core].[migrateData_addColumns_v2] @accountid nvarchar(50), @coreDB nvarchar(50), @dataDB nvarchar(50), @v2svr nvarchar(50), @v2db nvarchar(50), @code nvarchar(50)
+as
+
+	declare @fieldKey nvarchar(max)
+	declare @fieldVal1 nvarchar(max), @fieldVal2 nvarchar(max), 
+		@fieldDate1 nvarchar(max), @fieldDate2 nvarchar(max), 
+		@fieldNumeric1 nvarchar(max), @fieldNumeric2 nvarchar(max), 
+		@fieldText1 nvarchar(max)='', @fieldText2 nvarchar(max)=''
+
+	declare @sqlstr nvarchar(max)='
+		update a set collength=d.max_length
+		--select b.moduleid, a.colkey, d.*
+		from '+@datadb+'.dbo.modlcolm a
+			inner join '+@datadb+'.dbo.modl b on a.moduleguid=b.moduleguid
+			inner join '+@v2svr+'.'+@v2db+'.sys.objects c on b.moduleid=c.name and c.type=''U''
+			inner join '+@v2svr+'.'+@v2db+'.sys.columns d on c.object_id=d.object_id and d.name=a.colkey
+		where a.coltype in (231, 167, 175, 239) and a.collength is null	'
+
+	exec sp_executesql @sqlstr
+
+	set @sqlstr='	
+		select @fieldkey=a.colkey 
+		from '+@datadb+'.dbo.modlcolm a 
+			inner join '+@datadb+'.dbo.modl b 
+				on a.moduleguid=b.moduleguid 
+				and colOrder=(
+					select column_id
+					from '+@v2svr+'.'+@v2db+'.sys.index_columns c 
+						inner join '+@v2svr+'.'+@v2db+'.sys.indexes c1 on c.index_id=c1.index_id and c1.object_id=c.object_id
+							and c1.is_primary_key=1
+						inner join '+@v2svr+'.'+@v2db+'.sys.objects d on c1.object_id=d.object_id
+					where d.name=b.ModuleID)
+		where b.moduleid='''+@code+'''' 
+	
+	exec sp_executesql @sqlstr, N'@fieldKey nvarchar(max) output', @fieldKey output
+	declare @ran nvarchar(50)=REPLACE(CAST(newid() AS NVARCHAR(50)), '-', '')
+	set @sqlstr='
+		DECLARE #cur'+@ran+' CURSOR
+		READ_ONLY
+		FOR 
+			select d.name colKey, 
+				case 
+					when a.coltype in (36, 104) or (a.coltype in (231, 167, 175, 239) and a.collength between 1 and 350) then ''colValue''
+					when a.coltype in (40, 41, 42, 43, 58, 61) then ''colValueDate''
+					when a.coltype in (48, 52, 56, 62, 59, 60, 62, 106, 122, 127) then ''colValueMoney''
+					when a.coltype in (231, 167, 175, 239) and (a.collength not between 1 and 350) then ''colValueText''
+				end colVal, b.moduleGUID
+			from '+@datadb+'.dbo.modlcolm a 
+				inner join '+@datadb+'.dbo.modl b on a.moduleguid=b.moduleguid 
+				inner join '+@v2svr+'.'+@v2db+'.sys.objects c on c.type=''U'' and c.name=b.moduleid 
+				inner join '+@v2svr+'.'+@v2db+'.sys.columns d on c.object_id=d.object_id and d.name=a.colKey
+			where moduleid='''+@code+''' and a.colkey not in (''isdeleted'', ''createdDate'', ''UpdatedDate'', ''createdUser'', ''updatedUser'', ''isClosed'', ''closedDate'', ''closedUser'', ''status'', ''statusComment'', ''deleteddate'', ''deletedUser'')
+				--and a.colkey<>'''+@fieldKey+'''
+				and a.colkey not like ''%BLOB%''
+		order by b.moduleid
+
+		if exists(select * from '+@v2svr+'.'+@v2db+'.dbo.'+@code+')
+		begin
+			DECLARE @colKey varchar(50), @colVal varchar(50), @sqlstr nvarchar(max), @moduleguid uniqueidentifier
+			OPEN #cur'+@ran+'
+
+			FETCH NEXT FROM #cur'+@ran+' INTO @colKey, @colVal, @moduleguid
+			WHILE (@@fetch_status <> -1)
+			BEGIN
+				IF (@@fetch_status <> -2)
+				BEGIN
+					set @sqlstr=''
+						insert into '+@datadb+'.dbo.docmcolm (DocGUID, ColKey, ''+@colVal+'')
+						select TOP 1000 w.docGUID, ''''''+@colKey+'''''', u.[''+@colKey+'']
+						from '+@v2svr+'.'+@v2db+'.dbo.'+@code+' u
+							inner join '+@datadb+'.dbo.docm w on cast(u.'+@fieldkey+' as nvarchar(50))=w.oldid and w.moduleguid=@moduleguid
+							left join '+@datadb+'.dbo.docmcolm v on w.docguid=v.docGUID and v.colkey=''''''+@colkey+''''''
+						where v.docGUID is null and u.[''+@colKey+''] is not null
+
+						WHILE @@ROWCOUNT>0 BEGIN
+							insert into '+@datadb+'.dbo.docmcolm (DocGUID, ColKey, ''+@colVal+'')
+							select TOP 1000 w.docGUID, ''''''+@colKey+'''''', u.[''+@colKey+'']
+							from '+@v2svr+'.'+@v2db+'.dbo.'+@code+' u
+								inner join '+@datadb+'.dbo.docm w on cast(u.'+@fieldkey+' as nvarchar(50))=w.oldid and w.moduleguid=@moduleguid
+								left join '+@datadb+'.dbo.docmcolm v on w.docguid=v.docGUID and v.colkey=''''''+@colkey+''''''
+							where v.docGUID is null and u.[''+@colKey+''] is not null	
+						END
+						''
+					print @sqlstr
+					exec sp_executesql @sqlstr, N''@moduleGUID uniqueidentifier'', @moduleGUID
+				END
+				FETCH NEXT FROM #cur'+@ran+' INTO @colKey, @colVal, @moduleguid
+			END
+
+			CLOSE #cur'+@ran+'
+			DEALLOCATE #cur'+@ran+'
+		
+		end'
+	
+	print @sqlstr
+	exec sp_executesql @sqlstr
+
+

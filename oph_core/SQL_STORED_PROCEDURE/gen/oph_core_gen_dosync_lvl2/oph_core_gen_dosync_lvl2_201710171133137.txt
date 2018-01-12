@@ -1,0 +1,286 @@
+
+
+
+CREATE procedure [gen].[dosync_lvl2] @paccountid nvarchar(50), @saccountid nvarchar(50), @code_preset nvarchar(50),
+	@paddress nvarchar(500), @laddress nvarchar(500), @isPushCore bit=0, @token uniqueidentifier, @isLAN bit=0, @isdebug bit=0
+as
+	declare @url nvarchar(max), @g uniqueidentifier, @x nvarchar(max), @xx xml, @xx2 xml, @sqlstr nvarchar(max),
+		@cx bigint, @c bigint, @i bigint
+	
+	print 'lvl2'
+
+	--checklatestevent lvl 2
+	print 'checklatestevent 2 begin'
+
+	set @url=@paddress+'?mode=checkLatestEvent&lvl=2&token='+cast(@token as nvarchar(50))
+	print @url
+	if @isLAN=0 begin
+		exec gen.gethttp @url, @g output
+
+		select @x=httptext 
+		from http where httpguid=@g
+
+		set @xx=replace(@x, '<?xml version="1.0" encoding="utf-8"?>', '')
+	end else begin
+		exec api.sync_checklatestevent @paccountid, @token, 2, @xx output, @issilent=1
+	end
+	print 'checklatestevent 2 end'
+	--select @xx
+
+	exec api.sync_checklatestevent @saccountid, @token, 2, @xx2 output, @issilent=1
+
+	select 'lvl2', * 
+	from (
+		SELECT Tbl.Col.value('id[1]', 'nvarchar(50)') id, 
+			Tbl.Col.value('updatedDate[1]', 'bigint') ud
+		FROM @xx.nodes('/sqroot/replicationCheck/code') Tbl(Col)) x
+	left join (
+		SELECT Tbl.Col.value('id[1]', 'nvarchar(50)') id,
+			Tbl.Col.value('updatedDate[1]', 'bigint') ud
+		FROM @xx2.nodes('/sqroot/replicationCheck/code') Tbl(Col)
+		) y
+		on x.id=y.id 
+	where isnull(x.ud,0)-isnull(y.ud,0)<>0
+		and x.id not in ('modl', 'modlinfo', 'modlcolm', 'modlcolminfo', 'acct', 'acctdbse', 'acctinfo')
+		and x.id=iif(@code_preset is not null, @code_preset, x.id)
+	
+
+	declare @code nvarchar(50), @fieldKey nvarchar(50), @schema nvarchar(50), @GUID nvarchar(max)
+
+	DECLARE cur_001 CURSOR
+	READ_ONLY
+	FOR 
+		select x.id
+		from (
+			SELECT Tbl.Col.value('id[1]', 'nvarchar(50)') id, 
+				Tbl.Col.value('updatedDate[1]', 'bigint') ud 
+			FROM @xx.nodes('/sqroot/replicationCheck/code') Tbl(Col)) x
+		left join (
+			SELECT Tbl.Col.value('id[1]', 'nvarchar(50)') id, 
+				Tbl.Col.value('updatedDate[1]', 'bigint') ud
+			FROM @xx2.nodes('/sqroot/replicationCheck/code') Tbl(Col)
+			) y
+			on x.id=y.id 
+		where isnull(x.ud,0)-isnull(y.ud,0)<>0
+			and x.id not in ('modl', 'modlinfo', 'modlcolm', 'modlcolminfo', 'acct', 'acctdbse', 'acctinfo')
+			and x.id=iif(@code_preset is not null, @code_preset, x.id)
+
+	OPEN cur_001
+
+	FETCH NEXT FROM cur_001 INTO @code
+	WHILE (@@fetch_status <> -1)
+	BEGIN
+		IF (@@fetch_status <> -2)
+		BEGIN
+			print @code+' reqheader begin '+cast(getdate() as nvarchar(50))
+
+			set @url=@paddress+'?mode=reqheader&code='+@code+'&page=1&token='+cast(@token as nvarchar(50))
+			print @url
+			if @isLAN=0 begin
+				exec gen.gethttp @url, @g output
+
+				select @x=httptext 
+				from http where httpguid=@g
+
+				set @xx=replace(@x, '<?xml version="1.0" encoding="utf-8"?>', '')
+			end else begin
+				exec api.sync_reqheader @paccountid, @token, @code, 1, @xx output, @issilent=1
+			end
+			print 'reqheader end '+@code+cast(getdate() as nvarchar(50))
+
+			select @xx
+			declare @pageNo bigint, @nbPages bigint
+
+			SELECT @pageNo=Tbl.Col.value('pageNo[1]', 'bigint'), 
+				@nbPages=Tbl.Col.value('nbPages[1]', 'bigint')
+			FROM @xx.nodes('/sqroot/replication/info') Tbl(Col)				
+
+			if OBJECT_ID('tempdb..#header1') is not null drop table #header1
+			if OBJECT_ID('tempdb..#header2') is not null drop table #header2
+			if OBJECT_ID('tempdb..#header3') is not null drop table #header3
+
+			create table #header1 (GUID uniqueidentifier null, ud bigint null)
+			create table #header2 (GUID uniqueidentifier null, ud bigint null)
+			create table #header3 (GUID uniqueidentifier null, ud bigint null)
+
+			select @schema=iif(settingmode=0, 'dbo', 'doc')
+			from modl m
+			where moduleid=@code
+			
+			set @fieldkey=''
+
+			select @fieldkey=iif(settingmode=0, colkey, 'docGUID')
+			from modl m
+				inner join modlcolm c on m.moduleguid=c.moduleguid
+				inner join modlcolminfo i on c.ColumnGUID=i.ColumnGUID and i.InfoKey='primaryCol' and i.infovalue='1'
+			where moduleid=@code
+
+			select @fieldkey=iif(isnull(@fieldkey, '')<>'', @fieldkey, iif(charindex('APRV', @code)>0, 'docAprvGUID', 'docGUID'))
+
+			if @fieldKey<>'' begin
+				set @sqlstr='select '+@fieldKey+' GUID, gen.datetoint(isnull(updatedDate, createddate)) ud from ['+@schema+'].['+@code+']'
+				--print @sqlstr
+
+				insert #header2 (GUID, ud)
+				exec sp_executesql @sqlstr
+
+				insert #header3 (GUID, ud)
+				exec sp_executesql @sqlstr
+
+				insert into #header1 (GUID, ud)
+				select x.* 
+				from (					
+					select x.*
+					from (
+						SELECT Tbl.Col.value('GUID[1]', 'uniqueidentifier') GUID, 
+							Tbl.Col.value('updatedDate[1]', 'bigint') ud
+						FROM @xx.nodes('/sqroot/replication/headers/header') Tbl(Col)
+						) x
+						left join #header2 z
+							on x.GUID=z.GUID
+					where z.guid is null
+					) x
+					left join #header1 y
+						on x.GUID=y.GUID
+				where y.GUID is null 
+
+				insert into #header1 (GUID, ud)
+				select x.* 
+				from (	
+					select x.*
+					from (	
+						SELECT Tbl.Col.value('GUID[1]', 'uniqueidentifier') GUID, 
+							Tbl.Col.value('updatedDate[1]', 'bigint') ud
+						FROM @xx.nodes('/sqroot/replication/headers/header') Tbl(Col)) x
+						inner join #header2 z
+							on x.GUID=z.GUID
+					where x.ud-z.ud<>0) x
+					left join #header1 y
+						on x.GUID=y.GUID
+				where y.GUID is null 
+
+				delete z
+				--select x.*
+				from (
+					SELECT Tbl.Col.value('GUID[1]', 'uniqueidentifier') GUID, 
+						Tbl.Col.value('updatedDate[1]', 'bigint') ud
+					FROM @xx.nodes('/sqroot/replication/headers/header') Tbl(Col)) x
+					inner join #header3 z
+						on x.GUID=z.GUID
+
+				set @i=0
+
+				while @pageNo<@nbPages begin
+					set @pageNo=@pageNo+1
+
+					print @code+' reqheader begin '+cast(@pageNo as nvarchar(10))+'/'+cast(@nbPages as nvarchar(10))+' '+CAST(GETDATE() as nvarchar(50))
+
+					set @url=@paddress+'?mode=reqheader&code='+@code+'&page='+cast(@pageNo as nvarchar(10))+'&token='+cast(@token as nvarchar(50))
+					print @url
+					if @isLAN=0 begin
+						exec gen.gethttp @url, @g output
+
+						select @x=httptext 
+						from http where httpguid=@g
+
+						set @xx=replace(@x, '<?xml version="1.0" encoding="utf-8"?>', '')
+					end else begin
+						
+						exec api.sync_reqheader @paccountid, @token, @code, @pageNo, @xx output, @issilent=1
+						
+					end
+					print @code+' reqheader end '+cast(@pageNo as nvarchar(10))+'/'+cast(@nbPages as nvarchar(10))+' '+CAST(GETDATE() as nvarchar(50))
+
+					SELECT @pageNo=Tbl.Col.value('pageNo[1]', 'bigint'), 
+						@nbPages=Tbl.Col.value('nbPages[1]', 'bigint')
+					FROM @xx.nodes('/sqroot/replication/info') Tbl(Col)				
+					
+					--select @xx
+
+					insert into #header1 (GUID, ud)
+					select x.* 
+					from (					
+						select x.*
+						from (
+							SELECT Tbl.Col.value('GUID[1]', 'uniqueidentifier') GUID, 
+								Tbl.Col.value('updatedDate[1]', 'bigint') ud
+							FROM @xx.nodes('/sqroot/replication/headers/header') Tbl(Col)) x
+							left join #header2 z
+								on x.GUID=z.GUID
+						where z.guid is null) x
+						left join #header1 y
+							on x.GUID=y.GUID
+					where y.GUID is null 
+
+					insert into #header1 (GUID, ud)
+					select x.* 
+					from (	
+						select x.*
+						from (	
+							SELECT Tbl.Col.value('GUID[1]', 'uniqueidentifier') GUID, 
+								Tbl.Col.value('updatedDate[1]', 'bigint') ud
+							FROM @xx.nodes('/sqroot/replication/headers/header') Tbl(Col)) x
+								inner join #header2 z
+									on x.GUID=z.GUID
+							where x.ud-z.ud<>0) x
+							left join #header1 y
+								on x.GUID=y.GUID
+					where y.GUID is null 
+
+					delete z
+					--select x.*
+					from (	
+						SELECT Tbl.Col.value('GUID[1]', 'uniqueidentifier') GUID, 
+							Tbl.Col.value('updatedDate[1]', 'bigint') ud
+						FROM @xx.nodes('/sqroot/replication/headers/header') Tbl(Col)) x
+						inner join #header3 z
+							on x.GUID=z.GUID
+
+					select @i=count(*)
+					from (
+							select guid
+							from #header1
+							group by guid) x
+
+					print @i
+					if @i>=10000 break
+					--if @i>=1000 set @pageNo=@nbPages 
+				end
+
+				select @guid=(
+					select '*'+cast(guid as nvarchar(50))
+					from (
+						select guid from #header1 
+						where guid is not null
+						group by guid) x
+					for xml path('')
+				)
+
+				--print @guid 
+				print 'processdata'
+				exec gen.dosync_processdata @paccountid, @saccountid, @paddress, @laddress, @code, @token, @guid, @isLAN, @isdebug
+
+				if @i<10000 begin	--only after all data populated, then send them back
+					select @guid=(
+						select '*'+cast(guid as nvarchar(50))
+						from (
+							select guid from #header3
+							where guid is not null
+							group by guid) x
+						for xml path('')
+					)
+
+					print 'processdataback'
+					exec gen.dosync_senddata @paccountid, @saccountid, @paddress, @laddress, @code, @token, @guid, @isLAN, @isdebug
+				end
+			end
+		END
+		FETCH NEXT FROM cur_001 INTO @code
+	END
+
+	CLOSE cur_001
+	DEALLOCATE cur_001
+
+
+
+

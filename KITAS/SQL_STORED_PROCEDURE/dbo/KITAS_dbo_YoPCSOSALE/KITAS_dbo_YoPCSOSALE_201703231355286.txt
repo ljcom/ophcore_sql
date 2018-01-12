@@ -1,0 +1,24 @@
+CREATE PROCEDURE [dbo].[YoPCSOSALE] @HostGUID uniqueidentifier, @startDate date, @endDate date
+as	--CreatedBy eLs ON Feb, 2017
+
+	--declare @HostGUID uniqueidentifier = gen.getHost('oph', NULL)
+	--declare @startDate date = getdate() - 10 , @endDate date = getdate()
+	
+	SET NOCOUNT ON
+	declare @UserGUID uniqueidentifier = gen.getUser(@HostGUID)
+	if @UserGUID is NULL begin
+		set @UserGUID = oph_core.gen.getUserHost(@HostGUID)
+	end
+
+	declare @userid varchar(20), @username varchar(200)
+	select @userid = CarolId, @username = UserName from CoUSER where UserGUID = @UserGUID
+
+	select 
+		CAST(DAY(@startDate) AS varchar(2)) +' '+ DATENAME(MM, @startDate) +' '+ CAST(YEAR(@startDate) AS varchar(4)) [start_date],
+		CAST(DAY(@endDate) AS varchar(2)) +' '+ DATENAME(MM, @endDate) +' '+ CAST(YEAR(@endDate) AS varchar(4)) [end_date],
+		isNULL(@userid, '-') [user_id], @username [user_name], 
+		dbo.currMode(sum(TotalDiscount), 1, 'Indonesia') [grand_discount],
+		SUM(TotalQty) [grand_qty], dbo.currMode(sum(TotalSales), 1, 'Indonesia') [grand_pay]
+	from oph.TcPCSO
+	where DocDate between @startDate and @endDate
+

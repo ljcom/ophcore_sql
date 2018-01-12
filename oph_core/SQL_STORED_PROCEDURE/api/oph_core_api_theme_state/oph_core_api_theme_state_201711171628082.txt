@@ -1,0 +1,114 @@
+
+
+CREATE PROCEDURE [api].[theme_state]
+	@hostGUID uniqueidentifier, @code nvarchar(20), @typeCode varchar, @isCount bit, @stateFor varchar(10), @xmlState xml OUTPUT, @isDebug bit = 0
+--WITH ENCRYPTION
+as	--CreatedBy eLs, Oct 2017
+	--modified by Sam, Oct 13 2017: remove replace things
+
+	--declare @hostGUID uniqueidentifier = gen.gethost('ap\nuraini'), @code varchar(20) = 'tadedu', @typeCode varchar = 'T',
+	--@isCount bit = 1, @stateFor varchar(10) = 'header', @xmlState xml, @isDebug bit = 1
+
+/*
+	<state code="100" name="PENDING">
+	  <substate code="0" tRecord="9">DRAFT</substate>
+	  <substate code="100" tRecord="2">ON APPROVAL</substate>
+	</state>
+	<state code="300" name="PENDING">
+	  <substate code="300" tRecord="0">REJECTED</substate>
+	</state>
+	<state code="400" name="APPROVED">
+	  <substate code="400" tRecord="0">APPROVED</substate>
+	</state>
+	<state code="500" name="CLOSED">
+	  <substate code="500" tRecord="1">CLOSED</substate>
+	</state>
+*/
+
+	declare @sqlstr nvarchar(MAX), @userGUID uniqueidentifier = gen.getuserhost(@hostguid)
+
+	if @stateFor = 'header' begin
+		set @sqlstr = '
+		if exists(
+			select DocGUID from ' + IIF(@typeCode='T', 'doc.' + @code, @code) +'
+			where isDeleted = 0 AND Status between 0 AND 399 ' + 
+				isNULL(' AND CreatedUser = ''' + cast(@userGUID as nvarchar(50)) + '''', '') + ' 
+		) OR exists (
+			select a.DocGUID from doc.' + @code + ' a
+				inner join (
+					select a1.DocGUID from doc.' + @code + 'APRV a1
+						inner join (
+							select DocGUID, min(AprvLevel) minLvl from doc.' + @code + 'APRV where [status] = 0 group by DocGUID
+						) b1 ON a1.DocGUID = b1.DocGUID AND a1.AprvLevel = minLvl
+					where a1.AprvLevel > 0 ' + isNULL(' AND AprvUserGUID  = ''' + cast(@userGUID as nvarchar(50)) + '''', '') + '
+				) b ON a.DocGUID = b.DocGUID 
+			where a.isDeleted = 0 AND a.Status between 100 AND 399
+		) 
+			set @xmlState = (
+				select 1 for xml path(''isPending'')
+			)'
+	end
+	else begin
+		set @sqlstr = '
+			set @xmlState = --cast(replace(replace((
+				(select --DISTINCT
+					b.StateCode [state/@code], b.StateDesc [state/@name], 
+					(
+						select --DISTINCT
+							a1.StateID [substate/@code]' + IIF(@isCount=1, ', SUM(isNULL(counts, 0)) [substate/@tRecord]', '') +
+							', a1.StateName [substate]
+						from mstastat a1 ' + IIF(@isCount=1, '
+							left join (
+								select [status], COUNT(*) [counts] from ' + IIF(@typeCode='T', 'doc.' + @code, @code) +'
+								where isDeleted = 0 ' + 
+									isNULL(' AND CreatedUser = ''' + cast(@userGUID as nvarchar(50)) + '''', '') + ' 
+								group by [status]' + IIF(@typeCode='T', '
+								UNION
+								select a.[status], COUNT(*) [counts] from doc.' + @code + ' a
+									inner join (
+										select a1.DocGUID from doc.' + @code + 'APRV a1
+											inner join (
+												select DocGUID, min(AprvLevel) minLvl from doc.' + @code + 'APRV where [status] = 0 group by DocGUID
+											) b1 ON a1.DocGUID = b1.DocGUID AND a1.AprvLevel = minLvl
+										where a1.AprvLevel > 0 ' + isNULL(' AND AprvUserGUID  = ''' + cast(@userGUID as nvarchar(50)) + '''', '') + '
+									) b ON a.DocGUID = b.DocGUID 
+								where a.isDeleted = 0 AND a.Status between 100 AND 299
+								group by a.[status]
+								UNION
+								select a.[status], COUNT(*) [counts] from doc.' + @code + ' a
+									inner join (
+										select a1.DocGUID from doc.' + @code + 'APRV a1
+										where a1.AprvLevel > 0 ' + isNULL(' AND AprvUserGUID  = ''' + cast(@userGUID as nvarchar(50)) + '''', '') + '
+									) b ON a.DocGUID = b.DocGUID 
+								where a.isDeleted = 0 AND a.Status between 400 AND 500
+								group by a.[status]', '') + '
+							) b1 ON a1.StateID = b1.[Status]', '') + '
+						where a1.StateCode = b.StateCode AND b.ModuleStatusGUID = a1.ModuleStatusGUID ' + 
+						IIF(@isCount=1, 'group by a1.StateID, a1.StateName', '') + '					
+						order by StateId
+						for xml path(''''), type
+					) [state]
+				from modl a
+					inner join (select ModuleStatusGUID, statecode, statedesc from mstastat group by ModuleStatusGUID, statecode, statedesc) b 
+						ON a.ModuleStatusGUID = b.ModuleStatusGUID
+				where ModuleId = ''' + @code + '''
+				order by b.StateCode
+				for xml path(''''))
+			--), ''&lt;'', ''<''), ''&gt;'', ''>'') as xml)'
+	end
+
+	print @sqlstr
+	exec sp_executesql @sqlstr, N'@xmlState xml OUTPUT', @xmlState OUTPUT
+
+	--declare @xmlHeader xml = (
+	--	select 
+	--		SUM(subs.value('@tRecord','int')) [tRecord]
+	--	from @xmlState.nodes('/state/substate') AS xmlTbl(subs)
+	--	where subs.value('@code', 'int') in (0, 100)
+	--	for xml path (''), type
+	--)
+
+	--if @stateFor = 'header' set @xmlState = @xmlHeader
+
+	if @isDebug = 1 select @sqlstr [sqlState], @xmlState [xmlState], @stateFor [forXML]
+

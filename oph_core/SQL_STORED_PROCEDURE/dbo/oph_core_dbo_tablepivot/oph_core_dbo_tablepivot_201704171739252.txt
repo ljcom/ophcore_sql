@@ -1,0 +1,18 @@
+
+
+
+
+
+
+CREATE PROCEDURE [dbo].[tablepivot] @tbl as api.type readonly,@sqlstr nvarchar(max)
+--WITH ENCRYPTION
+as
+
+	EXECUTE sp_executesql @sqlstr ,N'@tbl api.[type] readonly' ,@tbl
+
+
+
+
+
+
+

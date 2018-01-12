@@ -1,0 +1,16 @@
+
+
+CREATE view [dbo].[coUSERUGRP]
+as
+	-- untuk list di view user
+	select UserUGroupGUID, MemberUserGUID UserGUID, UGroupGUID,
+		CreatedDate, CreatedUser, UpdatedDate, UpdatedUser
+	from coUGRPUSER
+	where MemberUserGUID is not null
+
+
+
+
+
+
+

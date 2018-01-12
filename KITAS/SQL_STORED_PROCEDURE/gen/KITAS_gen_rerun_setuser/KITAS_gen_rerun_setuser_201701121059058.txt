@@ -1,0 +1,37 @@
+
+
+
+
+
+
+
+
+
+CREATE procedure [gen].[rerun_setuser] @tablename nvarchar(20), @key nvarchar(20), @trxno nvarchar(20)
+as
+	declare @sqlstr nvarchar(1000)
+	
+	set @sqlstr='select * from '+@tablename+' where '+@key+'='''+@trxno+''''
+	exec(@sqlstr)
+	
+	select * from taSRETAPRV
+	where SalesReturnGUID='0CCFDE09-C90B-4546-9156-67C63116B031'
+
+	select * from couserHOST
+	where UserGUID='90141693-71B5-44FF-8461-31AA66D3EAAB'
+
+	delete from toSRETAPRV
+	where SalesReturnGUID='0CCFDE09-C90B-4546-9156-67C63116B031'
+	exec sp_taSRETAPRV_setuser '0CCFDE09-C90B-4546-9156-67C63116B031', 'C9C4F13E-0BD7-4C4B-92F8-0A64F4A6B7A3'
+	
+	exec sp_taSRET_execute '0CCFDE09-C90B-4546-9156-67C63116B031', 'C9C4F13E-0BD7-4C4B-92F8-0A64F4A6B7A3'
+
+
+
+
+
+
+
+
+
+

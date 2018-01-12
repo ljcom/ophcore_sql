@@ -1,0 +1,36 @@
+CREATE procedure [gen].[getHTTPpart] @g uniqueidentifier=null, @gstr nvarchar(max)=null,
+	@searchStartText nvarchar(100), @searchEndText nvarchar(100), 
+	@resultText nvarchar(max) output, @nPointer int output
+as
+	declare @start int, @end int
+
+	declare @searchText nvarchar(max)
+	if @g is not null 
+		select @searchText=httpText	from HTTP where httpGUID=@g
+	else 
+		select @searchText=@gstr
+
+	select @start=charindex(@searchStartText, @searchtext)
+
+	if @start>0 begin
+		set @start=@start+len(@searchStartText)
+
+		while @nPointer>@start and @start>0 begin
+			select @start=charindex(@searchStartText, @searchText, @start)
+			if @start>0 set @start=@start+len(@searchStartText)
+		end 
+		if @start>0 set @end=charindex(@searchendtext, @searchtext, @start)
+		if @end>0 select @resultText=SUBSTRING(@searchtext, @start, @end-@start)
+		if @nPointer<@start and @start>0 set @npointer=@start else set @npointer=0
+	end
+	else set @npointer=0
+
+
+
+
+
+
+
+
+
+

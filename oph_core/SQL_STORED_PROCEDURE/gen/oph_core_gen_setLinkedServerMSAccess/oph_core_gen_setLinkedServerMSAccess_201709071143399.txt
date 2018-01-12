@@ -1,0 +1,14 @@
+CREATE procedure gen.setLinkedServerMSAccess @svr nvarchar(50), @fileLocation nvarchar(500), @pwd nvarchar(50)=null
+as
+	if exists(select * from sys.servers where name = @svr) 
+		EXEC master.sys.sp_dropserver @svr
+
+	if @pwd is not null set @pwd=N';PWD='+@pwd
+
+	EXEC sp_addlinkedserver 
+	@server = @svr, --N'dbpib1', 
+	@provider = N'Microsoft.ACE.OLEDB.12.0', 
+	@srvproduct = N'Access', 
+	@datasrc = @filelocation, --N'D:\sqldata\dbpib1.mdb', 
+	@provstr = @pwd --N';PWD=MumtazFarisHana'
+

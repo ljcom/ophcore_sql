@@ -1,0 +1,70 @@
+
+CREATE procedure [core].[migrateData_addColumns] @accountid nvarchar(50), @dbcore nvarchar(50), @dataDB nvarchar(50), @v3db nvarchar(50), @tablename nvarchar(50)
+as
+
+	declare @fieldKey nvarchar(max)
+	declare @field1 nvarchar(max), @field2 nvarchar(max)
+
+	declare @sqlstr nvarchar(max)='	
+		select @fieldkey=a.colkey 
+		from '+@datadb+'.dbo.modlcolm a 
+			inner join '+@datadb+'.dbo.modl b 
+				on a.moduleguid=b.moduleguid 
+				and colOrder=(select min(colorder) colorder from '+@datadb+'.dbo.modlcolm c where c.moduleguid=a.ModuleGUID)
+		where b.moduleid='''+@tablename+''''
+	
+	exec sp_executesql @sqlstr, N'@fieldKey nvarchar(max) output', @fieldKey output
+
+	set @sqlstr='
+		set @field1=stuff((
+			select '', [''+a.colkey+'']'' 
+			from '+@datadb+'.dbo.modlcolm a 
+				inner join '+@datadb+'.dbo.modl b on a.moduleguid=b.moduleguid 
+				inner join '+@v3db+'.sys.objects c on c.type=''U'' and stuff(c.name, 2, 1, ''a'')=b.moduleid 
+				inner join '+@v3db+'.sys.columns d on c.object_id=d.object_id and d.name=a.colKey
+			where moduleid='''+@tablename+''' and a.colkey not in (''isdeleted'', ''createdDate'', ''UpdatedDate'', ''createdUser'', ''updatedUser'', ''isClosed'', ''status'', ''statusComment'', ''deleteddate'', ''deletedUser'')
+				and a.colkey<>'''+@fieldkey+'''
+			for xml path('''')), 1, 2, '''')'
+	
+	exec sp_executesql @sqlstr, N'@field1 nvarchar(max) output', @field1 output
+
+	set @sqlstr='
+		set @field2=stuff((
+			select '', cast([''+a.colkey+''] as nvarchar(max)) [''+a.colkey+'']''
+			from '+@datadb+'.dbo.modlcolm a 
+				inner join '+@datadb+'.dbo.modl b on a.moduleguid=b.moduleguid 
+				inner join '+@v3db+'.sys.objects c on c.type=''U'' and stuff(c.name, 2, 1, ''a'')=b.moduleid 
+				inner join '+@v3db+'.sys.columns d on c.object_id=d.object_id and d.name=a.colKey
+			where moduleid='''+@tablename+''' 
+				and a.colkey not in (''isdeleted'', ''createdDate'', ''UpdatedDate'', ''createdUser'', ''updatedUser'', ''isClosed'', ''status'', ''statusComment'', ''deleteddate'', ''deletedUser'')
+				and a.colkey<>'''+@fieldkey+'''
+			for xml path('''')), 1, 2, '''')'
+	
+	exec sp_executesql @sqlstr, N'@field2 nvarchar(max) output', @field2 output
+
+	set @sqlstr=N'
+		declare @xmlstr nvarchar(max)=N''
+			insert into '+@datadb+'.dbo.docmcolm (DocolGUID, DocGUID, ColKey, ColValue)
+			select newid(), '+@fieldkey+', u.ColKey, u.ColValue'
+
+	set @sqlstr=@sqlstr+N'			
+			--select * 
+			from (
+				select '+@fieldkey+', '+@field2+'
+				from '+@v3db+'.dbo.['+stuff(@tablename, 2, 1, 'o')+']) t
+			unpivot(
+				colValue 
+				for ColKey in ('+@field1+')
+			) u
+				left join '+@datadb+'.dbo.docmcolm v on u.'+@fieldkey+'=v.docGUID and u.colkey=v.colkey
+			where v.docolGUID is null
+			''
+		print @xmlstr	
+		exec sp_executesql @xmlstr
+	'
+	print @field1
+	print @field2
+	print @sqlstr
+	exec sp_executesql @sqlstr
+
+

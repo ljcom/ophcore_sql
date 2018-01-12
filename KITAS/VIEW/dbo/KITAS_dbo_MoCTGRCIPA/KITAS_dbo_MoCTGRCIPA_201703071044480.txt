@@ -1,0 +1,18 @@
+CREATE VIEW MoCTGRCIPA
+as	--CreatedBy eLs ON Mar, 2017
+
+	select 
+		a.CTGRGUID [CTGRCIPAGUID],
+		QUOTENAME(cast(a.ID as varchar(5)))+' '+ a.Name [Child],
+		isNULL(QUOTENAME(cast(b.ID as varchar(5)))+' '+b.Name, 
+			isNULL(QUOTENAME(cast(c.ID as varchar(5)))+' '+c.Name, 
+				isNULL(QUOTENAME(cast(d.ID as varchar(5)))+' '+d.Name, 
+					isNULL(QUOTENAME(cast(e.ID as varchar(5)))+' '+e.Name, '')))) [Parent],
+		a.CreatedDate, a.CreatedUser, a.UpdatedDate, a.UpdatedUser
+	from MoCTGR a
+		left join MoCTGR_1 b ON a.PARNCTGRGUID = b.CTGRGUID
+		left join MoCTGR_2 c ON a.PARNCTGRGUID = c.CTGRGUID
+		left join MoCTGR_3 d ON a.PARNCTGRGUID = d.CTGRGUID
+		left join MoCTGR_4 e ON a.PARNCTGRGUID = e.CTGRGUID
+	where a.isDeleted = 0
+

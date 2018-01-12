@@ -1,0 +1,79 @@
+CREATE procedure [core].[addFunctionTable_v40] @code nvarchar(50), @db nvarchar(50)=null, @server nvarchar(50)=null, @isdebug bit=0
+as
+	print 'pending -- changed by syn'
+
+	--if isnull(@server, '')='' set @server=@@SERVERNAME
+	--if isnull(@db, '')='' set @db=db_name()
+
+	--declare @declareList nvarchar(max)
+	--declare @fieldList nvarchar(max)
+
+	--declare @pstr nvarchar(max)='	
+	--		select @fieldList = 
+	--			stuff(
+	--				(select '', ''+c.colkey 
+	--				from '+@server+'.'+@db+'.dbo.modl m
+	--					inner join '+@server+'.'+@db+'.dbo.modlcolm c on m.moduleguid=c.moduleguid
+	--				where m.moduleid='''+@code+'''
+	--				order by colorder
+	--				for xml path('''')), 1, 2, '''')
+
+	--		select @declareList = 
+	--			stuff(
+	--				(select '', ''+c.colkey+'' nvarchar(50)'' 
+	--				from '+@server+'.'+@db+'.dbo.modl m
+	--					inner join '+@server+'.'+@db+'.dbo.modlcolm c on m.moduleguid=c.moduleguid
+	--				where m.moduleid='''+@code+'''
+	--				order by colorder
+	--				for xml path('''')), 1, 2, '''')
+	--'
+	--exec sp_executesql @pstr, N'@declareList nvarchar(max) output, @fieldList nvarchar(max) output', @declarelist output, @fieldlist output
+	
+
+	--if @isdebug=1 print @fieldList
+	--if @isdebug=1 print @declareList
+
+	--declare @execstr nvarchar(max)
+	--set @execstr='
+	--	exec '+@server+'.'+@db+'..sp_executesql @sqlstr'
+
+	--declare @sqlstr nvarchar(max)
+	--set @sqlstr='
+	--	if exists(select * from sys.objects where name='''+@code+''') 
+	--		drop function doc.'+@code+''
+
+	--if @isdebug=1 print @sqlstr
+	--exec sp_executesql @execstr, N'@sqlstr nvarchar(max)', @sqlstr
+
+	--set @sqlstr='
+	--	create'+' '+'function doc.'+@code+'(@hostGUID uniqueidentifier)
+	--	RETURNS 
+	--	@result TABLE 
+	--	(
+	--		docGUID uniqueidentifier, '+@declareList+'
+	--	)
+	--	--WITH ENCRYPTION
+	--	as
+	--	begin
+	--		insert into @result (docGUID, '+@fieldlist+')
+	--		select docGUID, '+@fieldlist+' 
+	--		from (
+	--			select top 100 d.docguid, c.colkey, isnull(c.colvalue,'''')+isnull(cast(c.colvaluemoney as nvarchar(50)), '''')+isnull(cast(colvaluedate as nvarchar(50)),'''') colVal
+	--			from docm d
+	--				inner join modl m on d.moduleguid=m.moduleguid
+	--				inner join docmcolm c on d.docguid=c.docguid
+	--			where m.moduleid='''+@code+''') x
+	--		pivot (
+	--				max(colval) for colkey in('+@fieldlist+')
+	--			) as pvt
+
+	--		return
+	--	end
+	
+	--	'
+	--if @isdebug=1 print @sqlstr
+	--exec sp_executesql @execstr, N'@sqlstr nvarchar(max)', @sqlstr
+
+
+
+

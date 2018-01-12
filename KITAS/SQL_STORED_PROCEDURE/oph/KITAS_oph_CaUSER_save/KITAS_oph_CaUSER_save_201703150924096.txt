@@ -1,0 +1,74 @@
+CREATE procedure [oph].[CaUSER_save]
+	@GUID uniqueidentifier, @hostGUID uniqueidentifier, @UserId nvarchar(50), @UserName nvarchar(50), @SignInitial nvarchar(100), @Position nvarchar(50), @skinGUID uniqueidentifier, @AutoLogin bit, @FirstPage nvarchar(4000), @HomeAddress nvarchar(50), @HomePhone nvarchar(20), @MobilePhone nvarchar(20), @PersonalEmail nvarchar(50), @preview int = 0
+as --automatic creation by system, you have to remove this comment to customize this procedure
+ 
+	if @preview &gt; 0 begin
+		if dbo.fn_checkObject('dbo','CaUSER_save_preview')=1 exec dbo.CaUSER_save_preview @GUID, @hostGUID,@UserId, @UserName, @SignInitial, @Position, @skinGUID, @AutoLogin, @FirstPage, @HomeAddress, @HomePhone, @MobilePhone, @PersonalEmail, @preview
+	end
+
+	else if dbo.fn_checkObject('dbo','CaUSER_save_custom')=1 exec dbo.CaUSER_save_custom @GUID, @hostGUID, @UserId, @UserName, @SignInitial, @Position, @skinGUID, @AutoLogin, @FirstPage, @HomeAddress, @HomePhone, @MobilePhone, @PersonalEmail
+
+	else begin
+		declare @userGUID1 uniqueidentifier, @site uniqueidentifier, @msg nvarchar(max), @iscancel bit=0
+		
+		select @userGUID1=userguid, @site=siteguid
+		from coUSERHOST
+		where hostGUID=@hostGUID
+		
+		set @msg=''
+		
+		
+		if 1=1 begin
+		
+			if 1=1			begin
+				if exists(select * from CoUSER
+					where UserGUID = @GUID) begin
+
+					if dbo.fn_checkObject('dbo','CaUSER_save_update_before')=1 exec dbo.CaUSER_save_update_before @GUID, @hostGUID, @UserId OUTPUT, @UserName OUTPUT, @SignInitial OUTPUT, @Position OUTPUT, @skinGUID OUTPUT, @AutoLogin OUTPUT, @FirstPage OUTPUT, @HomeAddress OUTPUT, @HomePhone OUTPUT, @MobilePhone OUTPUT, @PersonalEmail OUTPUT, @isCancel OUTPUT, @msg OUTPUT
+					if @iscancel=0 begin
+						begin try
+
+							update CoUSER set 
+								UserId = @UserId, UserName = @UserName, SignInitial = @SignInitial, Position = @Position, 
+								skinGUID = @skinGUID, AutoLogin = @AutoLogin, FirstPage = @FirstPage, 
+								HomeAddress = @HomeAddress, HomePhone = @HomePhone, 
+								MobilePhone = @MobilePhone, PersonalEmail = @PersonalEmail, 
+								UpdatedDate = getdate(), UpdatedUser = @userGUID1 
+							where UserGUID = @GUID
+
+
+							if dbo.fn_checkObject('dbo','CaUSER_save_update_after')=1 exec dbo.CaUSER_save_update_after @GUID, @hostGUID, 1
+
+						end try
+						begin catch
+							set @msg=error_message()
+						end catch
+
+					end
+				end
+				else begin
+					if dbo.fn_checkObject('dbo','CaUSER_save_update_before')=1 exec dbo.CaUSER_save_update_before @GUID, @hostGUID, @UserId OUTPUT, @UserName OUTPUT, @SignInitial OUTPUT, @Position OUTPUT, @skinGUID OUTPUT, @AutoLogin OUTPUT, @FirstPage OUTPUT, @HomeAddress OUTPUT, @HomePhone OUTPUT, @MobilePhone OUTPUT, @PersonalEmail OUTPUT, @isCancel OUTPUT, @msg OUTPUT
+					if @iscancel=0 begin
+						if @GUID is null set @GUID = newid()
+
+						begin try
+			
+			
+							insert into CoUSER
+								(UserGUID, UserId, UserName, SignInitial, Position, skinGUID, AutoLogin, FirstPage, HomeAddress, HomePhone, MobilePhone, PersonalEmail, createdUser)
+								values
+									(@GUID, @UserId, @UserName, @SignInitial, @Position, @skinGUID, @AutoLogin, @FirstPage, @HomeAddress, @HomePhone, @MobilePhone, @PersonalEmail, @userGUID1)
+
+			
+							if dbo.fn_checkObject('dbo','CaUSER_save_update_after')=1 exec dbo.CaUSER_save_update_after @GUID, @hostGUID, 0
+			
+						end try
+						begin catch
+							set @msg=error_message()
+						end catch
+					end
+				end
+			end
+		end
+		select @msg saved
+	end

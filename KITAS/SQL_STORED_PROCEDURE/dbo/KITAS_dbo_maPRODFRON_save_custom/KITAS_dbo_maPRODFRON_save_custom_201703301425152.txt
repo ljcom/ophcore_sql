@@ -1,0 +1,162 @@
+
+CREATE procedure [dbo].[maPRODFRON_save_custom]
+	@GUID uniqueidentifier, @hostGUID uniqueidentifier, @saveXML xml
+as
+	--additional script for save_custom --
+	declare @savelist api.fieldlist1
+
+	insert into @saveList
+	exec api.convertXML2FieldList 'maPRODFRON', @savexml
+
+	-- end additional script for save_custom --
+	
+	declare @PCSOGUID uniqueidentifier = (select fieldvalue from @savelist where fieldId ='cartid')
+		, @PRODGUID uniqueidentifier = (select fieldvalue from @savelist where fieldId ='PRODGUID')
+		, @evenpskuGUID uniqueidentifier = (select fieldvalue from @savelist where fieldId ='evenpskuGUID')
+		, @Qty int = (select fieldvalue from @savelist where fieldId ='Availaible')
+		, @Price money = (select fieldvalue from @savelist where fieldId ='price')
+		, @userGUID uniqueidentifier
+
+	/*cari userGUID where host*/
+	--select @userGUID = UserGUID from [userhost] where hostGUID = @hostGUID 
+	--if @userGUID is null begin
+		set @userGUID = '99999999-9999-9999-9999-999999999999'
+	--end 
+
+	declare @carolGUID uniqueidentifier, @address nvarchar(200), @carolid nvarchar(20)
+		select @carolGUID = a.userGUID from oph_core.dbo.userhost a 
+		inner join oph_core.dbo.[user] b on b.userGUID = a.userGUID
+		where a.hostGUID = @hostGUID
+	
+
+	select @carolid = carolID from kitas.dbo.couser where userGUID = @carolGUID
+
+	select @address = CustomerAddress from kitas.dbo.MoCUS1 where CarolId = @carolid
+
+	if @carolGUID is null begin 
+		select 'You must &amp;lt;a style="color:white; font-weight:bold; text-decoration:underline !important;" data-toggle="modal" href=".login-modal"&amp;gt; LOGIN &amp;lt;/a &amp;gt; first'
+	end
+	else begin
+		if not exists (select 1 from kitas.dbo.TOPCSO where pcsoGUID = (select fieldvalue from @savelist where fieldId ='cartid')) begin
+			declare @autonumber nvarchar(10)
+			declare @DocDate smalldatetime
+				set @DocDate=getdate()
+			exec kitas.gen.getNumber 'TaPCSO', @DocDate, 0, @autonumber OUTPUT
+
+			insert into kitas.dbo.TOPCSO (PCSOGUID, DocNo, DocDate, carolGUID, Address, EVGRGUID, paymGUID, createduser, createddate,updateduser, UpdatedDate)
+			select 
+				@PCSOGUID, @autonumber, @DocDate, @carolGUID, @address, '2E2A6145-BF49-4757-A1FD-2100BE14BA02' /*website online*/, '5FE39332-DAB1-4BAA-B9BD-2A664BF22D84'
+				, @userGUID, getdate(), @userGUID, getdate()
+		end
+		else begin
+	
+			update kitas.dbo.toPCSO
+			set carolGUID = @carolGUID,
+				address = @address,
+				paymGUID = '5FE39332-DAB1-4BAA-B9BD-2A664BF22D84',
+				updateduser = @userGUID,
+				updateddate = getdate()
+			where pcsoGUID = @PCSOGUID
+		end
+
+		/*cari evenGUID*/
+		declare @evenGUID uniqueidentifier, @evename nvarchar(100)
+		select @evenGUID = a.evenGUID, @evename = name from kitas.dbo.MoEVENPSKU a 
+		inner join kitas.dbo.MoEVEN b on b.evenGUID = a.evenGUID
+		where evenPSKUGUID = @evenpskuGUID
+
+		declare @limit money, @cekTotalShop money, @maxSales money
+		, @maxQty int, @qty1 int, @qty2 int, @sisaqty int
+		
+		if @EvenGUID in ('9573DD6B-DB6F-4153-8A07-9B7CC8C0ADE7','6A293D44-E76E-4979-BAD6-A598988FB61B')  begin 
+			select @qty1 = isnull(sum(Qty),0)
+			from kitas.dbo.ToPCSO a 
+			inner join  kitas.dbo.ToPCSODETA b 
+				on b.pcsoGUID = a.pcsoGUID
+			where a.carolGUID = @carolGUID and isdeleted = 0 and b.prodGUID = @PRODGUID and EvenGUID in ('9573DD6B-DB6F-4153-8A07-9B7CC8C0ADE7','6A293D44-E76E-4979-BAD6-A598988FB61B') 
+				and ((status &gt;= 100) or (a.PCSOGUID = @PCSOGUID))
+
+			select @limit = limit from kitas.dbo.CoUSERLIMT where userGUID = @carolGUID
+			select @maxSales = maxsales, @maxQty = MaxQty from kitas.dbo.moEVEN where evenGUID = @evenGUID
+			set @sisaqty = @MaxQty - @qty1
+			set @cekTotalShop  = @Qty*@Price
+			set @cekTotalShop = @cekTotalShop + 
+							isnull((select sum(totalPrice) from kitas.dbo.ToPCSODETA where PCSOGUID = @PCSOGUID and EVENGUID in ('9573DD6B-DB6F-4153-8A07-9B7CC8C0ADE7','6A293D44-E76E-4979-BAD6-A598988FB61B')),0)
+		end
+		else if @EvenGUID not in ('9573DD6B-DB6F-4153-8A07-9B7CC8C0ADE7','6A293D44-E76E-4979-BAD6-A598988FB61B')  begin 
+			select @qty2 = isnull(sum(Qty),0)
+			from kitas.dbo.ToPCSO a 
+			inner join kitas.dbo.ToPCSODETA b 
+				on b.pcsoGUID = a.pcsoGUID
+			where a.carolGUID = @carolGUID and isdeleted = 0 and b.prodGUID = @PRODGUID and EvenGUID = @evenGUID
+				  and ((status &gt;= 100) or (a.PCSOGUID = @PCSOGUID))
+		
+			select 
+				@limit = (select Top 1 MaxSales from kitas.dbo.moeven where evenGUID = @evenGUID)-isnull(sum(TotalPrice),0) 
+			from kitas.dbo.ToPCSODETA a1
+			inner join kitas.dbo.ToPCSO a2 
+				on a1.PCSOGUID = a2.PCSOGUID
+			where EVENGUID = @evenGUID
+			   and a2.carolGUID = @carolGUID and status &gt;= 100 and a2.isdeleted = 0 
+
+			select @maxSales = maxsales,@maxQty = MaxQty from kitas.dbo.MoEven where evenGUID = @EvenGUID
+			set @sisaqty = @MaxQty - @qty1
+			set @cekTotalShop  = @Qty*@Price
+			set @cekTotalShop = @cekTotalShop + 
+								isnull((select sum(totalPrice) from kitas.dbo.ToPCSODETA where PCSOGUID = @PCSOGUID and EVENGUID = @evenGUID),0)
+		end
+		else begin
+			select 'ada yg salah'
+		end
+		--jika qty/limit melebihi (regular, web)
+		if @evenGUID in ('9573DD6B-DB6F-4153-8A07-9B7CC8C0ADE7','6A293D44-E76E-4979-BAD6-A598988FB61B') 
+					 and (@cekTotalShop &gt; @limit or @Qty +  @qty1 &gt; @maxQty) 
+		begin
+			if @cekTotalShop &gt; @limit begin
+				select 'Your order for Event '+@evename+' exceeds the limit  &amp;lt;br/&amp;gt; (Your Limit : Rp. '+PARSENAME(CONVERT(VARCHAR,CAST(@limit AS MONEY),1),2)+')'
+			end 
+			else if @Qty +  @qty1 &gt; @maxQty begin
+				select 'Qty orders of this product Event '+@evename+' exceeds the limit &amp;lt;br/&amp;gt; (Qty Limit : '+ convert(varchar(10),@maxqty-@qty1)+')'
+			end
+		end
+		--jika qty/limit melebihi selain (regular, web)
+		else if @evenGUID not in ('9573DD6B-DB6F-4153-8A07-9B7CC8C0ADE7','6A293D44-E76E-4979-BAD6-A598988FB61B') 
+				and (@cekTotalShop &gt; @limit or @Qty + @qty2 &gt; @maxQty) 
+		begin
+			--select @evename,convert(varchar(20),@limit)+'t',@cekTotalShop,'bazar'
+		
+			if @cekTotalShop &gt; @limit begin
+				select 'Your order for Event '+@evename+' exceeds the limit  &amp;lt;br/&amp;gt; (Your Limit : Rp. '+PARSENAME(CONVERT(VARCHAR,CAST(@limit AS MONEY),1),2)+')'
+			end 
+			else if @Qty +  @qty2 &gt; @maxQty begin
+				select 'Qty orders of this product for Event '+@evename+' exceeds the limit &amp;lt;br/&amp;gt; (Qty Limit : '+ convert(varchar(10),@maxqty-@qty2)+')'
+			end
+		end
+		else begin
+			if not exists (select 1 from kitas.dbo.TOPCSODETA where PCSOGUID = @PCSOGUID and PRODGUID = @PRODGUID and evenGUID = @evenGUID) begin
+				--insert pcsodeta
+				declare @newid uniqueidentifier = newid()
+				insert into kitas.dbo.TOPCSODETA (PCSODETAGUID, PCSOGUID, PRODGUID, Qty, Price, TotalPrice, EVENGUID, createduser, createddate, UpdatedUser, UpdatedDate)
+				select @newid, @PCSOGUID, @PRODGUID, @Qty, @Price, @Qty*@Price, @evenGUID
+						, @userGUID, getdate(), @userGUID, getdate()
+	
+				exec kitas.dbo.TaPCSODETA_save_update_after @newid, @hostGUID, 0
+			end 
+			else begin
+
+				declare @pcsodetaGUID uniqueidentifier
+				select @pcsodetaGUID = pcsodetaGUID from  kitas.dbo.ToPCSODETA where PCSOGUID = @PCSOGUID and PRODGUID = @PRODGUID and evenGUID = @evenGUID
+	
+				update kitas.dbo.TOPCSODETA
+					set Qty = Qty+@Qty, TotalPrice = TotalPrice+(@Qty*@Price), EVENGUID = @evenGUID, updateddate = getdate(), updateduser = @userGUID
+					where pcsodetaGUID = @pcsodetaGUID
+					exec kitas.dbo.TaPCSODETA_save_update_after @pcsodetaGUID, @hostGUID, 1
+			end
+		end
+		--update totalQTY + totalSales
+		update kitas.dbo.TOPCSO
+		set TotalQty = (select sum(Qty) from kitas.dbo.TOPCSODETA where PCSOGUID = @PCSOGUID)
+			, TotalSales = (select sum(TotalPrice) from kitas.dbo.TOPCSODETA where PCSOGUID = @PCSOGUID)
+		where PCSOGUID = @PCSOGUID
+end
+

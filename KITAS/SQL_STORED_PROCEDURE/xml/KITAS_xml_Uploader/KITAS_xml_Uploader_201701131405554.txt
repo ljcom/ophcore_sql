@@ -1,0 +1,237 @@
+
+CREATE procedure [xml].[Uploader] 
+	@hostGUID uniqueidentifier,
+	@tablename varchar(100), 
+	@QueryCode varchar(100),
+	@debug int=0	
+as
+	declare @xhead varchar(max), @xcontent varchar(max), @xfilter varchar(max), @xinfo varchar(max), 
+		@xapproval varchar(max), @xtalk varchar(max), @x2 varchar(max), @skinFolder varchar(100)
+		,@xstatusform varchar(max),@xaddtaskmenu varchar(max),@xstatuscomment varchar(max)
+
+	declare @allowPDF bit=0, @allowXLS bit=0, @tablename1 nvarchar(100),@QueryName nvarchar(100), @templateCode varchar(20)
+
+	set @tablename1= left(@tablename,1)+ 'a' +right(@tablename,len(@tablename)-2 )	
+
+	--check permission
+	select @allowPDF=allowPDF, @allowXLS=allowXLS, @QueryName=QueryName, @templateCode=templateCode
+	from coQURY where QueryCode=@QueryCode
+
+	--skin
+	select @skinFolder=c.skinFolder from CoUSER a
+		inner join CoUSERHOST b
+			on a.userguid=b.userguid
+		inner join coskin c
+			on a.skinguid=c.skinguid
+	where b.hostguid=@hostguid
+
+	--temp table
+	declare @b varchar(max), @w varchar(max)
+	exec [gen].[procfields_browse] @tablename, @b output, @w output
+	--set @w=replace(@w, '''''%''''', '''%''')+case when isnull(@sqlfilter,'')&lt;&gt;'' then ' and '+@sqlFilter else '' end
+	declare @fieldKey varchar(100)
+	select @fieldKey=ColName
+		from gen.coTABL a
+			inner join gen.coTABLFIEL b
+				on a.TableGUID=b.tableGUID
+		where tablename=@tablename and b.colorder=1
+	--select @skinfolder, @allowPDF,@allowXLS
+	
+	--xinfo
+	set @xinfo= '
+		select
+		case when queryTypeFlag = ''isReport'' then ''report filter''
+				else QueryName   end
+				as ''headcaps'',
+		'+
+		cast(isnull(@allowPDF,0) as varchar(1))+' ''allowPDF'','+
+		cast(isnull(@allowXLS,0) as varchar(1))+' ''allowXLS'','''+
+		cast(isnull(@QueryName,'') as varchar(100))+''' ''QueryName'','''+
+		cast(isnull(@templateCode,'') as varchar(100))+''' ''templateCode'','''+
+		cast(isnull(@QueryCode,'') as varchar(100))+''' ''QueryCode''
+		from coQURY a
+		where QueryCode='''+@QueryCode+'''
+		for xml path(''''), type '
+	--select @xinfo
+
+--syawal
+
+	--combine content
+	--set @xcontent=cast(@xserial as varchar(max))
+		
+		
+		declare @parameter varchar(max)
+		set @parameter = '
+				select	QueryTypeFlag ''QueryTypeFlag/@flag'',
+						newID()  ''QueryTypeFlag/Id'',
+						QueryCode ''QueryTypeFlag/QueryCode'',
+						AllowUploadCSV ''QueryTypeFlag/AllowUploadCSV'',
+						AllowUploadFixed ''QueryTypeFlag/AllowUploadFixed'',
+						UploadCSVSeparation ''QueryTypeFlag/Separation'',
+						REPLACE (UploadFolder,''\'',''|'')  ''QueryTypeFlag/UploadFolder'',
+						cast(isnull(templateCode,'''') as varchar(100)) ''QueryTypeFlag/templateCode'',
+						QuerySQL ''QueryTypeFlag/QuerySQL'',
+						UGroupGUID ''QueryTypeFlag/UGroupGUID''
+				
+						from coQURY
+						where querycode='''+@QueryCode+'''
+						for xml path (''view''), type	
+						'
+
+		--set @parameter='
+		--	select	OrderNo,
+		--		QueryParameterGUID, 
+				 
+		--		QueryParTypeFlag ''QueryParTypeFlag/@fieldName'',
+		--		case when QueryParTypeFlag=''isDate'' then QueryParCaption else QueryParCaption end ''QueryParTypeFlag/QueryParCaption'',
+		--		case when QueryParTypeFlag=''isDate'' then QueryParName else QueryParName end ''QueryParTypeFlag/QueryParName'',
+		--		case when QueryParTypeFlag=''isSuggestBox'' then b.SuggestBoxFieldKey  else null end ''QueryParTypeFlag/fieldKey'',
+		--		case when QueryParTypeFlag=''isSuggestBox'' then b.SuggestBoxFieldId  else null end ''QueryParTypeFlag/fieldId'',
+		--		case when QueryParTypeFlag=''isSuggestBox'' then  b.SuggestBoxFieldDesc else null end ''QueryParTypeFlag/fieldDesc'',
+		--		case when QueryParTypeFlag=''isSuggestBox'' then b.TableName else null end ''QueryParTypeFlag/tablename'',
+		--		case when QueryParTypeFlag=''isDate'' then ''2000-01-01'' else '''' end ''QueryParTypeFlag/value'', 
+		--		case when QueryParTypeFlag=''isSuggestBox'' then b.whereField else '''' end ''QueryParTypeFlag/filter''
+		--from coQURY a
+		--inner join coQURYPARA b
+		--	on b.queryGUID=a.QueryGUID
+		--where querycode='''+@QueryCode+''' order by OrderNo
+		--for xml path (''view''), type
+		--'
+
+		--serialize content fields
+		--temp table
+	
+	
+	declare @tablenameX varchar(100)
+	set @tablenameX = 'CaUPLD'
+	exec [gen].[procfields_browse] @tablenamex, @b output, @w output
+
+	declare @xserial xml
+	select @xserial =(
+		select
+			case 
+				when isnull(comboType,0) in (1,2,3,10,12)
+					then ''''+colname+''' as ''field/autosuggestbox/@name'', '+colname+' ''field/autosuggestbox/value/*'', '
+				when isnull(comboType,0) in (4,40,41,42,43,44,45)
+					then ''''+colname+''' as ''field/datebox/@name'', '+colname+' ''field/datebox/value/*'', '+convert(varchar(4),comboType)+' ''field/datebox/type/*'', '
+				when isnull(comboType,0) in (5) and isnull(ViewColWidth,40)&gt;0
+					then ''''+colname+''' as ''field/fileattachment/@name'', '+colname+' ''field/fileattachment/value/*'', '
+				when isnull(xType,0) in (104)
+					then ''''+colname+''' as ''field/textbox/@name'', case when '+colname+'=1 then ''Yes'' else '''' end ''field/textbox/value/*'', '
+				else ''''+colname+''' as ''field/textbox/@name'', '+
+					colname+' ''field/textbox/value/*'', ' end+
+			case 
+				when isnull(comboType,0) in (1,2,3) then
+					case when isnull(comboFieldId,'')&lt;&gt;'' then ''+isnull(comboFieldId,'')+' ''field/autosuggestbox/ref/id/*''' else 'null' end +', '+
+					case when isnull(comboFieldName,'')&lt;&gt;'' then ''+isnull(comboFieldName,'')+' ''field/autosuggestbox/ref/name/*''' else 'null' end +', '+
+					case when isnull(comboFieldNameEx1,'')&lt;&gt;'' then ''+isnull(comboFieldNameEx1,'')+' ''field/autosuggestbox/ref/name1/*''' else 'null' end +', '+
+					case when isnull(comboFieldNameEx2,'')&lt;&gt;'' then ''+isnull(comboFieldNameEx2,'')+' ''field/autosuggestbox/ref/name2/*''' else 'null' end +', ' 
+				when isnull(comboType,0) in (10,12) then
+					case when isnull(comboFieldId,'')&lt;&gt;'' then ''+isnull(ColName,'')+'cbId ''field/autosuggestbox/ref/id/*''' else 'null' end +', '+
+					case when isnull(comboFieldName,'')&lt;&gt;'' then ''+isnull(ColName,'')+'cbNm ''field/autosuggestbox/ref/name/*''' else 'null' end +', '+
+					case when isnull(comboFieldNameEx1,'')&lt;&gt;'' then ''+isnull(comboFieldNameEx1,'')+' ''field/autosuggestbox/ref/name1/*''' else 'null' end +', '+
+					case when isnull(comboFieldNameEx2,'')&lt;&gt;'' then ''+isnull(comboFieldNameEx2,'')+' ''field/autosuggestbox/ref/name2/*''' else 'null' end +', ' 
+				else '' end+
+			'null, '
+		--select *
+		from gen.coTABL a
+			inner join gen.coTABLFIEL b
+				on a.TableGUID=b.tableGUID						
+		where tablename=@tablenameX and isBrowsable&gt;0		
+		order by BrowseOrder
+		for xml path('')
+		)
+--select @xserial
+		set @xhead=
+		'select 
+			colname ''column/@fieldName'',
+			case when isnull(titleShort,'''')='''' then titleCaption else titleShort end ''column/caption'',
+			browseColWidth ''column/width'',
+			browseColAlign ''column/align''
+			
+		from gen.coTABL a
+			inner join gen.coTABLFIEL b
+				on a.TableGUID=b.tableGUID
+		where tablename='''+@tablenameX+''' and isBrowsable&gt;0
+		order by BrowseOrder
+		for xml path(''''), type'
+
+	declare @t varchar(max)
+	declare @searchText varchar(max)='',@nbRows int=10,@pgNo int=1, @approvalProtected nvarchar(500),@vl nvarchar (10)
+	declare @allowBrowse bit,@sortOrder varchar(max)
+	set @approvalProtected = ''
+	set @t='
+			declare @nbPages int
+			declare @searchText varchar(max)
+			set @searchText='''+@searchText+'''
+
+			select @nbPages=count(*)
+			from oph.'+@tablenameX+'
+			
+			set @nbPages=(@nbPages+'+cast(@nbRows as varchar(5))+'-1)/'+cast(@nbRows as varchar(5))+'
+
+			select * 
+			into #t1 
+			from (
+				select top '+cast(((@pgNo)*@nbRows) as varchar(10))+' * 
+				from oph.'+@tablenameX+'
+				where UploaderCode='''+@QueryCode+'''
+				order by '+case when isnull(@sortOrder,'')&lt;&gt;'' then @sortOrder+',' else '' end+' UpdatedDate desc) a
+			except
+			select * 
+			from (
+				select top '+cast(((@pgNo-1)*@nbRows) as varchar(10))+' * 
+				from oph.'+@tablenameX+' 
+				where UploaderCode='''+@QueryCode+'''
+				order by '+case when isnull(@sortOrder,'')&lt;&gt;'' then @sortOrder+',' else '' end+' UpdatedDate desc) b'
+
+
+--xtalk
+	set @xtalk='
+			(select 
+				z.doctalkguid ''talk/@GUID'',
+				z.DocComment ''talk/Message'',
+				z.createdUserCbId ''talk/userid'',
+				z.createdUserCbNm ''talk/username'',
+				z.UpdatedDate ''talk/approvaldate''
+			from oph.caTALK z
+			where z.DocumentGUID=''00000000-0000-0000-0000-000000000000''
+			order by z.UpdatedDate
+			for xml path (''''), type) talks '
+
+	set @xcontent=cast(@xserial as varchar(max))
+	set @xcontent=
+		'select ''UploadGUID'' ''@GUID'',
+		'+@xcontent+'					
+		'+@xtalk+' 	
+		from (select * from #t1
+		) '+@tablenameX+' 
+		for xml path (''row''), type'
+		
+--select @t
+--select @xcontent
+	set @x2=@t+'
+	select 
+	(select ('+@xinfo+')
+	for xml path(''''), type) ''permission'',
+	(select ('+@parameter+')
+	for xml path(''''), type) ''parameter'',
+	(select ('+@xhead+')
+	for xml path(''''), type) ''header'',
+	(select ('+@xcontent+')
+	for xml path(''''), type) ''content''
+	for xml path(''report''), root'
+
+	if @debug=1 select @x2, @t, @xinfo, @parameter, @xhead, @xcontent
+	--print @xcontent
+	exec(@x2)
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,353 @@
+
+CREATE procedure [xml].[view_header_upload] @hostGUID uniqueidentifier, @tablename varchar(100), 
+	@GUID uniqueidentifier, @editMode int=0, @isChild bit=0, @debug bit=0
+as
+	declare @xhead varchar(max), @xcontent varchar(max), @xfilter varchar(max), @xinfo varchar(max), @xUplBrowse  varchar(max),
+		@xapproval varchar(max), @xtalk varchar(max), @x2 varchar(max), @skinFolder varchar(100),@parentTable varchar(100),@status varchar(100),@headTable  varchar(100),
+		@userGUID uniqueidentifier,@xstatuscomment varchar(max),@ModuleGUID uniqueidentifier,@userGUID1 uniqueidentifier,@UGroupName  varchar(100),@UGroup int,@msg nvarchar(1000)
+
+	declare @allowAdd bit, @allowBrowse bit, @allowEdit bit, @allowDelete bit, @allowWipe bit,@oTableName nvarchar(100), @status3 varchar(100),
+			@allowForce bit, @isDeletedTable bit, @allowShowAttach bit,@aTableName nvarchar(100), @UGroupGUID uniqueidentifier, @y nvarchar(100)
+	declare @forwardModule nvarchar(100), @orderByStr nvarchar(100), @uplGUID uniqueidentifier
+
+	--set mode
+	declare @mode int
+	if substring(@tablename,2,1)='d' set @isDeletedTable=1	
+	if substring(@tablename,2,1)='a' set @mode=0
+	if substring(@tablename,2,1)='e' set @mode=0
+	if substring(@tablename,2,1)='c' set @mode=0
+	if substring(@tablename,2,1)='d' set @mode=0
+	--set mode
+
+	set @uplGUID=newid()
+
+	--set tablename
+	set @aTableName= left(@tablename,1)+ 'a' +right(@tablename,len(@tablename)-2 )	
+	set @parentTable= SUBSTRING(@aTableName,1,6) 
+	set @headTable=SUBSTRING(@aTableName,1,1)
+	set @oTableName=left(@parentTable,1)+ 'o' +right(@parentTable,len(@parentTable)-2 )
+	--set tablename
+
+	--skin
+	select @skinFolder=c.skinFolder, @userGUID=a.userGUID
+	from CoUSER a
+		inner join CoUSERHOST b
+			on a.userguid=b.userguid
+		inner join coSKIN c
+			on a.skinguid=c.skinguid
+		inner join coUGRPUSER d
+			on d.MemberUserGUID=a.UserGUID
+	where b.hostguid=@hostguid 
+	--skin
+	print @aTableName
+	--check permission
+	exec gen.verifyAuth @aTableName, @hostGUID ,'',
+		@allowadd output , 
+		@allowBrowse output , 
+		@allowEdit output , 
+		@allowDelete output , 
+		@allowWipe output , 
+		@allowForce output , 
+		@allowShowAttach output , 
+		@UGroupGUID output
+	--select @allowadd, @allowBrowse as browse1, @allowEdit, @allowDelete,@allowForce, @UGroupGUID
+	--check permission
+	print @allowbrowse
+	--Group viewer
+	if @UGroupGUID='E9173D1A-29E1-4655-A73E-7636C196DC52' and (len(@tablename)&lt;7)
+	begin
+		set @y ='and status &gt;= 4'
+	end
+	--Group viewer
+
+	--Autority browse table
+	if isnull(@allowBrowse,0)=0 begin 
+		set @msg='You do not have authority for table browse!'
+		select @msg 
+	end
+	else if not exists(select *
+		from gen.coTABL a
+			inner join gen.coTABLFIEL b
+				on a.TableGUID=b.tableGUID
+		where tablename=@aTableName and isBrowsable&gt;0)
+	begin
+		set @msg='You haven''t create browse list. Please ask administrator.'
+		--select @msg
+	end
+	select @ModuleGUID=ModuleGUID, @orderByStr=OrderByStr
+	from comodl 
+	where moduleid=@aTableName
+
+	select @forwardModule=b.ModuleId 
+	from CoMODLSMOD a
+		inner join CoMODL b
+			on a.ForwardModuleGUID=b.ModuleGUID
+	where submoduleguid=@ModuleGUID	
+
+	
+
+	print @forwardModule
+
+	declare @b varchar(max), @w varchar(max)
+	exec [gen].[procfields_browse] @aTableName, @b output, @w output
+
+
+	--fieldkey
+	declare @fieldKey varchar(100)
+	declare @minCol int
+	select @minCol=min(b.colorder)
+	from gen.coTABL a
+		inner join gen.coTABLFIEL b
+			on a.TableGUID=b.tableGUID
+	where tablename=@aTableName 
+
+	select @fieldKey=ColName
+	--select *
+	from gen.coTABL a
+		inner join gen.coTABLFIEL b
+			on a.TableGUID=b.tableGUID
+	where tablename=@aTableName and b.colorder=@minCol
+
+	--select @fieldkey
+
+	--fieldkey parent table
+	declare @fieldKey1 varchar(100)
+	select @minCol=min(b.colorder)
+	from gen.coTABL a
+		inner join gen.coTABLFIEL b
+			on a.TableGUID=b.tableGUID
+	where tablename=@parentTable 
+
+	select @fieldKey1=ColName
+	from gen.coTABL a
+		inner join gen.coTABLFIEL b
+			on a.TableGUID=b.tableGUID
+	where tablename=@parentTable and b.colorder=@mincol
+print 'yyy'				
+
+	--xinfo
+	set @xinfo= '
+		select
+			'''+@tablename+''' ''tableName'',
+			'''+cast(@uplGUID as varchar(36))+''' ''GUID'',
+			case when isnull(b.moduleDescription,'''')='''' then null else b.moduleDescription end ''description'','+
+		cast(isnull(@allowAdd,0) as varchar(1))+' ''permission/allowAdd'','+
+		cast(isnull(@allowEdit,0) as varchar(1))+' ''permission/allowEdit'','+
+		cast(isnull(@allowDelete,0) as varchar(1))+' ''permission/allowDelete'','+
+		cast(isnull(@allowWipe,0) as varchar(1))+' ''permission/allowWipe'','+ 
+		cast(isnull(@allowForce,0) as varchar(1))+' ''permission/allowArchieve'','+ 
+		cast(isnull(@allowShowAttach,0) as varchar(1))+' ''permission/allowShowAttach'','+
+		cast(isnull(@UGroup,0) as varchar(1))+' ''permission/Group''
+		from coMODL b 
+		where b.moduleid='''+@aTableName+''' 
+		for xml path(''''), type'
+		
+	--xhead 
+	set @xhead=
+		'select 
+			colname ''column/@fieldName'',
+			case when isnull(titleShort,'''')&lt;&gt;'''' then titleShort
+				when isnull(titleCaption,'''')&lt;&gt;'''' then titleCaption
+					else colname end ''column/caption'',
+			browseColWidth ''column/width'',
+			browseColAlign ''column/align''
+			
+		from gen.coTABL a
+			inner join gen.coTABLFIEL b
+				on a.TableGUID=b.tableGUID
+		where tablename='''+@aTableName+''' and isBrowsable&gt;0
+		order by BrowseOrder
+		for xml path(''''), type'
+		--select @xhead
+
+	--xRptBrowse 
+	set @xUplBrowse=
+		'select 
+			Querycode ''upload/@fieldName'',
+			case when QueryTypeFlag=''isUpload'' then 1 else 0 end ''upload/allowupload'', 
+			isnull(isRefreshHead,0) ''upload/isRefreshHead'',
+			Queryname ''upload/caption'',
+			UploadFolder ''upload/uploadfolder'',
+			UploadCSVSeparation ''upload/separation'',
+			QuerySQL ''upload/QuerySQL''
+		from coqury 
+		where Querycode='''+@aTableName+''' and QueryTypeFlag=''isUpload''
+		for xml path(''''), type'
+		--select @xhead
+
+	--xfilter 
+	set @xfilter='
+		select 		 
+			case when isnull(filterByFieldKey1,'''')='''' then null else filterByFieldKey1 end ''filter/@key'',
+			case when isnull(filterByFieldId1,'''')='''' then null else filterByFieldId1 end ''filter/@fieldId'',
+			case when isnull(filterByFieldName1,'''')='''' then null else filterByFieldName1 end ''filter/@fieldname'',			
+			case when isnull(filterByCaption1,'''')='''' then null else filterByCaption1 end ''filter/caption'', 
+			case when isnull(filterByStr1,'''')='''' then null else filterByStr1 end ''filter/tablename'', null,
+
+			case when isnull(filterByFieldKey2,'''')='''' then null else filterByFieldKey2 end ''filter/@key'',
+			case when isnull(filterByFieldId2,'''')='''' then null else filterByFieldId2 end ''filter/@fieldId'',
+			case when isnull(filterByFieldName2,'''')='''' then null else filterByFieldName2 end ''filter/@fieldname'',
+			case when isnull(filterByLinkNo2,'''')='''' then null else filterByLinkNo2 end ''filter/@LinkNo'',			
+			case when isnull(filterByCaption2,'''')='''' then null else filterByCaption2 end ''filter/caption'', 
+			case when isnull(filterByStr2,'''')='''' then null else filterByStr2 end ''filter/tablename'', null,
+
+			case when isnull(filterByFieldKey3,'''')='''' then null else filterByFieldKey3 end ''filter/@key'',
+			case when isnull(filterByFieldId3,'''')='''' then null else filterByFieldId3 end ''filter/@fieldId'',
+			case when isnull(filterByFieldName3,'''')='''' then null else filterByFieldName3 end ''filter/@fieldname'',
+			case when isnull(filterByLinkNo3,'''')='''' then null else filterByLinkNo3 end ''filter/@LinkNo'',			
+			case when isnull(filterByCaption3,'''')='''' then null else filterByCaption3 end ''filter/caption'', 
+			case when isnull(filterByStr3,'''')='''' then null else filterByStr3 end ''filter/tablename'', null,
+
+			case when isnull(filterByFieldKey4,'''')='''' then null else filterByFieldKey4 end ''filter/@key'',
+			case when isnull(filterByFieldId4,'''')='''' then null else filterByFieldId4 end ''filter/@fieldId'',
+			case when isnull(filterByFieldName4,'''')='''' then null else filterByFieldName4 end ''filter/@fieldname'',
+			case when isnull(filterByLinkNo4,'''')='''' then null else filterByLinkNo4 end ''filter/@LinkNo'',			
+			case when isnull(filterByCaption4,'''')='''' then null else filterByCaption4 end ''filter/caption'', 
+			case when isnull(filterByStr4,'''')='''' then null else filterByStr4 end ''filter/tablename'', null
+		from coMODL a
+		where moduleid='''+@aTableName+'''
+		for xml path(''''), type'
+
+
+
+	--serialize content fields
+	declare @xserial xml
+	select @xserial =(
+		select
+			case 
+				when isnull(comboType,0) in (1,2,3,10,12)
+					then ''''+colname+''' as ''field/autosuggestbox/@name'', '+colname+' ''field/autosuggestbox/value/*'', '
+				when isnull(comboType,0) in (4,40,41,42,43,44,45)
+					then ''''+colname+''' as ''field/datebox/@name'', '+colname+' ''field/datebox/value/*'', '+convert(varchar(4),comboType)+' ''field/datebox/type/*'', '
+				when isnull(comboType,0) in (5) and isnull(ViewColWidth,40)&gt;0
+					then ''''+colname+''' as ''field/fileattachment/@name'', '+colname+' ''field/fileattachment/value/*'', '
+				when isnull(xType,0) in (104)
+					then ''''+colname+''' as ''field/textbox/@name'', case when '+colname+'=1 then ''Yes'' else '''' end ''field/textbox/value/*'', '
+				else ''''+colname+''' as ''field/textbox/@name'', '+
+					colname+' ''field/textbox/value/*'', ' end+
+			case 
+				when isnull(comboType,0) in (1,2,3) then
+					case when isnull(comboFieldId,'')&lt;&gt;'' then ''+isnull(comboFieldId,'')+' ''field/autosuggestbox/ref/id/*''' else 'null' end +', '+
+					case when isnull(comboFieldName,'')&lt;&gt;'' then ''+isnull(comboFieldName,'')+' ''field/autosuggestbox/ref/name/*''' else 'null' end +', '+
+					case when isnull(comboFieldNameEx1,'')&lt;&gt;'' then ''+isnull(comboFieldNameEx1,'')+' ''field/autosuggestbox/ref/name1/*''' else 'null' end +', '+
+					case when isnull(comboFieldNameEx2,'')&lt;&gt;'' then ''+isnull(comboFieldNameEx2,'')+' ''field/autosuggestbox/ref/name2/*''' else 'null' end +', ' 
+				when isnull(comboType,0) in (10,12) then
+					case when isnull(comboFieldId,'')&lt;&gt;'' then ''+isnull(ColName,'')+'cbId ''field/autosuggestbox/ref/id/*''' else 'null' end +', '+
+					case when isnull(comboFieldName,'')&lt;&gt;'' then ''+isnull(ColName,'')+'cbNm ''field/autosuggestbox/ref/name/*''' else 'null' end +', '+
+					case when isnull(comboFieldNameEx1,'')&lt;&gt;'' then ''+isnull(comboFieldNameEx1,'')+' ''field/autosuggestbox/ref/name1/*''' else 'null' end +', '+
+					case when isnull(comboFieldNameEx2,'')&lt;&gt;'' then ''+isnull(comboFieldNameEx2,'')+' ''field/autosuggestbox/ref/name2/*''' else 'null' end +', ' 
+				else '' end+
+			'null, '
+		--select *
+		from gen.coTABL a
+			inner join gen.coTABLFIEL b
+				on a.TableGUID=b.tableGUID
+		where tablename=@aTableName and isBrowsable&gt;0
+		order by BrowseOrder
+		for xml path('')
+		)
+--select @xserial
+--print @nbRows
+--print @pgNo
+
+
+--case @approvalProtected
+	declare @approvalProtected nvarchar(500),@vl nvarchar (10)
+	set @approvalProtected = ''
+	set @vl = ' where 1= '
+	if exists(	select * 
+				from sysobjects 
+				where name=@aTableName+'APRV') 
+		and @aTableName&lt;&gt; 'coMODLUSER' and @aTableName&lt;&gt; 'CdMODLUSER'
+		and left(@aTableName,1)='t' and @UGroupGUID&lt;&gt;'E9173D1A-29E1-4655-A73E-7636C196DC52'
+	begin
+		if @mode = 0 
+		
+		set @approvalProtected = 'left join oph.fn_'+@aTableName+'APRV('''+convert(nvarchar(100), @hostGUID)+''') '+@aTableName+'APRV 
+												on '+@aTableName+'APRV.'+@fieldKey+' = '+@aTableName+'.'+@fieldKey+'
+												where ('+@aTableName+'.CreatedUser = '''+convert(nvarchar(50),@userGUID)+'''
+												or '+@aTableName+'APRV.approvalUserGUID = '''+convert(nvarchar(50),@userGUID)+''')'
+		
+		if @mode = 0
+		set @vl = ' and 1= '	else 	set @vl = ' where 1= '	
+							
+	end
+	--
+
+
+	--xapproval
+	if exists(select * from sysobjects where name=@aTableName+'APRV')
+		set @xapproval ='
+				(select 
+					y.ApprovalUserGUID ''approval/@GUID'',
+					y.lvl ''approval/lvl'',
+					--y.Status ''approval/status'', 
+					--y.ApprovalUserId ''approval/userid'',
+					--y.ApprovalUserName ''approval/username'',
+					y.UpdatedDate ''approval/approvaldate''
+				from oph.fn_'+@parentTable+'APRV('''+convert(nvarchar(100), @hostGUID)+''') y
+				where y.'+@fieldKey+'='+@aTableName+'.'+@fieldKey+'
+				order by y.lvl
+				for xml path (''''), type) approvals,'
+	else set @xapproval=''
+
+	
+	--xtalk
+	set @xtalk='
+			(select 
+				z.doctalkguid ''talk/@GUID'',
+				z.DocComment ''talk/Message'',
+				x.UserId ''talk/userid'',
+				x.UserName ''talk/username'',
+				z.UpdatedDate ''talk/approvaldate''
+			from coTALK z
+				inner join coUSER x
+					on z.createdUser=x.userGUID
+			where z.DocumentGUID='+@tablename+'.'+@fieldKey+'
+			order by z.UpdatedDate
+			for xml path (''''), type) talks '
+
+	
+
+	--combine content
+	set @xcontent=cast(@xserial as varchar(max))
+	set @xcontent=
+		'select '+@fieldKey+' ''@GUID'',
+		'+@xcontent+'	
+		'+@xapproval+' 	
+		'+@xtalk+' 	
+		from (select * from #t1
+		) '+@tablename+' 
+		for xml path (''row''), type'
+
+	--select 
+	set @x2='
+	select 
+		(	select ('+@xinfo+')
+			for xml path(''''), type) ''info'',
+		(	select ('+@xUplBrowse+')
+			for xml path(''''), type) ''Uploads'',
+		(	select ('+@xhead+')
+			for xml path(''''), type) ''header''
+	for xml path(''browse''), root'
+	
+
+	if @debug=1 select @x2, @xcontent
+	
+	if isnull(@msg, '')='' 
+		exec(@x2)
+	else
+		select @msg
+
+	--if lower(substring(@tablename,1,1))='t' set @tablename=substring(@tablename,1,6)
+	--update coMODGMODLUSER
+	--set firstPage='/welcome/default/master_tableview.aspx?mode=browse&amp;tablename='+@tablename+'&amp;option=4&amp;state=pending&amp;showForm=1'
+	--where userGUID=@userguid
+
+
+
+
+
+
+
+

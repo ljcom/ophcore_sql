@@ -1,0 +1,71 @@
+
+
+CREATE TRIGGER [dbo].[tg_modlcolm_addTableField] 
+ON [dbo].[modlcolm]
+AFTER INSERT AS
+BEGIN
+
+	SET NOCOUNT ON;
+
+	declare @sqlstr nvarchar(max), @datadb nvarchar(30), @v4DB nvarchar(30), 
+		@svr nvarchar(50)='', @code nvarchar(50), @colType int, 
+		@colLength int, @settingmode int, @colkey varchar(50)
+
+	set @datadb =  DB_NAME() 
+	
+	--select @v4DB = isnull(c.migratedb, c.databasename), @settingmode=settingmode
+	--from inserted a
+	--	inner join modl b on b.ModuleGUID = a.ModuleGUID
+	--	inner join acctdbse c on c.AccountDBGUID = b.AccountDBGUID 
+
+	--if @settingmode='1' or @settingmode='3' or @settingmode='4' begin
+		DECLARE #cur_colm CURSOR
+		READ_ONLY
+		FOR select i.colkey, moduleid, colLength, coltype, isnull(c.migratedb, c.databasename)
+			from inserted i
+				inner join modl m on i.ModuleGUID=m.moduleguid
+				inner join acctdbse c on c.AccountDBGUID = m.AccountDBGUID 
+				left join modlinfo x on x.ModuleGUID=m.ModuleGUID and x.InfoKey='view'
+			where m.settingMode in (1,3,4) and x.ModuleInfoGUID is null
+
+		OPEN #cur_colm
+
+		FETCH NEXT FROM #cur_colm INTO @colkey, @code, @collength, @coltype, @v4DB
+		WHILE (@@fetch_status <> -1)
+		BEGIN
+			IF (@@fetch_status <> -2)
+			BEGIN
+				set @sqlstr = '	
+					use '+@v4DB+'
+					if not exists(
+						select * 
+						from sys.objects o inner join sys.columns c on o.object_id=c.object_id 
+						where o.name='''+@code+''' and c.name='''+@colkey+''') 
+					begin
+						alter table doc.['+@code+'] 
+							add ['+@colkey+'] '+
+								case 
+									when @coltype in (59,60,62,122,106) then 'money' 
+									when @coltype in (40,41,42,43,58,61,189) then 'datetime' 
+									when @coltype in (48,52,56,108,127) then 'bigint' 
+									when @coltype in (104) then 'bit' 
+									when @coltype in (36) then 'uniqueidentifier'
+									when @coltype in (167,173,175,231,239) and @collength between 1 and 1000 then 'nvarchar('+cast(@collength as nvarchar(5))+')' 
+									when @coltype in (167,173,175,231,239) then 'nvarchar(max)' 
+									else 'nvarchar(max)'
+								end+' null
+
+					end'
+				exec sp_executesql @sqlstr
+			END
+			FETCH NEXT FROM #cur_colm INTO @colkey, @code, @collength, @coltype, @v4DB
+		END
+
+		CLOSE #cur_colm
+		DEALLOCATE #cur_colm
+
+		exec [gen].[createTable] @dataDB, @v4DB, null, @code, 0, 0--@isdelTable bit=0, @isdebug bit=0
+
+	--end
+END
+

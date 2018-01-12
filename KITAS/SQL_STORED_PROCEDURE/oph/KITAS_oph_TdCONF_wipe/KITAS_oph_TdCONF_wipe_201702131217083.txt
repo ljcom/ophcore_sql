@@ -1,0 +1,13 @@
+CREATE procedure oph.TdCONF_wipe
+	@GUID uniqueidentifier, @hostGUID uniqueidentifier
+as --automatic creation by system, you have to remove this comment to customize this procedure
+ 	declare @msg nvarCHAR(100)
+	set @msg =''
+	delete 
+	from ToCONF where CONFGUID = @GUID
+
+	if exists(select * from oph.TdCONF
+		where CONFGUID = @GUID)
+		set @msg='This record cannot be wiped. It might still be used by other tables.'
+	else
+		select @msg wiped

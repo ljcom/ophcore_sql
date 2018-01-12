@@ -1,0 +1,10 @@
+CREATE view dbo.coATABFIEL
+as --automatic creation by system, you have to remove this comment to customize this view
+ 
+	select a1.* from [KITAS].gen.CoTABL a
+		inner join KITAS.gen.CoTABLFIEL a1
+			on a.tableGUID=a1.tableGUID
+		inner join KITAS.sys.objects b
+			on left(a.tablename,1)+'o'+substring(a.tablename,3,len(a.tablename)-2)=b.name
+	where b.type in('U','V')
+

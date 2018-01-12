@@ -1,0 +1,131 @@
+
+
+
+CREATE procedure [api].[function_force] 
+	@hostGUID uniqueidentifier, 
+	@code varchar(20),
+	@GUID uniqueidentifier, 
+	@comment varchar(max),
+	@isDebug bit=0
+--WITH ENCRYPTION
+as
+	declare @ver varchar(10), @db varchar(50), @typecode varchar(1)
+	exec gen.getDBInfo @hostguid, @code, @ver output, @db output, @typecode output
+
+	declare @moduleGUID uniqueidentifier
+	select @moduleguid=ModuleGUID from modl where moduleid=@code
+
+	declare @dbcode varchar(100)=@code
+	declare @primaryCol varchar(50)
+
+	--if @ver='3.0' and exists(select * from docm where moduleguid=@moduleguid) begin
+	--	set @ver='4.0'
+	--	set @db=db_name()
+	--	set @dbcode='docm'
+	--	set @primaryCol='docGUID'
+	--end
+	--else begin
+		if @ver='3.0' set @dbcode=@db+'.dbo.'+stuff(@code,2,1,'o')
+		exec api.getPrimaryKey @hostguid, @code, @primaryCol OUTPUT
+	--end
+
+	declare @isExists bit=0
+
+	--run standard
+	declare @userGUID uniqueidentifier
+	declare @msg nvarchar(100), @isCancel bit=0
+		
+	set @msg =''
+		
+	--check additional before force
+	declare @before_proc nvarchar(max)=@code+'_force_before'
+	declare @before_par nvarchar(max)='@GUID uniqueidentifier, @hostGUID uniqueidentifier, @comment varchar(400), @isCancel bit OUTPUT, @msg nvarchar(500) OUTPUT'
+
+	set @isExists=0
+	exec gen.checkObject @before_proc, 'dbo', @db, @isExists OUTPUT
+
+	if @isExists=1 begin
+		set @before_proc='exec '+@db+'.dbo.'+@before_proc+' @GUID, @hostGUID, @comment, @isCancel, @msg'
+		--set @before_proc=@db+'.dbo.'+@before_proc
+		exec sp_executesql @before_proc, @before_par, @GUID, @hostGUID, @comment, @isCancel OUTPUT, @msg OUTPUT
+	end
+
+	--get user information
+	select @userGUID=UserGUID from userhost where HostGUID=@hostGUID
+
+
+	-- put check process to make sure this user allow to force --
+
+	if @isCancel=0 begin
+		--run if only not cancelled
+		declare @sqlstr nvarchar(max)
+		set @sqlstr='
+			if @userGUID is not null begin
+				declare @username varchar(200)
+				select @username=username
+				from [user]
+				where userguid=@userguid
+					
+				update '+@dbcode+' 
+				set Status = case when isnull(Status,0)<400 then 300 else 500 end, closedDate=getdate()
+				from '+@dbcode+'
+				where '+@primaryCol+'=@GUID
+
+				update '+@dbcode+' 
+				set statuscomment = case when isnull(Status,0)=300 then '''+@comment+'. Rejected by ''+@username
+						else ''Closed by ''+ @username end
+				from '+@dbcode+'
+				where '+@primaryCol+' = @GUID and status in (300, 500)
+
+				if exists(select * from '+@dbcode+' where '+@primaryCol+' = @GUID and status = 300) 
+					update '+@dbcode+'APRV 
+					set Status = 300
+					from '+@dbcode+'APRV
+					where approvaluserGUID = @userGUID and '+@primaryCol+'=@GUID
+
+				--if exists(select * from '+@dbcode+' where '+@primaryCol+' = @GUID and status in(300, 500)) begin 
+					--exec api.function_mail @hostGUID, ''force'', @code, @GUID
+					--if gen.checkObject('''+@code+'_mail_send'', ''dbo'', '''+@db+''')=1 exec '+@code+'_mail_send @GUID, @hostGUID
+				--end
+			end'
+
+		declare @sqlpar nvarchar(max)='@hostGUID uniqueidentifier, @code varchar(20), @GUID uniqueidentifier, @userGUID uniqueidentifier, @msg varchar(max) OUTPUT'
+		exec sp_executesql @sqlstr, @sqlpar, @hostGUID, @code, @GUID, @userGUID, @msg OUTPUT
+		if @isdebug=1 print @sqlstr
+		if @isdebug=1 print @sqlpar
+
+		--additional procedure after execution
+		declare @after_proc nvarchar(max)=@code+'_force_after'
+		declare @after_par nvarchar(max)='@GUID uniqueidentifier, @hostGUID uniqueidentifier'
+
+		set @isExists=0
+		exec gen.checkObject @after_proc, 'dbo', @db, @isExists OUTPUT
+
+		if @isExists=1 begin
+			set @after_proc='exec '+@db+'.dbo.'+@after_proc+' @GUID, @hostGUID'
+			--set @after_proc=@db+'.dbo.'+@after_proc
+			exec sp_executesql @after_proc, @after_par, @GUID, @hostGUID
+		end
+	end
+		
+	select @msg forced
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

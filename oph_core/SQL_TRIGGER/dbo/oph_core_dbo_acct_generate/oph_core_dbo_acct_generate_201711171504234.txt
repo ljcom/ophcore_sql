@@ -1,0 +1,61 @@
+
+
+CREATE TRIGGER [dbo].[acct_generate]
+   ON  [dbo].[acct] 
+   AFTER insert
+AS 
+BEGIN
+	SET NOCOUNT ON;
+	
+	declare @acct as nvarchar(50), @acctGUID uniqueidentifier, @sqlstr nvarchar(max), @mdb nvarchar(50), @v4db nvarchar(50),
+		@coredb nvarchar(max)=db_name(), @migrateAccount nvarchar(50)
+	
+	if exists(select * from inserted) begin
+		select @acct=AccountId, @migrateaccount=migrateAccount
+		from inserted 
+
+	
+
+		set @mdb=@acct+'_data'
+		set @v4db=@acct+'_v4'
+
+		set @sqlstr = '
+			declare @accountGUID uniqueidentifier
+			select @accountGUID=accountguid 
+			from acct where accountid='''+@acct+'''
+
+			if not exists(select * from master.sys.databases where name='''+@mdb+''') BEGIN
+				insert into acctdbse (AccountDBGUID, AccountGUID, DatabaseName, ODBC, isMaster, version)	
+				values (newid(), @accountGUID, '''+@mdb+''', null, 1, ''4.0'')
+
+				insert into acctdbse (AccountDBGUID, AccountGUID, DatabaseName, ODBC, isMaster, version)	
+				values (newid(), @accountGUID, '''+@v4db+''', null, 0, ''4.0'')
+			end	
+			'
+
+		if @migrateaccount is not null begin
+			set @sqlstr = @sqlstr + '
+				insert into acctdbse (AccountDBGUID, AccountGUID, DatabaseName, serverName, ODBC, isMaster, [version], migrateDB)
+				select newid(), @accountGUID, replace(d.DatabaseName, '''+@migrateaccount+''', '''+@acct+'''), d.serverName, null, d.isMaster, d.[version], null
+				from acct a
+					inner join acctdbse d on a.AccountGUID=d.AccountGUID
+					left join acctdbse e on replace(d.databasename, '''+@migrateaccount+''', '''+@acct+''')=e.databasename
+				where AccountId='''+@migrateaccount+''' and e.accountdbguid is null and d.[version]=''4.0''
+			
+				update e
+				set migratedb=d.DatabaseName
+				from acct a
+					inner join acctdbse d on a.AccountGUID=d.AccountGUID
+					inner join acctdbse e on replace(d.databasename, '''+@migrateaccount+''', '''+@acct+''')=e.databasename
+				where AccountId='''+@migrateaccount+'''
+
+				exec core.createdb '''+@acct+''', @ismigrate=0
+				exec core.createdb '''+@acct+''', @ismigrate=1
+				'
+		end
+	
+		exec gen.onetimejob @sqlstr, @coredb, @isdebug=1
+	end
+	return
+END
+

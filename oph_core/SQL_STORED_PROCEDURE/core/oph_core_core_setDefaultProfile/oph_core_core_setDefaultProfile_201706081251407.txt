@@ -1,0 +1,38 @@
+CREATE procedure [core].[setDefaultProfile] @accountid nvarchar(50), @isReset bit=0
+as
+	declare @db as nvarchar(50)
+	select @db=databasename 
+	--select *
+	from acct a
+		inner join acctdbse b on a.accountguid=b.accountguid
+	where b.ismaster=1 and b.[version]='4.0' and a.accountid=@accountid
+
+	declare @sqlstr nvarchar(max)='
+		use '+@db+' 	
+		DECLARE #profile CURSOR
+		READ_ONLY
+		FOR select userguid from [user] '+iif(@isReset=0,'where userprofilepath is null', '')+'
+
+		DECLARE @userGUID uniqueidentifier
+		OPEN #profile
+
+		FETCH NEXT FROM #profile INTO @userGUID
+		WHILE (@@fetch_status <> -1)
+		BEGIN
+			IF (@@fetch_status <> -2)
+			BEGIN
+				update [user]
+				set userProfilePath=''themes/themeONE/images/masks/af/af''+right(''00''+cast(cast(rand()*20 as int)+1 as varchar(2)),2)+''.png''
+				where userguid=@userGUID
+			END
+			FETCH NEXT FROM #profile INTO @userGUID
+		END
+
+		CLOSE #profile
+		DEALLOCATE #profile
+	'
+	print @sqlstr
+	exec sp_executesql @sqlstr
+
+
+

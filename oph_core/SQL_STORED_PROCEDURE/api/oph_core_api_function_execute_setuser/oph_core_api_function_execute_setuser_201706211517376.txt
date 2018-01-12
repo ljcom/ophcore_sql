@@ -1,0 +1,196 @@
+
+
+
+CREATE procedure [api].[function_execute_setuser] 
+	@hostGUID uniqueidentifier, 
+	@code varchar(20),
+	@GUID uniqueidentifier, 
+	@isDebug bit=0
+--WITH ENCRYPTION
+as 
+	declare @ver varchar(10), @db varchar(50), @typecode varchar(1), @insertNextLevel nvarchar(max)
+	exec gen.getDBInfo @hostguid, @code, @ver output, @db output, @typecode output
+
+	declare @userGUID uniqueidentifier
+	select @userGUID=c.UserGUID
+	from userhost c
+	where c.HostGUId=@hostGUID
+
+	--check customized
+	declare @custom_proc nvarchar(max)=@code+'_setuser_custom'
+	declare @custom_par nvarchar(max)='@GUID uniqueidentifier, @hostGUID uniqueidentifier'
+
+	declare @isExists bit=0
+	exec gen.checkObject @custom_proc, 'dbo', @db, @isExists OUTPUT
+
+	if @isExists=1 begin
+		set @custom_proc='exec '+@db+'.dbo.'+@custom_proc+' '''+CAST(@GUID AS VARCHAR(50))+''', '''+CAST(@hostGUID AS VARCHAR(50))+''''
+		--set @custom_proc=@db+'.dbo'+@custom_proc
+		exec sp_executesql @custom_proc, @custom_par, @GUID, @hostGUID
+	end
+	else begin
+		--run standard
+		declare @moduleGUID uniqueidentifier
+		select @moduleGUID=moduleGUID 
+		from MODL 
+		where Moduleid like left(@code,1)+'_'+substring(@code, 3, len(@code)-2)
+
+		declare @dbcode varchar(100)= @code
+		if @ver='3.0' set @dbcode=@db+'.dbo.'+@typecode+'o'+substring(@code,3,len(@code)-2)
+
+		declare @primaryCol varchar(50)
+		exec api.getPrimaryKey @hostguid, @code, @primaryCol OUTPUT
+
+		declare @aprovalcode varchar(50)=@code+'APRV'
+		declare @AppprovalCol varchar(50)
+		exec api.getPrimaryKey @hostguid, @aprovalcode, @AppprovalCol OUTPUT
+
+		--declare @code nvarchar(50)='tafasc', @guid uniqueidentifier=newid(), @primarycol nvarchar(50)='fascguid'
+		set @insertNextLevel = replace((select '
+			insert into '+@code+'APRV('+@primaryCol+', lvl, approvalUserGUID, curlvl, ugroupguid)
+			select distinct '''+cast(@GUID as nvarchar(50))+''', currentLevel.lvl, currentUser.memberUserGUID, 1, currentLevel.ApprovalGroupGUID
+			from modl b
+				inner join modlappr currentLevel
+					on a.ApprovalGUID=currentLevel.ApprovalGUID
+					and currentLevel.ApprovalGroupGUID='''+cast(approvalgroupguid as nvarchar(50))+'''
+					inner join ugrpuser currentUser
+						on currentLevel.ApprovalGroupGUID=currentUser.UGroupGUID
+					--level bottom
+					left join modlappr bottomLevel
+						on bottomLevel.ApprovalGroupGUID in('+BottomGroup+')
+						left join ugrpuser bottomuser
+							on bottomLevel.ApprovalGroupGUID=bottomuser.UGroupGUID
+							inner join '+@code+' e2
+								on (e2.CreatedUser=bottomuser.MemberUserGUID
+								and e2.'+@primaryCol+'='''+cast(@GUID as nvarchar(50))+''')
+			where ModuleId='''+@code+''' '+iif(isnull(b.sqlfilter,'')='', '', 'and '+sqlfilter)+'
+			' 
+		--select b.*
+		from modl a
+			inner join modlappr b
+				on a.ModuleGUID=b.moduleguid
+		where moduleid=@code
+		for xml path('')), '@#0D;', '')
+
+		declare @sqlstr nvarchar(max)
+		set @sqlstr='
+			use '+@db+'
+			declare @createduser uniqueidentifier
+
+			if not exists(	select *
+					from '+@dbcode+'APRV
+					where '+@primaryCol+' = @GUID and Lvl>0)
+			begin
+				-- insert all requestors
+				select @createduser=createduser from '+@dbcode+' where '+@primaryCol+'=@GUID
+
+				insert into '+@dbcode+'APRV ('+@AppprovalCol+', curlvl, '+@primaryCol+', lvl, approvalUserGUID, ugroupguid)
+				select newid(), null, @GUID, lvl, b.MemberUserGUID, b.ugroupguid
+				from  CoAPPRLVEL a
+					inner join cougrpuser1 b
+						on a.ApprovalGroupGUID=b.UGroupGUID
+					inner join coappr a1
+						on a.approvalguid=a1.approvalguid
+				where a1.moduleguid = @ModuleGUID 
+					and b.MemberUserGUID=@userGUID and a.lvl=0 and b.MemberUserGUID=@createduser
+
+				--insert the upper level users
+				declare @first integer
+				set @first=1
+
+				declare @a integer, @a1 integer, @level integer
+				declare @modluserGUID uniqueidentifier
+				set @a=1
+				set @a1=0
+				'+
+				@insertNextLevel
+				+'
+
+			end
+
+			--reset
+			declare @pguid uniqueidentifier, @uGUID uniqueidentifier, @i int
+			DECLARE #currr CURSOR
+			READ_ONLY
+			FOR select '+@primaryCol+', ApprovalUserGUID, min(lvl)
+				from '+@dbcode+'APRV
+				group by '+@primaryCol+', ApprovalUserGUID
+				having count(*)>1
+
+			OPEN #currr
+
+			FETCH NEXT FROM #currr INTO @pGUID, @uGUID, @i
+			WHILE (@@fetch_status <> -1)
+			BEGIN
+				IF (@@fetch_status <> -2)
+				BEGIN
+					delete from '+@dbcode+'APRV
+					where '+@primaryCol+'=@pGUID and approvaluserGUID=@uGUID
+						and lvl>@i
+				END
+				FETCH NEXT FROM #currr INTO @pGUID, @uGUID, @i
+			END
+
+			CLOSE #currr
+			DEALLOCATE #currr
+
+			declare @xguid uniqueidentifier
+
+			DECLARE #currr1 CURSOR
+			READ_ONLY
+			FOR select '+@primaryCol+', ApprovalUserGUID,
+			max(convert(varchar(100), '+@AppprovalCol+'))
+				from '+@dbcode+'APRV
+				group by '+@primaryCol+', ApprovalUserGUID
+				having count(*)>1
+
+			OPEN #currr1
+
+			FETCH NEXT FROM #currr1 INTO @pGUID, @uGUID, @xGUID
+			WHILE (@@fetch_status <> -1)
+			BEGIN
+				IF (@@fetch_status <> -2)
+				BEGIN
+					delete from '+@dbcode+'APRV
+					where '+@primaryCol+'=@pGUID and approvaluserGUID=@uGUID
+						and '+@AppprovalCol+'<>@xGUID
+
+				END
+				FETCH NEXT FROM #currr1 INTO @pGUID, @uGUID, @xGUID
+			END
+
+			CLOSE #currr1
+			DEALLOCATE #currr1
+
+			exec '+@db+'.gen.newApprovalMark @GUID'
+
+		declare @sqlpar nvarchar(max)='@hostGUID uniqueidentifier, @code varchar(20), @GUID uniqueidentifier, @userGUID uniqueidentifier, @ModuleGUID uniqueidentifier'
+		exec sp_executesql @sqlstr, @sqlpar, @hostGUID, @code, @GUID, @userGUID, @ModuleGUID
+		if @isdebug=1 print @sqlstr
+		if @isdebug=1 print @sqlpar
+		
+		if @isdebug=1 select @aprovalcode, @dbcode, @primaryCol, @AppprovalCol, @ModuleGUID [ModuleGUID], @GUID [GUID], @sqlstr, @sqlpar
+	end
+
+
+
+		
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

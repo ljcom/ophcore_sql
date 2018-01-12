@@ -1,0 +1,50 @@
+CREATE procedure [gen].[getDBInfo] @accountId varchar(50), @dbCore varchar(50), @code varchar(50), 
+	@ver varchar(10)=null OUTPUT, @db varchar(50)=null OUTPUT, @moduleType varchar(1)=null OUTPUT, @themeName varchar(50)=null OUTPUT, 
+	@masterPassword varchar(50)=null OUTPUT, @companyName varchar(50)=null output
+--WITH ENCRYPTION
+as	
+	declare @sqlstr nvarchar(max)='
+		declare @accountGUID uniqueidentifier, @accountDBGUID uniqueidentifier, @themepageGUID uniqueidentifier--, @masterPassword varchar(50)
+
+		select @accountguid=accountguid 
+		from '+@dbcore+'.dbo.acct 
+		where accountid='''+@accountid+'''
+		
+		select @masterPassword=infovalue
+		from '+@dbcore+'.dbo.acctinfo
+		where accountguid=@accountguid and infokey=''masterPassword''
+
+		select @companyName=infovalue
+		from '+@dbcore+'.dbo.acctinfo
+		where accountguid=@accountguid and infokey=''companyName''
+
+		select @accountdbguid=accountdbguid, 
+			@moduletype=
+				case settingMode
+					when 0 then ''C''
+					when 1 then ''M''
+					when 2 then ''P''
+					when 3 then ''S''
+					when 4 then ''T''
+					when 5 then ''Y''
+					when 6 then ''B'' end, 
+			@themePageGUID=themePageGUID
+		from modl 
+		where moduleid='''+@code+'''
+
+		select @themename=themecode
+		from thme a
+			inner join thmepage b on a.themeguid=b.themeguid
+		where themepageguid=@themepageguid
+
+		select @ver=version, @db=databasename 
+		from '+@dbcore+'.dbo.acctdbse
+		where accountdbguid=@accountdbguid		 
+		'
+
+	declare @sqlpar nvarchar(max)='@ver varchar(10) output, @db varchar(50) OUTPUT, @moduleType varchar(1) OUTPUT, @themename varchar(50) OUTPUT, @masterPassword varchar(50) OUTPUT, @companyName varchar(50) OUTPUT'
+	exec sp_executesql @sqlstr, @sqlpar, @ver OUTPUT, @db OUTPUT, @moduleType OUTPUT, @themename OUTPUT, @masterPassword OUTPUT, @companyName OUTPUT
+	
+
+
+

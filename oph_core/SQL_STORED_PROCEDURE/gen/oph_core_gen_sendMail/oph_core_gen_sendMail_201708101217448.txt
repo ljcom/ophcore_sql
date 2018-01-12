@@ -1,0 +1,31 @@
+
+CREATE procedure [gen].[sendMail]
+	@profileName nvarchar(150), @to nvarchar(max), @subject nvarchar(max), @body nvarchar(max), 
+	@cc varchar(max) = null, @bcc varchar(max) = null, @attach varchar(max) = null, @isDebug bit=0
+as	--CreatedBy eLs ON Aug, 2017
+
+	--declare @profileName nvarchar(150), @to nvarchar(max), @subject nvarchar(max), @body nvarchar(max), 
+	--	@cc varchar(max) = null, @bcc varchar(max) = null, @attach varchar(max) = null, @isDebug bit=1
+
+	if @isDebug = 1 begin
+		set @subject = '**<MAIL DEMO SYSTEM>** - ' + @subject
+		set @body = 'This mail was addressed to : ' + @to + '<br/>' + char(10) +
+			'Copied to (cc) : ' + isNULL(@cc, '-') + '<br/>' + char(10) +
+			'Blinded-Copy to (bcc) : ' + isNULL(@bcc, '-') + '<br/>' + char(10) + '<hr>' + char(10) + '<br/>'+ char(10) + 
+			@body
+		set @to = 'linggar@libertyjaya.com;niar@libertyjaya.com;'
+		set @cc = NULL
+		set @bcc = NULL
+	end
+
+	exec msdb.dbo.sp_send_dbmail 
+		@profile_name = @profileName,	
+		@recipients = @to,
+		@body = @body,
+		@body_format = 'HTML',
+		@subject = @subject,
+		@copy_recipients = @cc,
+		@blind_copy_recipients = @bcc,
+		@file_attachments = @attach
+
+

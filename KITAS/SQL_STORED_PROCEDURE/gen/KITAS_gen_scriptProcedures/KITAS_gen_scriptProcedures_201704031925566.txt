@@ -1,0 +1,61 @@
+
+
+CREATE procedure [gen].[scriptProcedures] @lasthour int=0
+as
+	DECLARE #cur213 CURSOR
+	READ_ONLY
+	FOR select a.object_id, b.name, a.name, a.type_desc, a.modify_date--, b.text 
+		from sys.objects a
+			inner join sys.schemas b
+				on a.schema_id=b.schema_id
+		where type in ('TR', 'FN', 'D', 'P', 'TF', 'R', 'V')
+			and (datediff(hour, a.modify_date, getdate())&lt;= @lasthour or @lasthour=0)
+	--	order by colid
+
+	DECLARE @id int, @schema varchar(40), @name varchar(40), @sqlstr varchar(max), @tempstr varchar(max), @oldName varchar(40)
+	declare @cmd varchar(1000), @modtime datetime, @folder nvarchar(500), @file nvarchar(500), @type varchar(100)
+
+	OPEN #cur213
+
+	FETCH NEXT FROM #cur213 INTO @id, @schema, @name, @type, @modtime
+	WHILE (@@fetch_status &lt;&gt; -1)
+	BEGIN
+		IF (@@fetch_status &lt;&gt; -2)
+		BEGIN
+				if exists(select * from tempdb.sys.objects where name='##script') drop table ##script
+
+				select @sqlstr=
+					(select text [text()]
+					from sys.syscomments
+					where id=@id
+					for xml path(''))
+		
+				set @sqlstr=replace(@sqlstr,'&amp;#x0D;',char(13))
+				--print @sqlstr
+				select @sqlstr sqltext into ##script
+
+				--write first
+				set @folder='D:\vsonline\operahouse\scripts\'+DB_NAME()+'\'+@type+'\'+@schema+'\'+DB_NAME()+'_'+@schema+'_'+@name
+				exec gen.cmdCreateFolders @folder
+
+				set @file=DB_NAME()+'_'+@schema+'_'+@name+'_'+replace(convert(varchar(10), @modtime,102),'.','')+replace(convert(varchar(10), @modtime,114),':','')+'.txt'
+				print @file
+				if dbo.fn_checkFile(@folder+'\'+@file)=0
+				begin
+					--select @cmd = 'osql -E -d'+db_name()+' -Q"select sqltext ''--script'' from ##script" -o"'+@folder+'\'+@file+'" -w500'
+					select @cmd = 'bcp "select sqltext from ##script" queryout "'+@folder+'\'+@file+'" -c -T -d'+db_name()
+					print @cmd
+					exec master..xp_cmdshell @cmd
+				end
+		END
+		FETCH NEXT FROM #cur213 INTO @id, @schema, @name, @type, @modtime
+	END
+
+	CLOSE #cur213
+	DEALLOCATE #cur213
+
+
+
+
+
+

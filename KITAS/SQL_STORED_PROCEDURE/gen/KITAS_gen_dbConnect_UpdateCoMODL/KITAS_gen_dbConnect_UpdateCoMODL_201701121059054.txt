@@ -1,0 +1,52 @@
+
+
+
+
+
+CREATE procedure [gen].[dbConnect_UpdateCoMODL] @tbl nvarchar(20), @replacewithtbl nvarchar(20), @sourceDB nvarchar(100)--=null
+as
+	declare @sqlstr nvarchar(max)
+	set @sqlstr = '
+	update b
+set b.ModuleDescription = a.ModuleDescription, b.AutoNumberPrefix1 = a.AutoNumberPrefix1, b.AutoNumberPrefix2 =a.AutoNumberPrefix2, b.AllowBrowse = a.AllowBrowse, b.AllowAdd = a.AllowAdd
+, b.AllowEdit = a.AllowEdit, b.AllowHold = a.AllowHold, b.AllowDelete = a.AllowDelete, b.AllowWipe = a.AllowWipe
+, b.FilterByCaption1 = a.FilterByCaption1, b.FilterByStr1 = a.FilterByStr1, b.FilterByFieldKey1 = a.FilterByFieldKey1
+, b.FilterByFieldId1 = a.FilterByFieldId1, b.FilterByFieldName1 = a.FilterByFieldName1, b.FilterByCaption2 = a.FilterByCaption2
+, b.FilterByStr2 = a.FilterByStr2, b.FilterByFieldKey2 = a.FilterByFieldKey2, b.FilterByFieldId2 = a.FilterByFieldId2
+, b.FilterByFieldName2 = a.FilterByFieldName2, b.FilterByLinkNo2 = a.FilterByLinkNo2, b.FilterByCaption3 = a.FilterByCaption3
+, b.FilterByStr3 = a.FilterByStr3, b.FilterByFieldKey3 = a.FilterByFieldKey3, b.FilterByFieldId3 = a.FilterByFieldId3
+, b.FilterByFieldName3 = a.FilterByFieldName3, b.FilterByLinkNo3 = a.FilterByLinkNo3, b.FilterByCaption4 = a.FilterByCaption4
+, b.FilterByStr4 = a.FilterByStr4, b.FilterByFieldKey4 = a.FilterByFieldKey4, b.FilterByFieldId4 = a.FilterByFieldId4
+, b.FilterByFieldName4 = a.FilterByFieldName4, b.FilterByLinkNo4 = a.FilterByLinkNo4, b.NbRecords = a.NbRecords, b.OrderByStr = a.OrderByStr
+, b.ModuleRelatedGUID = a.ModuleRelatedGUID, b.pictureFlag = a.pictureFlag, b.isAutoWord = a.isAutoWord, b.isManualPicture = a.isManualPicture
+, b.PictureAttachment = a.PictureAttachment, b.LastDataDate = a.LastDataDate, b.isDeleted = a.isDeleted, b.DeletedDate = a.DeletedDate
+, b.CreatedDate = a.CreatedDate, b.UpdatedDate = a.UpdatedDate, b.DeletedUser = a.DeletedUser, b.CreatedUser = a.CreatedUser, b.UpdatedUser = a.UpdatedUser
+ from '+@sourceDB+'.CoMODL a
+	inner join CoMODL b
+		on a.ModuleId = b.ModuleId
+where a.ModuleId = '''+@tbl+''''
+
+print @sqlstr
+
+exec (@sqlstr)
+
+
+--update b set 
+--b.ModuleGUID = a.ModuleGUID, b.ModuleId = a.ModuleId, b.ModuleDescription = a.ModuleDescription, b.AutoNumberPrefix1 = a.AutoNumberPrefix1
+--, b.AutoNumberPrefix2 = a.AutoNumberPrefix2, b.AllowBrowse = a.AllowBrowse, b.AllowAdd = a.AllowAdd, b.AllowEdit = a.AllowEdit
+--, b.AllowHold = a.AllowHold, b.AllowDelete = a.AllowDelete, b.AllowWipe = a.AllowWipe, b.FilterByCaption1 = a.FilterByCaption1
+--, b.FilterByStr1 = a.FilterByStr1, b.FilterByFieldKey1 = a.FilterByFieldKey1, b.FilterByFieldId1 = a.FilterByFieldId1, b.FilterByFieldName1 = a.FilterByFieldName1
+--, b.FilterByCaption2 = a.FilterByCaption2, b.FilterByStr2 = a.FilterByStr2, b.FilterByFieldKey2 = a.FilterByFieldKey2, b.FilterByFieldId2 = a.FilterByFieldId2
+--, b.FilterByFieldName2 = a.FilterByFieldName2, b.FilterByLinkNo2 = a.FilterByLinkNo2, b.FilterByCaption3 = a.FilterByCaption3
+--, b.FilterByStr3 = a.FilterByStr3, b.FilterByFieldKey3 = a.FilterByFieldKey3, b.FilterByFieldId3 = a.FilterByFieldId3, b.FilterByFieldName3 = a.FilterByFieldName3
+--, b.FilterByLinkNo3 = a.FilterByLinkNo3, b.FilterByCaption4 = a.FilterByCaption4, b.FilterByStr4 = a.FilterByStr4, b.FilterByFieldKey4 = a.FilterByFieldKey4
+--, b.FilterByFieldId4 = a.FilterByFieldId4, b.FilterByFieldName4 = a.FilterByFieldName4, b.FilterByLinkNo4 = a.FilterByLinkNo4
+--, b.NbRecords = a.NbRecords, b.OrderByStr = a.OrderByStr, b.ModuleRelatedGUID = a.ModuleRelatedGUID, b.pictureFlag = a.pictureFlag
+--, b.isAutoWord = a.isAutoWord, b.isManualPicture = a.isManualPicture, b.PictureAttachment = a.PictureAttachment, b.LastDataDate = a.LastDataDate
+--, b.ODBC = 'Data Source=CHOCOPANDAN;Initial Catalog=EF_INVT;User Id=gov;password=P@ssw0rd;timeout=600',  b.isDeleted = a.isDeleted
+--, b.DeletedDate = a.DeletedDate, b.CreatedDate = a.CreatedDate, b.UpdatedDate = a.UpdatedDate, b.DeletedUser = a.DeletedUser
+--, b.CreatedUser = a.CreatedUser, b.UpdatedUser = a.UpdatedUser from CHOCOPANDAN.EF_INVT.dbo.Comodl a
+--			inner join CoMODL b
+--			on a.ModuleId = b.ModuleId
+
+

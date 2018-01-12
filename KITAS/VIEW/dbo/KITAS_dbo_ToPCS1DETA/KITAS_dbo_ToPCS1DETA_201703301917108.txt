@@ -1,0 +1,26 @@
+
+
+
+
+
+
+CREATE view [dbo].[ToPCS1DETA]
+as
+select a.PCSODETAGUID, a.PCSOGUID, a.PRODGUID, d.EVENPSKUGUID, a.Qty, a.firstPrice, a.discPrice, a.Price, a.TotalPrice
+	, b.id productid, b.Name productname
+	, c.TotalSales, c.TotalQty
+	, (select top 1 replace(replace(attachment, 'D:\','http://104.199.130.13\') , '\', '/') attachment 
+				from moprodfoto a1 where a.PRODGUID = a1.PRODGUID and a1.isPP = 1) 
+	  [productphotos]
+	, a.CreatedDate, a.CreatedUser, a.UpdatedDate, a.UpdatedUser 
+from ToPCSODETA a
+inner join MoPROD b on b.PRODGUID = a.PRODGUID
+inner join ToPCSO c on a.PCSOGUID = c.PCSOGUID
+left join MoEVENPSKU d on d.EVENGUID = a.EVENGUID and d.PRODGUID = a.PRODGUID
+
+
+
+
+
+
+

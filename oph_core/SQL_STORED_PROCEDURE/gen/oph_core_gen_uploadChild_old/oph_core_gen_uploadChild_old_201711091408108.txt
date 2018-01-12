@@ -1,0 +1,176 @@
+create procedure [gen].[uploadChild_old] @hostGUID uniqueidentifier, @code nvarchar(50), @GUID uniqueidentifier, @parentGUID uniqueidentifier, @filepath nvarchar(max), @isdebug bit=0
+as
+	declare @ver varchar(10), @db varchar(50), @typecode varchar(1), @migrateDB varchar(50)
+	exec gen.getDBInfo @hostguid, @code, @ver output, @db output, @typecode output, @migrateDB output
+
+	declare @sqlstr nvarchar(max), @typename varchar(10)
+
+	declare @ranGUID nvarchar(50)=replace(cast(newid() as nvarchar(50)), '-', '')
+
+	declare @fieldKey nvarchar(50), @fieldkeyParent nvarchar(50), @schema nvarchar(10), @fieldCast nvarchar(max), @fieldOnly nvarchar(max), @fieldlist nvarchar(max)
+
+	select @fieldKey=b.colkey 
+	from modl a
+		inner join modlcolm b on a.ModuleGUID=b.ModuleGUID
+	where moduleid=@code and b.colOrder=(select min(colorder) from modlcolm where moduleguid=a.ModuleGUID)
+	
+	select @fieldkeyParent=b.infovalue 
+	from modl a
+		inner join modlinfo b on a.ModuleGUID=b.ModuleGUID and b.infokey = 'childkey'
+	where moduleid=@code
+
+	if @ver='2.0' or (@ver='3.0' and isnull(@migrateDB, '')<>'') begin
+		set @ver='4.0'
+		set @db=db_name()
+	end
+
+	if @ver='3.0'
+	begin
+		set @schema='oph'
+	end
+	else begin
+		set @schema='doc'
+		set @fieldkey='docGUID'
+		--set @fieldkeyParent='parentDocGUID'	
+	end
+	if gen.fn_checkFile(@filepath)=1
+	begin
+		set @sqlstr=
+			'
+			select newid() ['+@fieldKey+'], '''+convert(varchar(50), @parentGUID)+''' ['+@fieldkeyParent+'], * 
+			into ##t'+@ranGUID+'
+			FROM OPENROWSET(
+				''Microsoft.ace.OLEDB.12.0'',
+				''Excel 8.0;Database='+@filepath+';HDR=YES'',
+				''SELECT * FROM ['+@code+'$]'')
+				
+			--select * from ##t'+@ranGUID+'
+			
+				'
+		if @isdebug=1 print @sqlstr	
+		exec sp_executesql @sqlstr
+
+		
+		set @fieldCast=stuff((
+			select case 
+					when coltype = 32 
+					then ', cast((select top 1 '+combokey+' from '+@db+'.'+@schema+'.'+combotable+' where '+combotable+'.'+comboid+'= ##t'+@ranGUID+'.'+b.name+') as nvarchar(max)) ['+c.colkey+']'  
+					when b.system_type_id = '61' then ', cast(convert(smalldatetime,['+b.name+']) as nvarchar(max)) ['+c.colkey+']' 
+					else ', cast(['+b.name+'] as nvarchar(max)) ['+c.colkey+']' end
+			from tempdb.sys.objects a
+				inner join tempdb.sys.columns b
+					on a.object_id=b.object_id 
+				inner join (select ModuleID, colkey, titlecaption, coltype.infovalue [coltype], comboid.infovalue [comboid], combokey.infovalue [combokey], combotable.infovalue [combotable] 
+							from modl c
+								inner join modlcolm a on c.moduleguid=a.moduleguid
+								inner join modlcolminfo b on a.ColumnGUID=b.ColumnGUID and b.infokey='iseditable' and (b.infovalue='1')
+								inner join modlcolminfo coltype on a.ColumnGUID=coltype.ColumnGUID and coltype.infokey='coltype'
+								left join modlcolminfo comboid on a.ColumnGUID=comboid.ColumnGUID and comboid.infokey='combofieldid'
+								left join modlcolminfo combokey on a.ColumnGUID=combokey.ColumnGUID and combokey.infokey='combofieldkey'
+								left join modlcolminfo combotable on a.ColumnGUID=combotable.ColumnGUID and combotable.infokey='combotable'
+								inner join modlcolminfo isviewable on a.ColumnGUID=isviewable.ColumnGUID and isviewable.infokey='isviewable' and isviewable.infovalue='1'
+								inner join modlcolminfo pageNo on a.ColumnGUID=pageNo.ColumnGUID and pageNo.infokey='pageNo'
+								inner join modlcolminfo rowNo on a.ColumnGUID=rowNo.ColumnGUID and rowNo.infokey='rowNo'
+								inner join modlcolminfo sectionNo on a.ColumnGUID=sectionNo.ColumnGUID and sectionNo.infokey='sectionNo'
+							where moduleid=@code
+						) c on c.titlecaption = b.name
+			where a.name like '##t'+@ranGUID+'%' and b.name<>@fieldkey
+			for xml path('')), 1, 2, '')
+
+		select @fieldCast = 'cast('''+convert(varchar(50), @parentGUID)+'''as nvarchar(max)) ['+@fieldkeyParent+'],' + @fieldCast
+
+		set @fieldOnly=stuff((
+			select ', ['+c.colkey+']'
+			from tempdb.sys.objects a
+				inner join tempdb.sys.columns b
+					on a.object_id=b.object_id 
+				inner join (select ModuleID, colkey, titlecaption
+							from modl c
+								inner join modlcolm a on c.moduleguid=a.moduleguid
+								inner join modlcolminfo b on a.ColumnGUID=b.ColumnGUID and b.infokey='iseditable' and b.infovalue='1'
+								inner join modlcolminfo isviewable on a.ColumnGUID=isviewable.ColumnGUID and isviewable.infokey='isviewable' and isviewable.infovalue='1'
+								inner join modlcolminfo pageNo on a.ColumnGUID=pageNo.ColumnGUID and pageNo.infokey='pageNo'
+								inner join modlcolminfo rowNo on a.ColumnGUID=rowNo.ColumnGUID and rowNo.infokey='rowNo'
+								inner join modlcolminfo sectionNo on a.ColumnGUID=sectionNo.ColumnGUID and sectionNo.infokey='sectionNo'
+							where moduleid=@code
+						) c on c.titlecaption = b.name
+			where a.name like '##t'+@ranGUID+'%' and b.name<>@fieldkey
+			for xml path('')), 1, 2, '')
+
+			
+			select @fieldOnly ='['+@fieldkeyParent+'],' + @fieldOnly
+			print @fieldCast
+			print @fieldOnly
+
+		set @fieldlist= stuff((
+		select ', '+colkey + ' as ['+ colkey +']'
+		from modl c
+			inner join modlcolm a on c.moduleguid=a.moduleguid
+			inner join modlcolminfo b on a.ColumnGUID=b.ColumnGUID and b.infokey='iseditable' and b.infovalue='1'
+			inner join modlcolminfo isviewable on a.ColumnGUID=isviewable.ColumnGUID and isviewable.infokey='isviewable' and isviewable.infovalue='1'
+			inner join modlcolminfo pageNo on a.ColumnGUID=pageNo.ColumnGUID and pageNo.infokey='pageNo'
+			inner join modlcolminfo rowNo on a.ColumnGUID=rowNo.ColumnGUID and rowNo.infokey='rowNo'
+			inner join modlcolminfo sectionNo on a.ColumnGUID=sectionNo.ColumnGUID and sectionNo.infokey='sectionNo'
+		where moduleid=@code
+		order by pageNo.infoValue, rowNo.infoValue, sectionNo.infoValue 
+		for xml path('')), 1, 2, '')
+
+
+		set @sqlstr='			
+			declare @hostGUID uniqueidentifier='''+cast(@hostGUID as varchar(50))+'''
+
+			DECLARE #cur1 CURSOR
+			READ_ONLY
+			FOR		
+				select '+@fieldkey+' from ##t'+@ranGUID+'
+
+			OPEN #cur1
+			declare @GUID uniqueidentifier, @saveList nvarchar(max)
+			FETCH NEXT FROM #cur1 INTO @GUID
+
+			WHILE (@@fetch_status <> -1)
+			BEGIN
+				IF (@@fetch_status <> -2)
+				BEGIN
+				declare @newGUID uniqueidentifier
+				set @newGUID = ''00000000-0000-0000-0000-000000000000''
+
+					set @saveList=(
+						select ''<field id="''+infokey+''"><value>''+infovalue+''</value></field>''
+						from (
+							select '+@fieldCast+'
+							--select *
+							from ##t'+@ranGUID+' where '+@fieldKey+'=@GUID) a
+						unpivot(
+							infovalue 
+							for infokey in ('+@fieldOnly+')
+							) as x
+						for xml path(''''))
+					
+										
+					set @saveList=''<sqroot>''+replace(replace(@savelist, ''&lt;'', ''<''), ''&gt;'', ''>'')+''</sqroot>''
+
+					--select @savelist
+					print @hostGUID
+					print @GUID
+					print @savelist
+					exec api.[save] @hostGUID, '''+@code+''', @newGUID, @saveList
+					--select @savelist
+				END
+				FETCH NEXT FROM #cur1 INTO @GUID
+			END
+
+			CLOSE #cur1
+			DEALLOCATE #cur1
+			'
+
+		if @isdebug=1 print @sqlstr	
+		exec (@sqlstr)
+
+	end
+	else
+		print 'file not found: '+@filepath
+
+
+
+

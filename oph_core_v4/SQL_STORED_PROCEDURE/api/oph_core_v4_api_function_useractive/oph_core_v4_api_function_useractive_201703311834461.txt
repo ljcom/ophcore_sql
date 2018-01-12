@@ -1,0 +1,34 @@
+
+
+
+CREATE procedure [api].[function_useractive] 
+	@hostGUID uniqueidentifier, 
+	@code varchar(20),
+	@GUID uniqueidentifier, 
+	@comment varchar(max),
+	@isDebug bit=0
+as
+
+
+declare @db varchar(50)=api.fn_checkDB(@code), @typecode nvarchar(1), @ver varchar(10)
+	select @typecode = api.settingmode(settingmode), @ver=b.[version]
+	--select * 
+	from modl a
+		inner join acctdbse	b 
+					on a.accountdbguid=b.accountdbguid
+	where ModuleID=@code
+
+	declare @dbcode varchar(100)= @code
+	if @ver='3.0' set @dbcode=@db+'.dbo.'+@typecode+'o'+substring(@code,3,len(@code)-2)
+	
+	--declare @dbcode varchar(100)=@db+'.dbo.'+@code
+	declare @isExists bit=0
+
+	set @db =api.fn_checkDB(@code)
+
+	declare @sqlstr nvarchar(max)
+
+	set @sqlstr = 'update '+@db+'.dbo.couser set useractive = iif(useractive = 1, 0, 1) where userGUID = '''+cast(@GUID as nvarchar(50))+''''
+	exec (@sqlstr)
+
+	update [userinfo] set InfoValue = iif(infovalue = '1', '0', '1') where userGUID = @GUID and infokey = 'useractive'

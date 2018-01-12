@@ -1,0 +1,63 @@
+
+
+CREATE FUNCTION [api].[OPH4Tablename]
+(
+@oph3name nvarchar(max)
+)
+RETURNS nvarchar(max)
+AS
+BEGIN
+
+declare @oph4name nvarchar(max) =''
+
+if @oph3name = 'BrowseColWidth' set @oph4name = ''
+if @oph3name = 'BrowseOrder' set @oph4name = ''
+if @oph3name = 'ColName' set @oph4name = 'colkey'
+if @oph3name = 'colorder' set @oph4name = ''
+if @oph3name = 'colSize' set @oph4name = 'cols'
+if @oph3name = 'colValue' set @oph4name = 'colValue'
+if @oph3name = 'ComboFieldId' set @oph4name = ''
+if @oph3name = 'ComboFieldIdColWidth' set @oph4name = ''
+if @oph3name = 'ComboFieldKey' set @oph4name = ''
+if @oph3name = 'ComboFieldName' set @oph4name = ''
+if @oph3name = 'ComboFieldNameColWidth' set @oph4name = ''
+if @oph3name = 'ComboTable' set @oph4name = ''
+if @oph3name = 'ComboType' set @oph4name = 'coltype'
+if @oph3name = 'ComboWhereField2' set @oph4name = ''
+if @oph3name = 'ComboWhereRequired1' set @oph4name = ''
+if @oph3name = 'ComboWhereRequired2' set @oph4name = ''
+if @oph3name = 'CreatedDate' set @oph4name = ''
+if @oph3name = 'DefaultValue' set @oph4name = ''
+if @oph3name = 'groupCheckBox' set @oph4name = ''
+if @oph3name = 'id' set @oph4name = ''
+if @oph3name = 'isBrowsable' set @oph4name = ''
+if @oph3name = 'isEditable' set @oph4name = 'isEditable'
+if @oph3name = 'isNullable' set @oph4name = 'isNullable'
+if @oph3name = 'IsPreview' set @oph4name = 'preview'
+if @oph3name = 'isSumable' set @oph4name = ''
+if @oph3name = 'isViewable' set @oph4name = ''
+if @oph3name = 'length' set @oph4name = 'length'
+if @oph3name = 'PrimaryCol' set @oph4name = ''
+if @oph3name = 'SuffixCaption' set @oph4name = ''
+if @oph3name = 'TitleCaption' set @oph4name = 'titlecaption'
+if @oph3name = 'TriggerDate' set @oph4name = ''
+if @oph3name = 'UpdatedDate' set @oph4name = ''
+if @oph3name = 'ViewColDigit' set @oph4name = ''
+if @oph3name = 'ViewColNo' set @oph4name = 'colNo'
+if @oph3name = 'ViewColWidth' set @oph4name = ''
+if @oph3name = 'ViewOrderNo' set @oph4name = 'rowNo'
+if @oph3name = 'ViewPageNo' set @oph4name = 'pageNo'
+if @oph3name = 'ViewRowNo' set @oph4name = 'sectionNo'
+if @oph3name = 'ViewRowTitle' set @oph4name = 'rowTitle'
+if @oph3name = 'ViewRowType' set @oph4name = ''
+if @oph3name = 'ViewRowTypeOrder' set @oph4name = ''
+if @oph3name = 'xType' set @oph4name = ''
+
+--fieldNo
+if @oph4name = '' set @oph4name=@oph3name
+
+
+return @oph4name
+
+END
+

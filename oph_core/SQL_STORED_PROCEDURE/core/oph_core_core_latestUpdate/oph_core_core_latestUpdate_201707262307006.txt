@@ -1,0 +1,35 @@
+CREATE procedure core.latestUpdate @accountid nvarchar(50)
+as
+	declare @dataDB nvarchar(50)
+	select @datadb=databasename 
+	from oph_core.dbo.acctdbse d	
+		inner join oph_core.dbo.acct a on a.AccountGUID=d.AccountGUID
+	where accountid=@accountid and isMaster=1 and [version]='4.0'
+
+	print @datadb
+
+	declare @sqlstr nvarchar(max)
+
+	set @sqlstr='		
+		set @sqlstr1=
+			stuff(
+				(select ''union select max(isnull(updatedDate, createdDate)) ud from '+@dataDB+'.''+iif(settingmode=0,''dbo'', ''doc'')+''.[''+moduleid+''] ''
+				from '+@dataDB+'.dbo.modl m
+					inner join oph_core.dbo.acctdbse d on m.AccountDBGUID=d.AccountDBGUID
+					inner join oph_core.dbo.acct a on a.AccountGUID=d.AccountGUID
+				where (settingmode in (1, 3, 4) or (settingMode=0 and moduleid not in (''evnt'', ''http'', ''userhost''))) and accountid='''+@accountid+'''
+				for xml path('''')), 1, 6, '''')
+		'
+	print @sqlstr
+	declare @sqlstr1 nvarchar(max)
+	exec sp_executesql @sqlstr, N'@sqlstr1 nvarchar(max) OUTPUT', @sqlstr1 output 
+
+	print @sqlstr1
+	set @sqlstr='
+		select max(ud) updatedDate 
+		from ('+@sqlstr1+') x'
+
+	exec sp_executesql @sqlstr
+
+
+

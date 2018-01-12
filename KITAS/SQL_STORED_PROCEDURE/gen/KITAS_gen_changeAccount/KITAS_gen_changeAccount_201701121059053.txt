@@ -1,0 +1,72 @@
+
+
+CREATE procedure [gen].[changeAccount] @newAccount nvarchar(20), @oldAccount nvarchar(20), @newPassword nvarchar(20) 
+as
+	if isnull(@newPassword,'') &lt;&gt;'' begin
+		declare @sqlstr nvarchar(100)
+
+		declare @name nvarchar(50)		
+/*		DECLARE #cur00 CURSOR
+		READ_ONLY
+		FOR 
+			select b.name 
+			from syscolumns a
+				inner join sysobjects b
+					on a.id=b.id
+			where a.name='accountid' and b.xtype='U'
+			order by b.name
+
+		DECLARE @name varchar(40)
+		OPEN #cur00
+
+		FETCH NEXT FROM #cur00 INTO @name
+		WHILE (@@fetch_status &lt;&gt; -1)
+		BEGIN
+			IF (@@fetch_status &lt;&gt; -2)
+			BEGIN
+				set @sqlstr ='update '+@name+
+						' set accountid='''+@newAccount+''''+
+						+' where accountid='''+@oldAccount+''''
+				--print @sqlstr
+
+				exec sp_executesql @sqlstr
+			END
+			FETCH NEXT FROM #cur00 INTO @name
+		END
+
+		CLOSE #cur00
+		DEALLOCATE #cur00
+*/
+		update coacct
+		set AccountID=@newAccount
+		where accountid=@oldAccount
+
+		--update user	
+		DECLARE #cur01 CURSOR
+		READ_ONLY
+		FOR 
+			select userid from couser
+
+		--DECLARE @name varchar(40)
+		OPEN #cur01
+
+		FETCH NEXT FROM #cur01 INTO @name
+		WHILE (@@fetch_status &lt;&gt; -1)
+		BEGIN
+			IF (@@fetch_status &lt;&gt; -2)
+			BEGIN
+				exec gen.changepassword @name, null, @newpassword
+			END
+			FETCH NEXT FROM #cur01 INTO @name
+		END
+
+		CLOSE #cur01
+		DEALLOCATE #cur01		
+	end
+
+
+
+
+
+
+

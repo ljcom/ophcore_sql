@@ -1,0 +1,108 @@
+
+CREATE procedure [gen].[modlcolminfo_refresh] @columnGUID uniqueidentifier, @isdebug bit=0
+--WITH ENCRYPTION
+as
+	
+
+	exec [gen].[modlcolminfo_refresh_insert] @columnGUID, 'isviewable', '1', 'PageNo', '1'	
+	exec [gen].[modlcolminfo_refresh_insert] @columnGUID, 'isviewable', '1', 'SectionNo', '1'	
+	exec [gen].[modlcolminfo_refresh_insert] @columnGUID, 'isviewable', '1', 'ColNo', '1'	
+	exec [gen].[modlcolminfo_refresh_insert] @columnGUID, 'isviewable', '1', 'RowNo', '1'	
+
+	insert into modlcolminfo (ColumnInfoGUID, ColumnGUID, InfoKey, InfoValue)
+	select newid(), b.ColumnGUID, 'fieldNo', b.colOrder 
+	from modl a
+		inner join modlcolm b on a.moduleguid=b.moduleguid
+		inner join modlcolminfo c on b.columnguid=c.columnguid and c.InfoKey='isviewable' and c.InfoValue='1'
+		left join modlcolminfo d1 on b.columnguid=d1.columnguid and d1.InfoKey='fieldNo' 
+	where b.columnguid=@columnguid and  d1.columnguid is null
+
+	exec [gen].[modlcolminfo_refresh_insert] @columnGUID, 'isviewable', '1', 'colType', '11'	
+	exec [gen].[modlcolminfo_refresh_insert] @columnGUID, 'isviewable', '1', 'isPreview', '0'	
+	exec [gen].[modlcolminfo_refresh_insert] @columnGUID, 'isviewable', '1', 'isEditable', '0'	
+
+	update b2
+	set infovalue='0'
+	--select * 
+	from modlcolm a	
+		inner join modlcolminfo b2 on a.columnGUID=b2.columnGUID and b2.infokey='isbrowsable' and b2.infovalue='1'
+		inner join modlcolminfo b1 on a.columnGUID=b1.columnGUID and b1.infokey='coltype' and b1.infovalue='33'
+	where a.columnguid=@columnguid and isnull(b2.InfoKey,'')<>'0'
+
+	--coltype=32
+
+	exec [gen].[modlcolminfo_refresh_insert] @columnGUID, 'coltype', '32', 'combotable', null	
+	exec [gen].[modlcolminfo_refresh_insert] @columnGUID, 'coltype', '32', 'combofieldKey', null	
+	exec [gen].[modlcolminfo_refresh_insert] @columnGUID, 'coltype', '32', 'combofieldId', null	
+	exec [gen].[modlcolminfo_refresh_insert] @columnGUID, 'coltype', '32', 'combofieldName', null	
+	exec [gen].[modlcolminfo_refresh_insert] @columnGUID, 'coltype', '32', 'comboWhereField1', null	
+	exec [gen].[modlcolminfo_refresh_insert] @columnGUID, 'coltype', '32', 'comboWhereField2', null	
+
+	--coltype=33
+
+	exec [gen].[modlcolminfo_refresh_insert] @columnGUID, 'coltype', '33', 'combotable', null	
+	exec [gen].[modlcolminfo_refresh_insert] @columnGUID, 'coltype', '33', 'combofieldKey', null	
+	exec [gen].[modlcolminfo_refresh_insert] @columnGUID, 'coltype', '33', 'combofieldId', null	
+	exec [gen].[modlcolminfo_refresh_insert] @columnGUID, 'coltype', '33', 'combofieldName', null	
+	exec [gen].[modlcolminfo_refresh_insert] @columnGUID, 'coltype', '33', 'comboWhereField1', null	
+	exec [gen].[modlcolminfo_refresh_insert] @columnGUID, 'coltype', '33', 'comboWhereField2', null	
+
+	--isWidget
+	exec [gen].[modlcolminfo_refresh_insert] @columnGUID, 'isWidget', '1', 'PageNo', '1'	
+	exec [gen].[modlcolminfo_refresh_insert] @columnGUID, 'isWidget', '1', 'SectionNo', '1'	
+	exec [gen].[modlcolminfo_refresh_insert] @columnGUID, 'isWidget', '1', 'ColNo', '1'	
+	exec [gen].[modlcolminfo_refresh_insert] @columnGUID, 'isWidget', '1', 'RowNo', '1'	
+
+
+	exec [gen].[modlcolminfo_refresh_insert] @columnGUID, 'isWidget', '1', 'widgetType', null	
+	exec [gen].[modlcolminfo_refresh_insert] @columnGUID, 'isWidget', '1', 'widgetBgColor', null	
+	exec [gen].[modlcolminfo_refresh_insert] @columnGUID, 'isWidget', '1', 'widgetData', null	
+	exec [gen].[modlcolminfo_refresh_insert] @columnGUID, 'isWidget', '1', 'widgetIcon', null	
+	exec [gen].[modlcolminfo_refresh_insert] @columnGUID, 'isWidget', '1', 'widgetNo', null	
+	exec [gen].[modlcolminfo_refresh_insert] @columnGUID, 'isWidget', '1', 'widgetTitle', null
+	exec [gen].[modlcolminfo_refresh_insert] @columnGUID, 'isWidget', '1', 'moreInfoURL', ''
+
+
+	declare @moduleGUID uniqueidentifier
+	select @moduleguid=m.moduleguid 
+	from modl m inner join modlcolm c on m.ModuleGUID=c.ModuleGUID
+	where ColumnGUID=@columnGUID
+
+	update c 
+	set colorder=cast(isnull(pageno.InfoValue,0)+isnull(sectionNo.InfoValue,0)+isnull(ColNo.InfoValue,0)+isnull(RowNo.InfoValue,0)+right('00'+isnull(FieldNo.InfoValue,0),2) as int)
+	--select pageno.InfoValue+sectionNo.InfoValue+ColNo.InfoValue+RowNo.InfoValue+right('00'+FieldNo.InfoValue,2)+'',
+	--	right('00'+pageno.InfoValue,2) pageNo, right('00'+sectionNo.InfoValue,2) sectionNo, right('00'+ColNo.InfoValue,2) ColNo, 
+	--	right('00'+RowNo.InfoValue,2) RowNo, right('00'+FieldNo.InfoValue,2) FieldNo, colOrder, * 
+	from modl m 
+		inner join modlcolm c on m.ModuleGUID=c.ModuleGUID
+		inner join modlcolminfo pageNo on c.ColumnGUID=pageNo.columnguid and pageNo.InfoKey='pageNo'
+		left join modlcolminfo isViewable on c.ColumnGUID=isViewable.columnguid and isViewable.InfoKey='isViewable'
+		left join modlcolminfo sectionNo on c.ColumnGUID=sectionNo.columnguid and sectionNo.InfoKey='sectionNo'
+		left join modlcolminfo ColNo on c.ColumnGUID=ColNo.columnguid and ColNo.InfoKey='ColNo'
+		left join modlcolminfo RowNo on c.ColumnGUID=RowNo.columnguid and RowNo.InfoKey='RowNo'
+		left join modlcolminfo FieldNo on c.ColumnGUID=FieldNo.columnguid and FieldNo.InfoKey='FieldNo'
+	where m.moduleguid=@moduleguid and (isViewable.InfoValue='1' or isnull(pageNo.infovalue,'')<>'')
+		and isnull(c.colOrder,0)<>cast(isnull(pageno.InfoValue,0)+isnull(sectionNo.InfoValue,0)+isnull(ColNo.InfoValue,0)+isnull(RowNo.InfoValue,0)+right('00'+isnull(FieldNo.InfoValue,0),2) as int)
+
+	update c 
+	set colorder=1
+	from modl m 
+		inner join modlcolm c on m.ModuleGUID=c.ModuleGUID
+		inner join modlcolminfo primaryCol on c.ColumnGUID=primaryCol.columnguid and primaryCol.InfoKey='primaryCol' and primaryCol.infovalue='1'
+	where m.moduleguid=@moduleguid and isnull(c.colOrder,0)<>1
+
+	update c 
+	set colorder=900000+cast(right('00'+isnull(FieldNo.InfoValue,0),2) as int)
+	--select 900000+colOrder, isViewable.InfoValue, pageNo.infovalue
+	from modl m 
+		inner join modlcolm c on m.ModuleGUID=c.ModuleGUID
+		left join modlcolminfo isViewable on c.ColumnGUID=isViewable.columnguid and isViewable.InfoKey='isViewable'
+		left join modlcolminfo pageNo on c.ColumnGUID=pageNo.columnguid and pageNo.InfoKey='pageNo'
+		left join modlcolminfo primaryCol on c.ColumnGUID=primaryCol.columnguid and primaryCol.InfoKey='primaryCol'
+		left join modlcolminfo FieldNo on c.ColumnGUID=FieldNo.columnguid and FieldNo.InfoKey='FieldNo'
+	where isnull(isViewable.InfoValue,0)='0' and isnull(pageNo.infovalue,'')<>'' and isnull(primarycol.infovalue,'0')='0'
+		and m.moduleguid=@moduleguid and isnull(c.colOrder,0)<>900000+cast(right('00'+isnull(FieldNo.InfoValue,0),2) as int)
+
+
+
+

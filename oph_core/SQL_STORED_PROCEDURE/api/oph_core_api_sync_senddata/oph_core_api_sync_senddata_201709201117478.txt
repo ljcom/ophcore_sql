@@ -1,0 +1,132 @@
+
+
+
+CREATE procedure [api].[sync_senddata] @accountid nvarchar(50), @token uniqueidentifier, @code nvarchar(50), @xml xml
+as
+	declare @dataDB nvarchar(50), @settingmode int, @fieldkey nvarchar(50)
+	select @datadb=databasename 
+	from oph_core.dbo.acctdbse d	
+		inner join oph_core.dbo.acct a on a.AccountGUID=d.AccountGUID
+	where accountid=@accountid and isMaster=1 and [version]='4.0'
+
+	--print @datadb
+
+	declare @sqlstr nvarchar(max)='
+		select @settingmode=settingmode
+		from '+@datadb+'.dbo.modl m
+		where moduleid='''+@code+''''
+
+	exec sp_executesql @sqlstr, N'@settingmode int output', @settingmode output
+
+	set @sqlstr='
+		select @fieldkey=iif(m.settingmode=0, c.colkey, ''docGUID'')
+		from '+@datadb+'.dbo.modl m
+			inner join '+@datadb+'.dbo.modlcolm c on m.moduleguid=c.moduleguid
+			inner join '+@datadb+'.dbo.modlcolminfo i on c.columnguid=i.columnguid and i.infokey=''primaryCol'' and i.infovalue=''1''
+		where moduleid='''+@code+'''
+
+		set @fieldkey=iif(isnull(@fieldkey, '''')<>'''', @fieldkey, ''docGUID'')
+
+		--167,173,175,231,239
+		select @r=stuff((
+			select '', ''+iif(c.coltype in (167,173,175,231,239), 
+				''gen.recoverXMLString(Tbl.Col.value(''''''+replace(c.colkey, '' '', '''')+''[1]'''', ''''nvarchar(max)''''))'', 
+				''Tbl.Col.value(''''''+replace(c.colkey, '' '', '''')+''[1]'''', ''''nvarchar(max)'''')'')+'' [''+c.colkey+'']''
+			from '+@datadb+'.dbo.modl m
+				inner join '+@datadb+'.dbo.modlcolm c
+					on m.moduleguid=c.moduleguid
+			where m.moduleid='''+@code+''''+'
+				'+iif(@settingmode in (1,3,4),
+				'and c.colkey not in (''updatedDate'', ''createdDate'', ''docGUID'', ''parentdocGUID'', 
+					''AccountGUID'', ''ModuleGUID'', ''Status'', ''StatusComment'', 
+					''CreatedUser'', ''updatedUser'', ''isClosed'', ''closedDate'', ''closedUser'', ''isDeleted'', ''deletedDate'', ''deletedUser'', ''oldId'')', '')+'
+			for xml path('''')), 1, 2, '''')
+
+		select @r2=stuff((select '', [''+c.colkey+'']''
+		from '+@datadb+'.dbo.modl m
+			inner join '+@datadb+'.dbo.modlcolm c
+				on m.moduleguid=c.moduleguid
+		where m.moduleid='''+@code+''''+'
+			'+iif(@settingmode in (1,3,4),
+			'and c.colkey not in (''updatedDate'', ''createdDate'', ''docGUID'', ''parentdocGUID'', 
+				''AccountGUID'', ''ModuleGUID'', ''Status'', ''StatusComment'', 
+				''CreatedUser'', ''updatedUser'', ''isClosed'', ''closedDate'', ''closedUser'', ''isDeleted'', ''deletedDate'', ''deletedUser'', ''oldId'')', '')+'
+		for xml path('''')), 1, 2, '''')
+
+		select @r3=stuff((select '', [''+c.colkey+'']=x.[''+c.colkey+'']''
+		from '+@datadb+'.dbo.modl m
+			inner join '+@datadb+'.dbo.modlcolm c
+				on m.moduleguid=c.moduleguid
+		where m.moduleid='''+@code+''''+'
+			'+iif(@settingmode in (1,3,4),
+			'and c.colkey not in (''updatedDate'', ''createdDate'', ''docGUID'', ''parentdocGUID'', 
+				''AccountGUID'', ''ModuleGUID'', ''Status'', ''StatusComment'', 
+				''CreatedUser'', ''updatedUser'', ''isClosed'', ''closedDate'', ''closedUser'', ''isDeleted'', ''deletedDate'', ''deletedUser'', ''oldId'')', '')+'
+		for xml path('''')), 1, 2, '''')
+		'
+	
+	--print @sqlstr
+	declare @r nvarchar(max), @r2 nvarchar(max), @r3 nvarchar(max)
+	exec sp_executesql @sqlstr, N'@r nvarchar(max) output, @r2 nvarchar(max) output, @r3 nvarchar(max) output, @fieldkey nvarchar(50) output', @r output, @r2 output, @r3 output, @fieldkey output
+
+	--print @r2
+
+	if @settingmode=1 or @settingmode=3 or @settingmode=4 
+	set @r='
+		Tbl.Col.value(''docGUID[1]'', ''uniqueidentifier'') docGUID, 
+		Tbl.Col.value(''parentdocGUID[1]'', ''uniqueidentifier'') parentdocGUID, 
+		Tbl.Col.value(''AccountGUID[1]'', ''uniqueidentifier'') AccountGUID, 
+		Tbl.Col.value(''ModuleGUID[1]'', ''uniqueidentifier'') ModuleGUID, 
+		'+@r+', 
+		Tbl.Col.value(''Status[1]'', ''int'') Status, 
+		Tbl.Col.value(''StatusComment[1]'', ''nvarchar(max)'') StatusComment, 
+		Tbl.Col.value(''createdDate[1]'', ''datetime'') createdDate, 
+		Tbl.Col.value(''CreatedUser[1]'', ''uniqueidentifier'') CreatedUser, 
+		Tbl.Col.value(''updatedDate[1]'', ''datetime'') updatedDate, 
+		Tbl.Col.value(''updatedUser[1]'', ''uniqueidentifier'') updatedUser, 
+		Tbl.Col.value(''isClosed[1]'', ''bit'') isClosed, 
+		Tbl.Col.value(''closedDate[1]'', ''datetime'') closedDate, 
+		Tbl.Col.value(''closedUser[1]'', ''uniqueidentifier'') closedUser, 
+		Tbl.Col.value(''isDeleted[1]'', ''bit'') isDeleted, 
+		Tbl.Col.value(''deletedDate[1]'', ''datetime'') deletedDate, 
+		Tbl.Col.value(''deletedUser[1]'', ''uniqueidentifier'') deletedUser, 
+		Tbl.Col.value(''oldId[1]'', ''nvarchar(max)'') oldId'
+	
+		
+	set @r2=iif(@settingmode in (1,3,4),'docGUID, parentdocGUID, AccountGUID, ModuleGUID, ', '')+@r2+iif(@settingmode in (1,3,4),', Status, StatusComment, createdDate, CreatedUser, updatedDate, updatedUser, isClosed, closedDate, closedUser, isDeleted, deletedDate, deletedUser, oldId', '')
+	set @r3=@r3+iif(@settingmode in (1,3,4),', Status=x.status, StatusComment=x.StatusComment, updatedDate=x.updatedDate, updatedUser=x.updatedUser, isClosed=x.isClosed, closedDate=x.closedDate, closedUser=x.closedUser, isDeleted=x.isDeleted, deletedDate=x.deletedDate, deletedUser=x.deletedUser, oldId=x.oldId', '')
+	--set @r3=@r3+iif(@settingmode in (0),', updatedDate=x.updatedDate, createdDate=x.createdDate', '')
+	declare @schema nvarchar(5)=iif(@settingmode=0, 'dbo', 'doc')
+
+	select @sqlstr='
+		declare @moduleguid uniqueidentifier
+
+		select @moduleguid=moduleguid from '+@dataDB+'.dbo.modl where moduleid='''+@code+'''
+
+		insert into '+@dataDB+'.'+@schema+'.['+@code+'] ('+@r2+')
+		select x.* 
+		from (		
+			SELECT '+@r+'
+			FROM   @xml.nodes(''/sqroot/replication/data/item'') Tbl(Col)  ) x
+			left join '+@dataDB+'.'+@schema+'.['+@code+'] y on x.'+@fieldkey+'=y.'+@fieldkey+'
+		where y.'+@fieldkey+' is null
+
+		update y
+		set '+@r3+'
+		from (		
+			SELECT '+@r+'
+			FROM   @xml.nodes(''/sqroot/replication/data/item'') Tbl(Col)  ) x
+			inner join '+@dataDB+'.'+@schema+'.['+@code+'] y on x.'+@fieldkey+'=y.'+@fieldkey+'	
+		where gen.datetoint(isnull(x.updatedDate, x.createdDate))-gen.datetoint(isnull(y.updatedDate, y.createdDate))>0
+		
+	'
+	print @sqlstr
+	exec sp_executesql @sqlstr, N'@xml xml', @xml
+
+
+
+
+
+
+
+

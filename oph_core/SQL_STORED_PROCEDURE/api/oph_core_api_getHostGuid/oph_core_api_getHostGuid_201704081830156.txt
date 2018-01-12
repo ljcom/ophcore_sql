@@ -1,0 +1,19 @@
+
+
+
+
+
+
+CREATE procedure [api].[getHostGuid] @userID as nvarchar(100)
+as
+	select hostGUID from userhost a
+	inner join [user] b on b.UserGUID = a.UserGUID
+	where userID=@userID
+
+
+
+
+
+
+
+

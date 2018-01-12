@@ -1,0 +1,57 @@
+
+CREATE procedure [core].[storeScriptVersion_package]
+as
+
+	insert into oph_package.dbo.packmdelmodl (ModelModuleGUID, packageModelGUID, ModelID, ModuleID, modelType)
+	select newid(), x.PackageModelGUID, x.modelid, x.moduleid, x.modelType
+	from (
+		--self
+		select m.PackageModelGUID, m.modelID, vm.ModuleID, 'self' modelType
+		from oph_package.dbo.packmdel m
+			inner join oph_package.dbo.pack p
+				on m.packageGUID=p.packageGUID
+			inner join oph_package.dbo.versmodl vm on vm.ModuleID=m.modelID
+				and vm.productName=p.productName
+		--group by m.modelID, vm.ModuleID
+
+		--child
+		union
+		select m.PackageModelGUID, m.modelID, vm.ModuleID, 'child'
+		from oph_package.dbo.packmdel m
+			inner join oph_package.dbo.pack p
+				on m.packageGUID=p.packageGUID
+			inner join oph_package.dbo.versmodl vm on vm.ParentModuleID=m.modelID
+				and vm.productName=p.productName
+		--group by m.modelID, vm.ModuleID
+
+		--gchild
+		union
+		select m.PackageModelGUID, m.modelID, vm2.ModuleID, 'gchild'
+		from oph_package.dbo.packmdel m
+			inner join oph_package.dbo.pack p
+				on m.packageGUID=p.packageGUID
+			inner join oph_package.dbo.versmodl vm on vm.ParentModuleID=m.modelID
+				and vm.productName=p.productName
+			inner join oph_package.dbo.versmodl vm2 on vm2.ParentModuleID=vm.moduleID
+		group by m.PackageModelGUID, m.modelID, vm2.ModuleID
+		) x
+		left join oph_package.dbo.packmdelmodl pmm
+			on pmm.ModelID=x.modelID and pmm.ModuleID=x.ModuleID and pmm.modelType=x.modelType
+	where pmm.ModelModuleGUID is null 
+
+	insert into oph_package.dbo.packmdelmodl (ModelModuleGUID, packageModelGUID, ModelID, ModuleID, modelType)
+	select newid(), x.PackageModelGUID, x.modelid, x.moduleid, x.modelType
+	from (
+		select m.PackageModelGUID, m.modelID, vm.infovalue moduleid, 'combo' modelType
+		from oph_package.dbo.packmdelmodl m
+			inner join oph_package.dbo.versmodlcolminfo vm on vm.ModuleID=m.moduleID and vm.InfoKey='comboTable'
+				and isnull(vm.infovalue,'')<>''
+		group by m.PackageModelGUID, m.modelID, vm.infovalue
+		) x
+		left join oph_package.dbo.packmdelmodl pmm
+			on pmm.ModelID=x.modelID and pmm.ModuleID=x.ModuleID and pmm.modelType=x.modelType
+	where pmm.ModelModuleGUID is null 
+
+--delete oph_package.dbo.packmdelmodl
+
+

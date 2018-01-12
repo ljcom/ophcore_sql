@@ -1,0 +1,65 @@
+
+
+CREATE procedure [gen].[createView] @viewName varchar(50), @content nvarchar(max), @schema nvarchar(10)='doc', @isEnc bit=0, @resultText nvarchar(max) output, @isdebug bit=0
+--WITH ENCRYPTION
+as
+-- ver 20170719
+	declare @sqlstr nvarchar(max)=''
+	
+	if exists (select * from sys.objects a
+				inner join syscomments b
+					on a.object_id=b.id
+				inner join sys.schemas c
+					on a.schema_id=c.schema_id
+				where a.name like @viewName-- and encrypted=1
+					and c.name=@schema)
+	begin
+		if charindex('create view', @content)=0
+			set @sqlstr = 'alter view ' + @schema + '.' + @viewName + char(13) + char(10) + 
+				case when @isEnc=1 then 'with encryption'+ char(13) + char(10) else '' end +
+				'as'+char(13)-- --automatic creation by system, you have to remove this comment to customize this view' + char(13) + char(10) + ' ' --+
+		else set @content=replace(@content, 'create view', 'alter view')
+
+		set @sqlstr=''+@sqlstr+@content
+	end
+
+
+	if not exists (
+		select * 
+		from sysObjects
+		where name = @viewName) 
+	begin
+		if charindex('create view', @content)=0
+			set @sqlstr = 'create view ' + @schema + '.' + @viewName + char(13) + char(10) + 
+				case when @isEnc=1 then 'with encryption'+ char(13) + char(10) else '' end +
+				'as'+char(13)-- --automatic creation by system, you have to remove this comment to customize this view' + char(13) + char(10) + ' ' --+
+		else set @sqlstr=''
+
+		set @sqlstr=''+@sqlstr+@content
+		
+	end
+
+	if @isdebug=1 print @sqlstr
+
+	BEGIN TRY
+		--begin transaction
+		exec sp_executesql @sqlstr
+		--commit
+	END TRY
+	BEGIN CATCH
+		SET @resulttext=ERROR_MESSAGE()
+		--rollback 
+	END CATCH;
+		
+
+	insert into modlcolm (ColumnGUID, ModuleGUID, colKey, colType, colOrder, titlecaption, createdDate, updatedDate, colLength)
+	select newid(), m.moduleguid, c.name, c.user_type_id, c.column_id, null, getdate(), null, c.max_length
+	from sys.columns c 
+		inner join sys.objects o on c.object_id=o.object_id and right(o.name, 4)<>'APRV'
+		inner join modl m on m.moduleid=o.name
+		left join modlcolm i on m.moduleguid=i.moduleguid and i.colKey=c.name
+	where i.colkey is null and c.name not in ('DocGUID', 'AccountGUID', 'ModuleGUID', 'Status', 'StatusComment', 
+		'CreatedDate', 'CreatedUser', 'updatedDate', 'updatedUser', 'isClosed', 'closedDate', 'closedUser', 
+		'isDeleted', 'deletedDate', 'deletedUser', 'parentDocGUID', 'oldId')
+
+

@@ -1,0 +1,12 @@
+CREATE FUNCTION gen.getHost(@UserID varchar(100), @UserGUID uniqueidentifier = NULL)
+RETURNS uniqueidentifier
+as	--CreatedBy eLs ON Dec, 2016
+BEGIN
+	Declare @HostGUID uniqueidentifier
+
+	select @HostGUID = HostGUID from [user] a
+		inner join userhost b ON a.UserGUID = b.UserGUID
+	where UserID = isNULL(@UserID, UserID) AND a.UserGUID = isNULL(@UserGUID, a.UserGUID)
+
+	return @HostGUID
+END

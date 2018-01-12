@@ -1,0 +1,11 @@
+CREATE PROCEDURE [dbo].[YoPCSOSALE_sub2] @DocDate date
+as	--CreatedBy eLs ON Feb, 2017
+
+	select 
+		PCSOGUID, CarolGUIDcbId [id_member], CarolGUIDcbNm [name_member], EVGRGUIDcbId+' '+EVGRGUIDcbNm [event_name], 
+		TotalQty [total_qty], dbo.currMode(TotalDiscount, 1, 'Indonesia') [total_discount],
+		dbo.currMode(TotalSales, 1, 'Indonesia') [total_pay]
+	from oph.TcPCSO
+	where DocDate = @DocDate
+	order by CreatedDate
+

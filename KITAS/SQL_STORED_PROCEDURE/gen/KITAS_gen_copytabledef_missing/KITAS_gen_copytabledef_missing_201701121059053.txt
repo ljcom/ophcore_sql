@@ -1,0 +1,36 @@
+
+
+
+
+
+
+
+CREATE procedure [gen].[copytabledef_missing] @sourceDB as nvarchar(100)
+as
+	if @sourceDB&lt;&gt;'' begin
+		declare @sqlstr nvarchar(4000)
+	
+		set @sqlstr='
+			select x.tablename, y1.colname  
+			from (select tablename from gen.cotablfiel
+				group by Tablename) x
+				inner join (select tablename from '+@sourceDB+'.gen.cotablfiel
+				group by Tablename) y
+					on x.Tablename=y.Tablename
+				inner join '+@sourceDB+'.gen.cotablfiel y1
+					on x.Tablename=y1.Tablename					
+				left join gen.cotablfiel x1
+					on x.Tablename=x1.Tablename
+					and x1.ColName=y1.colname
+			where x1.colname is null
+			'
+		exec (@sqlstr)
+	end
+
+
+
+
+
+
+
+

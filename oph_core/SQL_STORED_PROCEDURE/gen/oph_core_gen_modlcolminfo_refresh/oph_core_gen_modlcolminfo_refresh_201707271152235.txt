@@ -1,0 +1,55 @@
+
+
+CREATE procedure [gen].[modlcolminfo_refresh] @columnGUID uniqueidentifier, @isdebug bit=0
+--WITH ENCRYPTION
+as
+	exec [gen].[modlcolminfo_refresh_insert] @columnGUID, 'isviewable', '1', 'PageNo', '1'	
+	exec [gen].[modlcolminfo_refresh_insert] @columnGUID, 'isviewable', '1', 'SectionNo', '1'	
+	exec [gen].[modlcolminfo_refresh_insert] @columnGUID, 'isviewable', '1', 'ColNo', '1'	
+	exec [gen].[modlcolminfo_refresh_insert] @columnGUID, 'isviewable', '1', 'RowNo', '1'	
+
+	insert into modlcolminfo (ColumnInfoGUID, ColumnGUID, InfoKey, InfoValue)
+	select newid(), b.ColumnGUID, 'fieldNo', b.colOrder 
+	from modl a
+		inner join modlcolm b on a.moduleguid=b.moduleguid
+		inner join modlcolminfo c on b.columnguid=c.columnguid and c.InfoKey='isviewable' and c.InfoValue='1'
+		left join modlcolminfo d1 on b.columnguid=d1.columnguid and d1.InfoKey='fieldNo' 
+	where b.columnguid=@columnguid and  d1.columnguid is null
+
+	exec [gen].[modlcolminfo_refresh_insert] @columnGUID, 'isviewable', '1', 'colType', '11'	
+	exec [gen].[modlcolminfo_refresh_insert] @columnGUID, 'isviewable', '1', 'isPreview', '0'	
+	exec [gen].[modlcolminfo_refresh_insert] @columnGUID, 'isviewable', '1', 'isEditable', '0'	
+
+	update b2
+	set infovalue='0'
+	--select * 
+	from modlcolm a	
+		inner join modlcolminfo b2 on a.columnGUID=b2.columnGUID and b2.infokey='isbrowsable' and b2.infovalue='1'
+		inner join modlcolminfo b1 on a.columnGUID=b1.columnGUID and b1.infokey='coltype' and b1.infovalue='33'
+	where a.columnguid=@columnguid 
+
+	--coltype=32
+
+	exec [gen].[modlcolminfo_refresh_insert] @columnGUID, 'coltype', '32', 'combotable', ''	
+	exec [gen].[modlcolminfo_refresh_insert] @columnGUID, 'coltype', '32', 'combofieldKey', ''	
+	exec [gen].[modlcolminfo_refresh_insert] @columnGUID, 'coltype', '32', 'combofieldId', ''	
+	exec [gen].[modlcolminfo_refresh_insert] @columnGUID, 'coltype', '32', 'combofieldName', ''	
+	exec [gen].[modlcolminfo_refresh_insert] @columnGUID, 'coltype', '32', 'comboWhereField1', ''	
+	exec [gen].[modlcolminfo_refresh_insert] @columnGUID, 'coltype', '32', 'comboWhereField2', ''	
+
+	--isWidget
+	exec [gen].[modlcolminfo_refresh_insert] @columnGUID, 'isWidget', '1', 'PageNo', '1'	
+	exec [gen].[modlcolminfo_refresh_insert] @columnGUID, 'isWidget', '1', 'SectionNo', '1'	
+	exec [gen].[modlcolminfo_refresh_insert] @columnGUID, 'isWidget', '1', 'ColNo', '1'	
+	exec [gen].[modlcolminfo_refresh_insert] @columnGUID, 'isWidget', '1', 'RowNo', '1'	
+
+
+	exec [gen].[modlcolminfo_refresh_insert] @columnGUID, 'isWidget', '1', 'widgetType', ''	
+	exec [gen].[modlcolminfo_refresh_insert] @columnGUID, 'isWidget', '1', 'widgetBgColor', ''	
+	exec [gen].[modlcolminfo_refresh_insert] @columnGUID, 'isWidget', '1', 'widgetData', ''	
+	exec [gen].[modlcolminfo_refresh_insert] @columnGUID, 'isWidget', '1', 'widgetIcon', ''	
+	exec [gen].[modlcolminfo_refresh_insert] @columnGUID, 'isWidget', '1', 'widgetNo', ''	
+	exec [gen].[modlcolminfo_refresh_insert] @columnGUID, 'isWidget', '1', 'widgetTitle', ''
+	exec [gen].[modlcolminfo_refresh_insert] @columnGUID, 'isWidget', '1', 'moreInfoURL', ''
+
+

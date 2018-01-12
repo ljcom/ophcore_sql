@@ -1,0 +1,121 @@
+
+
+create procedure [gen].[sendnotifMail] @GUID uniqueidentifier, @hostGUID uniqueidentifier, @ModuleGUID uniqueidentifier,@function nvarchar(100), @xtype nvarchar(50)=null
+as 	
+	declare @Subject nvarchar(max),@Body nvarchar(max),@m2 nvarchar(max),@s2 nvarchar(max),@m nvarchar(max),@SqlStr nvarchar(max),@ProfileName nvarchar(50)
+	declare @sqlstr1  nvarchar(max), @Recipients nvarchar(max), @r2 nvarchar(max)
+	declare @otablename nvarchar(50),@atablename nvarchar(50),@ColName nvarchar(50),@ss nvarchar(max)
+	declare @columnVal TABLE (columnVal nvarchar(max))
+	declare @columnSubject TABLE (columnSubject nvarchar(max))
+	declare @columnRecipient TABLE (columnRecipient nvarchar(max))
+	declare @columnReciept TABLE (columnReciept nvarchar(max))
+
+	select @otablename = left(ModuleId,1) + 'o' + substring(ModuleId,3,len(ModuleId)-2)  from CaMODL where ModuleGUID = @ModuleGUID
+	select @atablename = left(ModuleId,1) + 'a' + substring(ModuleId,3,len(ModuleId)-2)  from CaMODL where ModuleGUID = @ModuleGUID
+
+	select @ColName=ColName from gen.cotabl a
+	inner join gen.cotablfiel b
+		on a.tableGUID = b.tableGUID
+	where tablename=@atablename
+	and PrimaryCol=1
+
+	select @Subject = [Subject], @SqlStr = SqlStr, @Body = Body,@ProfileName = ProfileName
+			,@Recipients = isnull(Recipients,'') from CaMODLNOTI a
+		inner join canoti b
+			on a.NotificationMailGUID = b.NotificationMailGUID		
+		where ModuleGUID=@ModuleGUID	--'A3591800-A95F-459A-B490-B06252069591'
+		and FunctionCode=@function		--'6034805E-4D39-41AE-82FA-58454B70F39B'
+
+
+	 
+	 
+	set @sqlstr1 = @sqlstr + ''''+convert(nvarchar(50),@GUID)+''''
+	select @sqlstr1 =''''+SUBSTRING (@sqlstr1,CHARINDEX('from', @sqlstr1, 0),len(@sqlstr1)-CHARINDEX('from', @sqlstr1)+1)	
+	select @m2='select ''' + REPLACE(REPLACE(REPLACE(@Body,'[','''+ ['),']','] +'''),'#br#','&lt;br/&gt;') + @sqlstr1
+	
+	select @m2=REPLACE (REPLACE (@m2,'#60#','&lt;'),'#62#','&gt;')
+	
+	insert @columnVal exec (@m2)
+	select @m=columnVal From @columnVal
+
+	select @s2='select ''' + REPLACE (REPLACE(@Subject,'[','''+ ['),']','] +''') + @sqlstr1		
+	insert @columnSubject exec (@s2)
+	select @Subject=columnSubject From @columnSubject
+
+	if @xtype = 'execute' begin
+		set @ss='
+		DECLARE @r nvarchar(4000), @email nvarchar(100)
+		if exists(select * from ' +@otablename+ ' where status=1 and ' +@otablename+ '.' + convert(nvarchar(50),@ColName)+ '=''' +convert(nvarchar(50),@GUID)+''') begin
+				declare @lvl int
+				select @lvl=min(lvl) from ' +@otablename+ 'APRV
+				where '+ convert(nvarchar(50),@ColName)+' =''' +convert(nvarchar(50),@GUID)+'''
+					and isnull(status,0)&lt;4
+	
+				DECLARE #cur CURSOR
+				READ_ONLY
+				FOR 
+
+				select personalEmail 
+				from (
+						select personalEmail 
+						from ' +@otablename+ 'APRV
+							inner join coUSER
+								on ' +@otablename+ 'APRV.approvalUSERGUID = coUSER.USERGUID
+			--				inner join coUSER coUSERDELE
+			--					on coUSER.delegateUSERGUID = coUSERDELE.USERGUID
+						where '+ convert(nvarchar(50),@ColName)+' =''' +convert(nvarchar(50),@GUID)+''' and lvl=@lvl
+							and isnull(status,0)&lt;4 and isnull(personalemail,'''') &lt;&gt;''''
+					union
+						select coUSERDELE.personalEmail 
+						from ToLABLAPRV
+							inner join coUSER
+								on ToLABLAPRV.approvalUSERGUID = coUSER.USERGUID
+							inner join coUSER coUSERDELE
+								on coUSER.delegateUSERGUID = coUSERDELE.USERGUID
+						where '+ convert(nvarchar(50),@ColName)+' =''' +convert(nvarchar(50),@GUID)+''' and lvl=@lvl
+							and isnull(status,0)&lt;4 and isnull(coUSERDELE.personalemail,'''') &lt;&gt;''''
+					) x
+				group by personalEmail
+	
+
+				set @r=''''
+				OPEN #cur
+		
+				FETCH NEXT FROM #cur INTO @email
+				WHILE (@@fetch_status &lt;&gt; -1)
+				BEGIN
+					IF (@@fetch_status &lt;&gt; -2)
+					BEGIN
+						set @r = @r + isnull(@email,'''') + '';''
+			
+					END
+					FETCH NEXT FROM #cur INTO @email
+				END
+		
+				CLOSE #cur
+				DEALLOCATE #cur
+			end
+			print @r'
+		--exec (@ss)
+
+		insert @columnReciept exec (@ss)
+		select @Recipients=columnReciept From @columnReciept
+	end
+	else
+	begin
+		select @r2='select ''' +REPLACE (REPLACE (REPLACE(SUBSTRING (@Recipients,1,11),'[','''+ ['),']','] +'''),'Recipient','PersonalEmail') + @sqlstr1
+		insert @columnRecipient exec (@r2)
+		select @Recipients=columnRecipient + SUBSTRING (@Recipients,CHARINDEX(']', @Recipients, 0)+1,len(@Recipients)-CHARINDEX(']', @Recipients)+1)	 From @columnRecipient	
+	end
+
+	print @Subject
+	print @m
+	--print @s2
+	--print @r2
+	print @Recipients
+	--print @sqlstr1		
+	
+	 exec gen.sendMail @GUID, @hostGUID, @ProfileName, @Recipients, @m, @Subject,''
+
+
+

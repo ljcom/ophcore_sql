@@ -1,0 +1,8 @@
+CREATE VIEW [dbo].[CoUPWD]
+as
+	select 
+		UserGUID, Password, ConfirmPassword, CreatedDate, CreatedUser, UpdatedDate, UpdatedUser 
+	from CoUSER
+	where isDeleted = 0 
+
+

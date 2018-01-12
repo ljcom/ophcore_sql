@@ -1,0 +1,39 @@
+
+CREATE procedure [core].[info_acct] @accountid varchar(50), @key varchar(100)
+--WITH ENCRYPTION
+as
+	if @key='accountGUID'
+		select AccountGUID infovalue 
+		from acct 
+		where AccountId=@accountid
+	else if @key='dbse'
+		select (
+			select a.AccountDBGUID, DatabaseName 
+			from acctdbse a
+				inner join acct b on a.AccountGUID=b.AccountGUID 
+			where b.accountid=@accountid
+			for xml path('rows'), type) acctdbse
+		for xml path('tables'), root('sqroot')
+
+	else if @key='info'
+		select (
+			select a.InfoKey, a.InfoValue
+			from acctinfo a
+				inner join acct b on a.AccountGUID=b.AccountGUID 
+			where b.accountid=@accountid
+			for xml path('rows'), type) acctinfo
+		for xml path('tables'), root('sqroot')
+	else
+		select infovalue 
+		from acctinfo a 
+			inner join acct b 
+				on a.accountguid=b.accountguid 
+			--inner join [user] d 
+				--on d.accountguid = b.AccountGUID 
+			--inner join userhost c 
+				--on c.UserGUID = d.userguid 
+		where infokey=@key and accountid=@accountid --and c.hostguid=@hostGUID
+
+
+
+

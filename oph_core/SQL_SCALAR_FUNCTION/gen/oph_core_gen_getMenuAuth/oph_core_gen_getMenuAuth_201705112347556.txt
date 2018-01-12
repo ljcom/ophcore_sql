@@ -1,0 +1,22 @@
+CREATE function [gen].[getMenuAuth] (@url varchar(max), @hostGUID uniqueidentifier)
+returns bit
+as begin
+	declare @n1 int=charindex('code=', @url)
+	declare @n2 int=charindex('code=', @url, @n1)
+	declare @code varchar(50)=''
+	declare @result bit=0
+
+	if @n1=0 and @n2=0 and isnull(@url,'')<>''
+		set @result=1
+	else begin
+		set @code=substring(@url, @n1+5, @n2+5-1)
+
+		if exists(select * from modl where moduleid=@code) 
+			set @result=gen.getAuth(@code, @hostGUID, 'access')
+		else
+			set @result=0
+	end
+
+	return @result
+end
+

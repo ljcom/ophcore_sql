@@ -1,0 +1,151 @@
+
+CREATE PROCEDURE [xml].[tableview] @hostGUID uniqueidentifier, @tablename varchar(100), @firstpage varchar(max)='', @stateid int, @debug int=0
+as
+	--declare @hostGUID uniqueidentifier, @tablename varchar(100), 
+	--@firstpage varchar(max)='EHRD*welcome/default/master_tableview.aspx?mode=browse', @stateid int = 0, @debug int=0
+
+	declare @xcontent varchar(max), @xfilter varchar(max), @xinfo varchar(max), 
+			@xapproval varchar(max), @xtalk varchar(max), @x2 varchar(max),
+			@skinFolder varchar(100), 
+			@userId varchar(100), @userName varchar(100), 
+			@oriUserGUID uniqueidentifier, @oriUserId varchar(100), @oriUserName varchar(100), 
+			@UGroupGUID uniqueidentifier, @msg nvarchar (500),
+			@FirstPages varchar(max), @description nvarchar(100), @aTableName nvarchar(100)
+
+	declare @allowAdd bit=0, 
+			@allowBrowse bit=0, 
+			@allowEdit bit=0,
+			@allowDelete bit=0,
+			@allowWipe bit=0,
+			@allowForce bit=0, 
+			@thispages bit=0,
+			@allowShowAttach bit=0,
+			@isDeletedTable bit=0
+
+	declare @xstatus varchar(max), @moduleGUID uniqueidentifier, @mgName varchar(100), @mg varchar(10)
+
+	set @aTableName= left(@tablename,1)+ 'a' +right(@tablename,len(@tablename)-2 )
+	select @moduleguid=moduleguid from comodl where moduleid=@atablename
+
+	if charindex('*', @firstpage, 1) &gt; 1	set @mg = left(@firstpage, charindex('*', @firstpage, 1) - 1)
+
+	select @mgName = ModuleGroupName from CoMODG where ModuleGroupId = @mg
+
+	if @mgName is Not NULL begin
+		set @mgName = iif(@mg = 'main', null, @mgName)
+		set @firstpage = SUBSTRING(@firstpage, charindex('*', @firstpage, 1) + 1, LEN(@firstpage))
+	end
+
+	--skin
+	select @skinFolder=c.skinFolder, @userid=a.UserId, @username=a.UserName, 
+		@FirstPages=a.FirstPage,@oriUserGUID=b.DelegateUserGUID, @oriuserid=isnull(e.UserId,''), @oriUserName=isnull(e.UserName,'')
+	from CoUSER a
+		inner join CoUSERHOST b
+			on a.userguid=b.userguid
+		inner join coSKIN c
+			on a.skinguid=c.skinguid
+		left join coUGRPUSER d
+			on d.MemberUserGUID=a.UserGUID
+		left join CoUSER e
+			on e.UserGUID=b.DelegateUserGUID	
+	where b.hostguid=@hostguid 
+	
+	--check permission
+	exec gen.verifyAuth @atablename, @hostGUID ,'',
+		@allowadd output , 
+		@allowBrowse output , 
+		@allowEdit output , 
+		@allowDelete output , 
+		@allowWipe output , 
+		@allowForce output , 
+		@allowShowAttach output , 
+		@UGroupGUID output
+
+	set @FirstPages=SUBSTRING(@FirstPages,1,66)
+	if @firstpage = @firstpages set @thispages = 1
+
+	select @description=ModuleDescription from comodl where moduleid=left(@tablename,1)+'a'+substring(@tablename,3,len(@tablename)-2)
+	set @description = ISNULL(@description, @tablename)
+
+	if @mgName is Not NULL and SUBSTRING(@tablename, 3, 4) = 'ALLT'
+		set @description = 'All Pending Document in ' + @mgName
+
+	if substring(@tablename,2,1)='d' begin
+	set @isDeletedTable=1
+	set @allowAdd=0
+	end
+
+	--xinfo
+	set @xinfo= 'select
+		'''+@tablename+''' ''tableName'',
+		'''+isnull(@description,'')+''' ''description'',
+		'''+cast(@stateid as varchar(10))+''' ''stateid'',
+		'''+@skinfolder+''' ''skinFolder'', '+
+		''''+@userid+''' ''userId'', '''+@username+''' ''userName'', 
+		'''+@oriUserId+''' ''oriUserId'', '''+@oriUserName+''' ''oriUserName'', '+
+		''''+cast(@hostGUID as varchar(50))+''' ''hostGUID'', '+
+		cast(isnull(@thispages,0) as varchar(1))+' ''permission/thispages'','+
+		cast(isnull(@allowBrowse,0) as varchar(1))+' ''permission/allowBrowse'','+
+		cast(isnull(@allowAdd,0) as varchar(1))+' ''permission/allowAdd'','+
+		cast(isnull(@allowEdit,0) as varchar(1))+' ''permission/allowEdit'','+
+		cast(isnull(@allowDelete,0) as varchar(1))+' ''permission/allowDelete'','+
+		cast(isnull(@allowWipe,0) as varchar(1))+' ''permission/allowWipe''
+		for xml path(''''), type'
+
+	if @debug=1 select @skinfolder, @userid, @username, @oriuserid, @oriusername, @thispages, @allowAdd, @allowBrowse, @allowDelete, @allowEdit, @allowForce, @allowWipe
+	--xhead
+
+	set @xstatus='
+		select modulestatuscode ''state/@code'', ModuleStatusDesc ''state/@name'',
+			(	select ModuleStatusID ''substate/@id'', ModuleStatusName ''substate/@name''
+				from CoMODLSTAT
+				where ModuleStatusCode=b.ModuleStatusCode and ModuleGUID=b.ModuleGUID
+				order by ModuleStatusid
+				for xml path(''''), type) ''state/substatus''
+		from CoMODLSTAT b
+		where moduleguid='''+convert(varchar(50), @ModuleGUID)+'''
+		group by modulestatuscode, ModuleStatusDesc, ModuleGUID
+		order by ModuleStatusCode
+		for xml path(''''), type'
+	
+
+	--xfilter
+	set @xfilter='
+		select 
+			case when isnull(filterByFieldKey1,'''')='''' then null else filterByFieldKey1 end ''filter/@key'',
+			case when isnull(filterByCaption1,'''')='''' then null else filterByCaption1 end ''filter/caption'', null,
+			case when isnull(filterByFieldKey2,'''')='''' then null else filterByFieldKey2 end ''filter/@key'',
+			case when isnull(filterByCaption2,'''')='''' then null else filterByCaption2 end ''filter/caption'', null,
+			case when isnull(filterByFieldKey3,'''')='''' then null else filterByFieldKey3 end ''filter/@key'',
+			case when isnull(filterByCaption3,'''')='''' then null else filterByCaption3 end ''filter/caption'', null
+		from coMODL a
+		where moduleid='''+@tablename+'''
+		for xml path(''''), type'
+	set @xfilter = ''''''
+
+	--fieldkey
+	declare @fieldKey varchar(100)
+	select @fieldKey=ColName
+		from gen.coTABL a
+			inner join gen.coTABLFIEL b
+				on a.TableGUID=b.tableGUID
+		where tablename=@tablename and b.colorder=1
+	
+	if @debug=1 select @xinfo, @xfilter
+	set @x2='
+	select 
+	(select ('+@xinfo+')
+	for xml path(''''), type) ''info'',
+	(select ('+@xstatus+')
+	for xml path(''''), type) ''status'',
+	(select ('+isnull(@xfilter,'')+')
+	for xml path(''''), type) ''filters''
+	for xml path(''tableView''), root'
+
+	if @debug=1 select @x2, @xinfo, @xfilter
+	exec(@x2)
+
+
+
+
+

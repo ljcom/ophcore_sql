@@ -1,0 +1,13 @@
+
+create TRIGGER [dbo].[tg_user_insert]
+   ON  [dbo].[user]
+   AFTER insert
+AS 
+BEGIN
+	SET NOCOUNT ON;
+
+	update [user]
+	set userProfilePath='../../themes/themeONE/images/masks/af/af'+right('00'+cast(cast(rand()*20 as int)+1 as varchar(2)),2)+'.png'
+	from inserted a inner join [user] b on a.userguid=b.userguid
+END
+

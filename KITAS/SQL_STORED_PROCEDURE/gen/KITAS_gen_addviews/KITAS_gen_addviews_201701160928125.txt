@@ -1,0 +1,227 @@
+
+CREATE procedure [gen].[addviews] @tablename1 varchar(100)='', @debug bit=0, @isEnc bit=1, @isdebug bit=0
+as 
+
+--ver 20141119
+
+	declare @id int, @tableName varchar(50), @sqlstr varchar(max), @view varchar(50), @parameter varchar(400), @content varchar(max)
+	declare @selectstr varchar(max), @browsestr varchar(max), @wherestr varchar(max)
+	declare @joinStr1 varchar(max)--, @joinStr2 varchar(max), @joinStr3 varchar(max)  
+	declare @jStr varchar(max), @liststr varchar(max),
+		@extselectIdStr varchar(max), @extselectNameStr varchar(max), @extselectNameStrEx1 varchar(100), @extselectNameStrEx2 varchar(100), 
+		@esStr varchar(100), @esnStr varchar(100), @esnStr1 varchar(100), @esnStr2 varchar(100), 
+		@newstr varchar(max)
+	declare @status varchar(50), @isactive bit, @isDeleted bit
+	
+	DECLARE #cur_addviews CURSOR
+	   FOR 	
+		select a.object_id, a.name from sys.objects a
+			inner join sys.schemas b
+				on a.schema_id=b.schema_id
+			left join (
+				select tablename from coATAB a
+					inner join coATABFIEL b
+						on a.tableguid=b.tableguid
+				group by tablename			
+			) x on x.tablename=a.name
+		where a.type in ('U','V') 
+			and (a.name like '[CMPRSTY]o%') 
+			and b.name='dbo'
+			and a.name like case when @tablename1='' then a.name else @tablename1+'%' end
+		order by a.name
+	
+	OPEN #cur_addviews
+	FETCH NEXT FROM #cur_addviews
+	into @id, @tableName 
+
+	WHILE @@FETCH_STATUS = 0
+	BEGIN	
+		if left(@tableName,4)='syn_' begin
+			set @view=right(@tablename, len(@tablename)-4)
+			set @content='select * from '+@tablename
+			exec gen.addview @view, @parameter, @content, 'oph', @isEnc=@isEnc, @isdebug=@isdebug
+		end 
+		else begin
+			set @joinStr1 = ''
+			--set @joinStr2 = ''
+			--set @joinStr3 = ''
+			set @extSelectIdStr = ''
+			set @extSelectNameStr = ''
+
+			exec gen.procfields_select @tableName, @selectstr OUTPUT, @newstr OUTPUT, @liststr OUTPUT
+			exec gen.procfields_browse @tableName, @browsestr OUTPUT, @wherestr OUTPUT
+
+			DECLARE curRow CURSOR
+			   FOR 	select 
+						case when combotype in (1,3) then
+							char(9) + char(9) + 'left join ' + left(ComboTable,1)+'o'+SUBSTRING(ComboTable,3,len(ComboTable)-2) + ' ' + char(13) + char(10) + 
+							char(9) + char(9) + char(9) + 'on ' + TableName + '.' + ColName + ' = ' + left(ComboTable,1)+'o'+SUBSTRING(ComboTable,3,len(ComboTable)-2) + '.' + ComboFieldKey + char(13) + char(10) + 
+							' ' 
+						when combotype in (10,12, 13) then
+							char(9) + char(9) + 'left join (' + char(13) + char(10) + 
+							char(9) + char(9) + char(9) + 'select b.'+comboFieldKey+' '+ColName+'cbGUID,  '
+								+'b.'+comboFieldId+' '+ColName+'cbId, ' 
+									+case when isnull(comboFieldName,'')&lt;&gt;'' then 'b.'+comboFieldName else 'null' end + ' '+ColName+'cbNm, ' 
+									+case when isnull(comboFieldNameEx1,'')&lt;&gt;'' then 'b.'+comboFieldNameEx1 else 'null' end + ' '+ColName+'cbEx1, '
+									+case when isnull(comboFieldNameEx2,'')&lt;&gt;'' then 'b.'+comboFieldNameEx2 else 'null' end + ' '+ColName+'cbEx2 ' + char(13) + char(10) + 
+							char(9) + char(9) + char(9) + 'from '+left(ComboTable,1)+'o'+SUBSTRING(ComboTable,3,len(ComboTable)-2)+' b' + char(13) + char(10) + 
+							char(9) + char(9) + char(9) + ') ' + ColName+'cb' + char(13) + char(10) + 
+							char(9) + char(9) + char(9) + 'on ' + TableName + '.' + ColName + ' = ' + colName+'cb' + '.' + colName+'cbGUID' + char(13) + char(10) + 
+							' ' 
+						when combotype in (2,11) then
+							char(9) + char(9) + 'left join (' + char(13) + char(10) + 
+							char(9) + char(9) + char(9) + 'select  b.parametervalueGUID, b.ParValueId '+ColName+'parId, b.ParValueDesc '+ColName+'parVal, b.ParValueNumber '+ColName+'parNum, b.ParReference '+ColName+'parRef ' + char(13) + char(10) + 
+							char(9) + char(9) + char(9) + 'from po'+ComboTable+' b' + char(13) + char(10) + 
+							char(9) + char(9) + char(9) + ') '+ColName+'par' + ' ' + char(13) + char(10) + 														
+							char(9) + char(9) + char(9) + 'on cast(' + TableName + '.' + ColName + ' as varchar(50)) = ' + ColName+'par' + '.' + case when ColName ='Status' then + ''+ColName+'parId'  else 'parameterValueGUID' end + char(13) + char(10) + 
+							' ' end joinStr, 
+
+						case when combotype in (1,3) then 
+							left(ComboTable,1)+'o'+SUBSTRING(ComboTable,3,len(ComboTable)-2) + '.' + ComboFieldId
+						when combotype in (10,12,13) then 
+							ColName+'cb.' + ColName+'cbId'
+						when combotype in (2,11) then 
+							ColName+'par.'+ColName+'parId' end extSelectIdStr,
+
+						case when combotype in (1,3) then
+							left(ComboTable,1)+'o'+SUBSTRING(ComboTable,3,len(ComboTable)-2) + '.' + ComboFieldName
+						when combotype in (10,12,13) then
+							ColName+'cb.' + ColName+'cbNm'
+						when combotype in (2,11) then
+							ColName+'par.'+ColName+'parVal' end extSelectNameStr,
+
+						case when combotype in (1,3) then
+							left(ComboTable,1)+'o'+SUBSTRING(ComboTable,3,len(ComboTable)-2) + '.' + ComboFieldNameEx1
+						when combotype in (10,12,13) then
+							ColName+'cb.' + ColName+'cbEx1'
+							
+						when combotype in (2,11) then null end extSelectNameStr1,
+						case when combotype in (1,3) then
+							left(ComboTable,1)+'o'+SUBSTRING(ComboTable,3,len(ComboTable)-2) + '.' + ComboFieldNameEx2
+						when combotype in (10,12,13) then
+							ColName+'cb.' + ColName+'cbEx2'
+						when combotype in (2,11) then null end extSelectNameStr2
+				from gen.cotablfiel a
+					inner join gen.cotabl b
+						on a.tableguid=b.tableguid
+				where tableName = @tableName 		
+					and ComboType in (1,2,3,10,11,12,13)
+
+			OPEN curRow
+			FETCH NEXT FROM curRow
+			into @jStr, @esStr, @esnStr, @esnStr1, @esnStr2
+			
+			WHILE @@FETCH_STATUS = 0
+			BEGIN
+				set @joinStr1=@joinStr1+@jStr
+				--else if @joinStr3='' and len(@joinStr2)+len(@jStr)&lt;=80000 set @joinStr2=@joinStr2+@jStr
+				--else set @joinStr3=@joinStr3+@jStr
+
+				set @extselectIdStr = @extselectIdStr + ', ' + @esStr
+
+				set @extselectNameStr = @extselectNameStr + case when @esnStr is null then '' else ', ' end + isnull(@esnStr,'')
+				set @extselectNameStr = @extselectNameStr + case when @esnStr1 is null then '' else ', ' end + isnull(@esnStr1,'')
+				set @extselectNameStr = @extselectNameStr + case when @esnStr2 is null then '' else ', ' end + isnull(@esnStr2,'')
+
+				FETCH NEXT FROM curRow
+				into @jStr, @esStr, @esnStr, @esnStr1, @esnStr2
+			end
+			close CurRow
+			deallocate curRow
+			
+			select @status = ''
+			select @status = name from syscolumns where id = @id and name like 'status'
+
+			if exists (select name from syscolumns where id = @id and name like 'isDeleted')
+				select @isDeleted=1
+			else
+				select @isDeleted=0
+
+			if exists (select name from syscolumns where id = @id and name like 'isActive')
+				select @isActive=1
+			else
+				select @isActive=0
+
+			if @status = '' 
+			begin
+				set @view = left(@tableName, 1) + 'a' + substring(@tableName, 3, len(@tableName) - 2)
+				set @parameter = ''
+				set @content = char(9) + 'select ' + @TableName + '.*' + @extselectIdStr + @extselectNameStr + char(13) + char(10) + 
+						char(9) + 'from ' + @tableName + ' ' + char(13) + char(10) 
+				set @content= @content+@joinStr1
+				--set @content= @content+@joinStr2
+				--set @content= @content+@joinStr3 
+				set @content= @content+' ' + char(13) + char(10) + 
+						case when @isDeleted=1 then char(9) + 'where isnull(' + @tableName+ '.isDeleted,0) &lt;&gt; 1' else '' end +
+						case when @isActive=1 then char(9) + 'where isnull(' + @tableName+ '.isActive,0) = 1' else '' end
+
+				exec gen.addview @view, @parameter, @content, 'oph', @isEnc=@isEnc, @isdebug=@isdebug
+			end
+			else
+			begin
+				set @view = left(@tableName, 1) + 'a' + substring(@tableName, 3, len(@tableName) - 2)
+				set @parameter = ''
+				set @content = char(9) + 'select ' + @TableName + '.*' + @extselectIdStr + @extselectNameStr + 
+					case when charindex('userStatusDescription', @extselectIdStr, 1)&gt;0 or charindex('userStatusDescription', @extselectNameStr, 1)&gt;0 then '' else ', '' '' AS userStatusDescription ' end +char(13) + char(10) + 
+						char(9) + 'from ' + @tableName + ' ' + char(13) + char(10) 
+				set @content= @content+@joinStr1
+				--set @content= @content+@joinStr2
+				--set @content= @content+@joinStr3 
+				set @content= @content+' ' + char(13) + char(10) + 
+						char(9) + 'where 1=1 ' + case when len(@Tablename)=6 then 'and isnull(' + @tableName + '.' + @status + ',0) &lt; 400 ' else '' end + 
+						case when @isDeleted=1 then char(9) + 'and isnull(' + @tableName+ '.isDeleted,0) &lt;&gt; 1' else '' end+
+						case when @isActive=1 then char(9) + 'and isnull(' + @tableName+ '.isActive,0) = 1' else '' end
+
+				exec gen.addview @view, @parameter, @content, 'oph', @isEnc=@isEnc, @isdebug=@isdebug
+
+				set @view = left(@tableName, 1) + 'c' + substring(@tableName, 3, len(@tableName) - 2)
+				set @parameter = ''
+				set @content = char(9) + 'select ' + @TableName + '.*' + @extselectIdStr + @extselectNameStr + char(13) + char(10) + 
+						char(9) + 'from ' + @tableName + ' ' + char(13) + char(10) 
+				set @content= @content+@joinStr1
+				--set @content= @content+@joinStr2
+				--set @content= @content+@joinStr3 
+				set @content= @content+' ' + char(13) + char(10) + 
+						char(9) + 'where ' + @tableName + '.' + @status + ' between 500 and 599 ' + 
+						case when @isDeleted=1 then char(9) + 'and isnull(' + @tableName+ '.isDeleted,0) &lt;&gt; 1' else '' end+
+						case when @isActive=1 then char(9) + 'and isnull(' + @tableName+ '.isActive,0) = 1' else '' end
+
+				exec gen.addview @view, @parameter, @content, 'oph', @isEnc=@isEnc, @isdebug=@isdebug
+
+				set @view = left(@tableName, 1) + 'e' + substring(@tableName, 3, len(@tableName) - 2)
+				set @parameter = ''
+				set @content = char(9) + 'select ' + @TableName + '.*' + @extselectIdStr + @extselectNameStr + char(13) + char(10) + 
+						char(9) + 'from ' + @tableName + ' ' + char(13) + char(10) 
+				set @content= @content+@joinStr1
+				--set @content= @content+@joinStr2
+				--set @content= @content+@joinStr3 
+				set @content= @content+' ' + char(13) + char(10) + 
+						char(9) + 'where ' + @tableName + '.' + @status + ' between 400 and 499 ' +
+						case when @isDeleted=1 then char(9) + 'and isnull(' + @tableName+ '.isDeleted,0) &lt;&gt; 1' else '' end+
+						case when @isActive=1 then char(9) + 'and isnull(' + @tableName+ '.isActive,0) = 1' else '' end
+
+				exec gen.addview @view, @parameter, @content, 'oph', @isEnc=@isEnc, @isdebug=@isdebug
+			end
+			if @isdeleted=1 begin
+				set @view = left(@tableName, 1) + 'd' + substring(@tableName, 3, len(@tableName) - 2)
+				set @parameter = ''
+				set @content = char(9) + 'select ' + @TableName + '.*' + @extselectIdStr + @extselectNameStr + char(13) + char(10) + 
+						char(9) + 'from ' + @tableName + ' ' + char(13) + char(10) 
+				set @content= @content+@joinStr1
+				--set @content= @content+@joinStr2
+				--set @content= @content+@joinStr3 
+				set @content= @content+' ' + char(13) + char(10) + 
+						case when @isDeleted=1 then char(9) + 'where isnull(' + @tableName+ '.isDeleted,0) = 1' else '' end
+				exec gen.addview @view, @parameter, @content, 'oph', @isEnc=@isEnc, @isdebug=@isdebug
+			end
+		end
+		FETCH NEXT FROM #cur_addviews
+		into @id, @tableName
+
+	end
+	CLOSE #cur_addviews
+	DEALLOCATE #cur_addviews
+
+
+
+

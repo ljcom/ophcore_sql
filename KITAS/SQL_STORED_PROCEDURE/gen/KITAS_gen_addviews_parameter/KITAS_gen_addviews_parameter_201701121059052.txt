@@ -1,0 +1,61 @@
+
+CREATE PROCEDURE [gen].[addviews_parameter] @parCode varchar(50) = ''
+as	--ModifiedBy eLs ON Nov, 2015
+
+	DECLARE @name varchar(40), @result int
+	
+	declare @viewName varchar(50), @parameter varchar(200)='', @content varchar(8000), 
+	@content2 varchar(8000)='', @content3 varchar(8000)='', @content4 varchar(8000)='', 
+	@content5 varchar(8000)='', @content6 varchar(8000)='', @content7 varchar(8000)=''
+
+	if ISNULL(@parCode, '') != '' begin
+		set @viewName = 'po'+@parCode
+		set @content=char(9)+'select b.*, a.parameterCode, parameterDescription, SystemMode'+char(13)+char(10)+
+			char(9)+'from coPRMTVALU b'+char(13)+char(10)+
+			char(9)+char(9)+'inner join coPRMT a'+char(13)+char(10)+
+			char(9)+char(9)+char(9)+'on a.parameterGUID=b.parameterGUID'+char(13)+char(10)+
+			char(9)+'where a.parameterCode='''+@parCode+''''
+
+		exec [gen].[addview] @viewName, @parameter, @content
+
+		set @viewName = 'pa'+@parCode
+		exec [gen].[addview] @viewName, @parameter, @content
+
+		if exists(select * from INFORMATION_SCHEMA.TABLES where TABLE_NAME = @viewName AND TABLE_SCHEMA = 'dbo') begin
+			set @content = 'ALTER SCHEMA oph TRANSFER dbo.'+@viewName 
+			exec (@content)
+		end
+	end
+	else begin
+		DECLARE #cur CURSOR
+		READ_ONLY
+		FOR select parameterCode from coPRMT where isDeleted=0
+
+		OPEN #cur
+
+		FETCH NEXT FROM #cur INTO @name
+		WHILE (@@fetch_status &lt;&gt; -1)
+		BEGIN
+			IF (@@fetch_status &lt;&gt; -2)
+			BEGIN
+				set @viewName = 'po'+@name
+				set @content=char(9)+'select b.*, a.parameterCode, parameterDescription, SystemMode'+char(13)+char(10)+
+					char(9)+'from coPRMTVALU b'+char(13)+char(10)+
+					char(9)+char(9)+'inner join coPRMT a'+char(13)+char(10)+
+					char(9)+char(9)+char(9)+'on a.parameterGUID=b.parameterGUID'+char(13)+char(10)+
+					char(9)+'where a.parameterCode='''+@name+''''
+
+				exec [gen].[addview] @viewName, @parameter, @content
+
+				exec gen.addviews_parameter @name
+
+			END
+			FETCH NEXT FROM #cur INTO @name
+		END
+
+		CLOSE #cur
+		DEALLOCATE #cur
+	end
+
+
+

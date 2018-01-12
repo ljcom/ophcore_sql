@@ -1,0 +1,18 @@
+
+CREATE TRIGGER [dbo].[modg_delete]
+   ON  [dbo].[modg]
+   AFTER DELETE
+AS 
+BEGIN
+	delete from a
+	from modginfo a 
+		inner join deleted b
+			on a.ModuleGroupGUID=b.ModuleGroupGUID
+
+	delete from a
+	from modgmodl a 
+		inner join deleted b
+			on a.ModuleGroupGUID=b.ModuleGroupGUID
+
+END
+

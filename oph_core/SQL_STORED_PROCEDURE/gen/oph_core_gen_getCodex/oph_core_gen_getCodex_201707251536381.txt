@@ -1,0 +1,49 @@
+
+
+CREATE procedure [gen].[getCodex] @hostGUID uniqueidentifier, @code nvarchar(50), @coderef nvarchar(50), @codestr nvarchar(300) output
+--WITH ENCRYPTION
+as
+begin
+	--declare @codestr nvarchar(max)
+	declare @ver nvarchar(10), @db nvarchar(50), @migratedb nvarchar(50), @typecode nvarchar(1)
+	exec gen.getDBInfo  @hostguid, @code, @ver output, @db output, @moduletype=@typecode output, @migratedb=@migratedb output 
+
+	--if @reversed=0 begin
+		if left(@code, 3)='par' begin
+			set @code=replace(replace(@code, 'par(', ''), ')', '')
+			set @codestr='(select v.parameterValueGUID, v.parameterValue parValueId, v.parameterDescription parValueDesc from gen.getpara('''+@code+''', '''') '
+		end
+		else if left(@code, 4)='view' begin
+			set @code=replace(replace(@code, 'view(', ''), ')', '')
+			set @codestr='doc.'+@coderef+'_'+@code
+		end
+		else begin
+			if @typecode='C' begin
+				set @codestr='['+@code+']'
+			end
+			else begin
+				set @codestr='doc.['+@code+']'--('''+cast(@hostguid as nvarchar(50))+''')'
+			end
+		end
+	--end
+	--else begin
+	--	if left(@code, 3)<>'par' begin
+	--		declare @mod nvarchar(50)
+	--		select @mod=replace(cast(ModuleGUID as nvarchar(50)),'-', '')
+	--		from modl where moduleid=@code
+
+	--		if @typecode='C' begin
+	--			set @codestr='['+@code+']'
+	--		end
+	--		else if isnull(@migratedb,'')='' begin
+	--			set @codestr='oph.['+@code+']'
+	--		end
+	--		else begin
+	--			set @codestr='doc.['+@code+']'
+	--		end
+	--	end
+	--end
+end
+
+
+

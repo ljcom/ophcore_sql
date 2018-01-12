@@ -1,0 +1,40 @@
+
+
+CREATE procedure [gen].[addviews_parameter_DSTA]
+as
+	DECLARE #cur CURSOR
+	READ_ONLY
+	FOR 
+		select substring(moduleid,3,4), moduleGUID
+		from coMODL a
+		where moduleid like 'ta%' and len(moduleid)=6
+
+	DECLARE @name varchar(40), @moduleGUID uniqueidentifier
+	
+	declare @viewName varchar(50), @parameter varchar(200)='', @content varchar(8000), 
+	@content2 varchar(8000)='', @content3 varchar(8000)='', @content4 varchar(8000)='', 
+	@content5 varchar(8000)='', @content6 varchar(8000)='', @content7 varchar(8000)=''
+	OPEN #cur
+
+	FETCH NEXT FROM #cur INTO @name, @moduleGUID
+	WHILE (@@fetch_status &lt;&gt; -1)
+	BEGIN
+		IF (@@fetch_status &lt;&gt; -2)
+		BEGIN
+			set @viewName = 'poDSTA'+@name
+			set @content=char(9)+'select modulestatusGUID parameterValueGUID, modulestatusid parValueId, modulestatusname parValueDesc, modulestatuscode parValueNumber, modulestatusdesc parReference, moduleguid'+char(13)+char(10)+
+				char(9)+'from coMODLSTAT a'+ 
+				char(9)+'where moduleGUID='''+convert( varchar(50), @moduleGUID)+''''
+
+			exec [gen].[addview] @viewName, @parameter, @content
+
+		END
+		FETCH NEXT FROM #cur INTO @name, @moduleGUID
+	END
+
+	CLOSE #cur
+	DEALLOCATE #cur
+
+
+
+

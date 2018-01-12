@@ -1,0 +1,15 @@
+
+
+
+CREATE view [dbo].[MoCTGRFRON]
+as
+
+	select 
+		CTGRGUID, ID, IIF(PARNCTGRGUID is NULL, Name + ' PRODUCT', Name) [Name], 
+		PARNCTGRGUID, isParent, isDeleted, CreatedDate, CreatedUser, UpdatedDate, UpdatedUser, DeletedDate, DeletedUser
+	from Moctgr
+	where isnull(isDeleted,0)=0
+
+
+
+

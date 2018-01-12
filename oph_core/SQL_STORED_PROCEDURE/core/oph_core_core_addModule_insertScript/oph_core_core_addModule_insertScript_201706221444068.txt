@@ -1,0 +1,66 @@
+CREATE procedure [core].[addModule_insertScript] @accountid nvarchar(50), @dataDB nvarchar(50), @isdebug bit=0
+as
+	
+	DECLARE #cur CURSOR
+	READ_ONLY
+	FOR	select b.DatabaseName, b.serverName
+		from acct a
+			inner join acctdbse b on a.AccountGUID=b.AccountGUID
+		where (b.[version]='3.0') and a.AccountId=@accountid
+
+	declare @sqlstr nvarchar(max)=''
+	DECLARE @v3DB nvarchar(50), @svr nvarchar(50)
+	OPEN #cur
+
+	FETCH NEXT FROM #cur INTO @v3DB, @svr
+	WHILE (@@fetch_status <> -1)
+	BEGIN
+		IF (@@fetch_status <> -2)
+		BEGIN
+			select @sqlstr='
+				insert into '+@dataDB+'.dbo.modlinfo (ModuleInfoGUID, ModuleGUID, InfoKey, InfoValue, createdDate, updatedDate)
+				select newid(), b.moduleguid, ''script_''+replace(a.name, b.moduleid+''_'', '''') , 	
+					replace((select text+'''' 
+					from '+@svr+'.'+@v3DB+'.sys.syscomments d
+					where a.object_id=d.id
+					order by colid
+					for xml path('''')
+					), ''&#x0D;'', '''') script, a.modify_date, a.modify_date
+				from '+@svr+'.'+@v3DB+'.sys.objects a
+					inner join '+@svr+'.'+@v3DB+'.sys.schemas s on a.schema_id=s.schema_id
+					inner join '+@dataDB+'.dbo.modl b
+						on b.moduleid+''_''=left(a.name, len(b.moduleid)+1)
+					left join '+@dataDB+'.dbo.modlinfo c
+						on b.moduleguid=c.moduleguid and c.infokey=''script_''+replace(a.name, b.moduleid+''_'', '''')
+				where a.type=''P'' and s.name=''dbo'' and datediff(dd, a.modify_date, isnull(c.updateddate, ''1/1/2000''))<0
+
+				update c
+				set InfoValue= replace((
+					select text+'''' 
+					from '+@svr+'.'+@v3DB+'.sys.syscomments d
+					where a.object_id=d.id
+					order by colid
+					for xml path('''')
+					), ''&#x0D;'', ''''), 
+					updatedDate=a.modify_date
+				--select *
+				from '+@svr+'.'+@v3DB+'.sys.objects a
+					inner join '+@svr+'.'+@v3DB+'.sys.schemas s on a.schema_id=s.schema_id
+					inner join '+@dataDB+'.dbo.modl b
+						on b.moduleid+''_''=left(a.name, len(b.moduleid)+1)
+					inner join '+@dataDB+'.dbo.modlinfo c
+						on b.moduleguid=c.moduleguid and c.infokey=''script_''+replace(a.name, b.moduleid+''_'', '''')
+				where a.type=''P'' and s.name=''dbo'' --and datediff(dd, a.modify_date, isnull(c.updateddate, ''1/1/2000''))<0
+			'
+			if @isdebug=1 print @sqlstr
+			exec sp_executesql @sqlstr
+		END
+		FETCH NEXT FROM #cur INTO @v3DB, @svr
+	END
+
+	CLOSE #cur
+	DEALLOCATE #cur
+
+
+
+

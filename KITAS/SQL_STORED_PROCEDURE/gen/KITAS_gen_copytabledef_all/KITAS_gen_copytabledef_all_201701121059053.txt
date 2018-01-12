@@ -1,0 +1,51 @@
+
+
+
+
+
+CREATE procedure [gen].[copytabledef_all] @sourceDB as nvarchar(100)
+as
+	if @sourceDB&lt;&gt;'' begin
+		declare @sqlstr nvarchar(4000)
+		
+		create table #table1
+		(tablename nvarchar(400) not null)
+		
+		set @sqlstr='
+			select x.tablename 
+			from (select tablename from gen.cotabl) x
+				inner join (select tablename from '+@sourceDB+'.gen.cotabl) y
+					on x.Tablename=y.Tablename'
+		insert into #table1 (tablename)		
+		exec (@sqlstr)	
+		
+		DECLARE #cur2 CURSOR
+		READ_ONLY
+		FOR select tablename from #table1
+
+		DECLARE @name varchar(400)
+		OPEN #cur2
+
+		FETCH NEXT FROM #cur2 INTO @name
+		WHILE (@@fetch_status &lt;&gt; -1)
+		BEGIN
+			IF (@@fetch_status &lt;&gt; -2)
+			BEGIN
+				print @name
+
+				EXEC gen.copytabledef @name, @name, @sourceDB
+			END
+			FETCH NEXT FROM #cur2 INTO @name
+		END
+
+		CLOSE #cur2
+		DEALLOCATE #cur2
+	end
+
+
+
+
+
+
+
+

@@ -1,0 +1,19 @@
+
+CREATE TRIGGER [dbo].[tg_modl_update]
+   ON  [dbo].[modl]
+   AFTER update
+AS 
+BEGIN
+	SET NOCOUNT ON;
+
+	if UPDATE(moduleid) begin
+		RAISERROR ('You cannot change ModuleID.', 16, 1)
+	ROLLBACK TRANSACTION
+	end
+	--if UPDATE(AccountDBGUID) begin
+	--	RAISERROR ('You cannot change ModuleID.', 16, 1)
+	--ROLLBACK TRANSACTION
+	--end
+
+END
+

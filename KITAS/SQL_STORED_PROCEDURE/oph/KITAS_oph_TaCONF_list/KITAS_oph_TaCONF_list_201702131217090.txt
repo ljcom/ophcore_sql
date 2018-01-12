@@ -1,0 +1,9 @@
+CREATE procedure oph.TaCONF_list
+@account nvarchar(20), @GUID uniqueidentifier=null, @hostGUID uniqueidentifier
+as --automatic creation by system, you have to remove this comment to customize this procedure
+ 	declare @newid uniqueidentifier
+	set @newid = newid()
+
+	select TaCONF.Status
+	from oph.TaCONF TaCONF
+	where isnull(CONFGUID, @newid)=case when @GUID is null then isnull(CONFGUID, @newid) else @GUID end

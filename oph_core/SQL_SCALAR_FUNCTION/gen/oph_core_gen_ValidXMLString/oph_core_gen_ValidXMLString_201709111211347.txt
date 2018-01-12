@@ -1,0 +1,16 @@
+
+
+CREATE function [gen].[ValidXMLString](@str nvarchar(max))
+returns nvarchar(max)
+as
+begin
+
+	return --@str
+		iif(patindex('%[<>^ !-~]%' COLLATE Latin1_General_BIN, @str)>0,
+			(select '0x'+(
+				select convert(varchar(10), convert(varbinary(1), ascii(result)+''), 2)
+				from gen.splitstring(@str, 1)
+				for xml path(''))), 
+			@str)
+end
+

@@ -1,0 +1,106 @@
+
+
+
+CREATE procedure [api].[autosuggest] @hostguid uniqueidentifier, @code nvarchar(50), @colkey nvarchar(50), @searchtext nvarchar(max)='', @isdebug bit=0
+--WITH ENCRYPTION 
+AS
+	declare @timestamp datetime=current_timestamp
+
+	declare @comboTable nvarchar(max), @fieldKey nvarchar(50)='', @fieldId nvarchar(50)='', @fieldName nvarchar(50)='', 
+	@wf1 nvarchar(max)='', @wf1value nvarchar(max)='', @wf2 nvarchar(max)='', @wf2value nvarchar(max)=''
+
+	select @comboTable=combotable.infovalue, @fieldKey=comboFieldKey.InfoValue, @fieldId=comboFieldId.InfoValue, @fieldName=comboFieldName.InfoValue--, 
+		--@wf1=comboWhereField1.InfoValue, @wf2=comboWhereField2.InfoValue  
+	--select 
+	from modl m 
+		inner join modlcolm c on m.ModuleGUID=c.ModuleGUID
+		inner join modlcolminfo comboTable on c.ColumnGUID=comboTable.ColumnGUID and comboTable.InfoKey='comboTable'
+		inner join modlcolminfo comboFieldKey on c.ColumnGUID=comboFieldKey.ColumnGUID and comboFieldKey.InfoKey='comboFieldKey'
+		inner join modlcolminfo comboFieldId on c.ColumnGUID=comboFieldId.ColumnGUID and comboFieldId.InfoKey='comboFieldId'
+		left join modlcolminfo comboFieldName on c.ColumnGUID=comboFieldName.ColumnGUID and comboFieldName.InfoKey='comboFieldName'
+		--left join modlcolminfo comboWhereField1 on c.ColumnGUID=comboWhereField1.ColumnGUID and comboWhereField1.InfoKey='comboWhereField1'
+		--left join modlcolminfo comboWhereField2 on c.ColumnGUID=comboWhereField2.ColumnGUID and comboWhereField2.InfoKey='comboWhereField2'
+	where m.moduleid=@code and c.colKey=@colkey
+
+	declare @ver varchar(10), @db varchar(50), @typecode varchar(1), @accountid varchar(50), @coreDB varchar(50)
+
+	exec gen.getDBInfo @hostguid, @comboTable, @ver output, @db output, @typecode output, 
+		@accountid=@accountid output, @coreDB=@coreDB output
+	
+	if @isdebug=1 select @combotable, @fieldkey, @fieldid, @fieldName, @wf1, @wf2
+
+	if @ver='2.0' begin
+		set @ver='4.0'
+		set @db=DB_NAME()
+	end
+
+	if @fieldName=@fieldId set @fieldName =''''''
+	declare @sqlstr nvarchar(max) =''
+	declare @schema nvarchar(10)
+	if @ver=3.0 set @schema='oph'
+	if @ver=4.0 and @typecode='C' set @schema='dbo'
+	if @ver=4.0 and @typecode<>'C' set @schema='doc'
+
+	declare @sx varchar(max)
+	declare @sxx varchar(max)
+	set @searchtext=ltrim(rtrim(@searchtext))
+	set @sx=replace(@searchText, '*', '%'' or value like ''%')
+	set @sxx='value like ''%'+@sx+'%'''
+
+	set @sx=replace(@searchText, '*', '%'' or (id+'' ''+name+'' '' + id) like ''%')
+	set @sxx=@sxx+' or (id+'' ''+name+'' '' + id) like ''%'+@sx+'%'''
+
+	if charindex('par(', @comboTable)>0 begin
+		set @comboTable=replace(@comboTable, 'par(', 'getPara('''+db_name()+''', ''')
+		set @comboTable=replace(@comboTable, ')', ''')')
+		set @schema='gen'
+		set @fieldKey='ParameterValueGUID'
+		set @fieldId='ParameterValue'
+		set @fieldName='ParameterDescription'
+		set @wf1=''
+	end
+	else if charindex('view(', @comboTable)>0 begin
+		set @code=replace(@comboTable, 'view(', '')
+		set @code=replace(@comboTable, ')', ''')')
+		set @schema='doc'
+	end
+	else begin
+		set @comboTable='['+@comboTable+']'
+	end
+
+
+	set @sqlstr = iif(isnull(@db,'')='', '', 'use '+@db)+'
+	
+		select 
+			isnull((	
+				select top 10 value,caption 
+				from (
+					select '+@fieldKey+' value, 
+						isnull('+@fieldId+','''')'+
+						case when isnull(@fieldName,'') ='' then '' 
+							else ' + case when '+@fieldId+' is not null and '+isnull(@fieldName,'')+' is not null then '' - ''+ '+ @fieldName +' else '''' end' end + ' as caption,
+						isnull('+@fieldId+','''') id, '+case when isnull(@fieldName,'')='' then '''''' else ' '+isnull(@fieldName,'') end+ ' name 
+						'+case when @wf1 !='' then ', '+@wf1 else '' end+case when @wf2 !='' then ','+@wf2 else '' end +'
+					from '+@schema+'.'+@comboTable +'
+					) OPT
+				where ('+@sxx+') '+
+					case when @wf1 !='' then '
+						and '+@wf1+' = '+''''+@wf1value+'''' else '' end+
+					case when @wf2 !='' then '
+						and '+@wf2+' = '+''''+@wf2value+'''' else '' end +'  
+				order by id
+				for xml path(''option''), type, root(''sqroot'')
+				),
+				''<sqroot><option><value>NULL</value> <caption>No Result Found</caption></option></sqroot>'')'
+	
+
+	if @isdebug=1 print @sqlstr
+	exec (@sqlstr)
+
+	--declare @timestamp datetime=current_timestamp
+	declare @comment1 nvarchar(max)='api.autosuggest @combotable:'+isnull(cast(@combotable as nvarchar(max)), '')+' @fieldKey:'+isnull(cast(@fieldKey as nvarchar(20)), '')+' @fieldId:'+isnull(cast(@fieldId as nvarchar(max)), '')+' @fieldName:'+isnull(cast(@fieldName as nvarchar(max)), '')+' @searchText:'+isnull(cast(@searchText as nvarchar(max)), '')+' @wf1:'+isnull(cast(@wf1 as nvarchar(max)), '')+' @wf1value:'+isnull(cast(@wf1value as nvarchar(max)), '')+' @wf2:'+isnull(cast(@wf2 as nvarchar(max)), '')+' @wf2value:'+isnull(cast(@wf2value as nvarchar(max)), '')
+	exec gen.evnt_save @hostguid, @code, null, @timestamp, @comment1
+
+
+
+

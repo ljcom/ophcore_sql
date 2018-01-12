@@ -1,0 +1,133 @@
+
+CREATE procedure [core].[storeScriptVersion_module] @accountId nvarchar(50)
+as
+	declare @db nvarchar(50)
+	select @db=d.DatabaseName 
+	from acct a inner join acctdbse d on a.AccountGUID=d.AccountGUID
+	where a.AccountId=@accountId and d.isMaster=1 and d.version='4.0'
+		
+	declare @sqlstr nvarchar(max)='
+		use '+@db+'
+
+		insert into oph_package.dbo.vers(versionDate)
+		select versionDate
+		from (
+			select cast(isnull(m.updateddate, m.createdDate) as date) versionDate
+			from modl m
+				left join oph_package.dbo.vers v on cast(isnull(m.updateddate, m.createdDate) as date)=v.versionDate
+			where v.versionGUID is null
+			union
+			select cast(isnull(m.updateddate, m.createdDate) as date)
+			from modlcolm m
+				left join oph_package.dbo.vers v on cast(isnull(m.updateddate, m.createdDate) as date)=v.versionDate
+			where v.versionGUID is null
+			union
+			select cast(isnull(m.updateddate, m.createdDate) as date)
+			from modlcolminfo m
+				left join oph_package.dbo.vers v on cast(isnull(m.updateddate, m.createdDate) as date)=v.versionDate
+			where v.versionGUID is null
+			union
+			select cast(isnull(m.updateddate, m.createdDate) as date)
+			from modlinfo m
+				left join oph_package.dbo.vers v on cast(isnull(m.updateddate, m.createdDate) as date)=v.versionDate
+			where v.versionGUID is null
+		) x
+		group by versiondate
+
+		'
+	print @sqlstr
+	exec sp_executesql @sqlstr
+
+	set @sqlstr='
+		use '+@db+'
+
+		insert into oph_package.dbo.versmodl(VersionModuleGUID, versionGUID, productTypeID, productName, accountID, 
+			ModuleID, ModuleDescription, settingMode, ParentModuleID, OrderNo, needLogin, 
+			ThemePageID, ModuleStatusID, ModuleGroupID, createdDate)
+		select newid(), v.versionguid, ''app'', ai.infovalue, a.accountid, 
+			m.moduleid, m.moduledescription, m.settingmode, s.moduleid, m.orderno, m.needlogin, 
+			p.pageURL, t.ModuleStatusName, g.ModuleGroupID, getdate()
+		--select *
+		from modl m
+			inner join oph_core.dbo.acct a on m.AccountGUID=a.AccountGUID
+			inner join oph_core.dbo.acctinfo ai on ai.accountGUID=a.AccountGUID and ai.infokey=''ProductName''
+			left join modl s on m.ParentModuleGUID=s.ModuleGUID
+			left join msta t on m.ModuleStatusGUID=t.ModuleStatusGUID
+			left join modg g on m.ModuleGroupGUID=g.ModuleGroupGUID
+			left join thmepage p on m.ThemePageGUID=p.ThemePageGUID
+			inner join oph_package.dbo.vers v on cast(isnull(m.updateddate, m.createdDate) as date)=v.versionDate
+			left join oph_package.dbo.versmodl vm 
+				on vm.versionGUID=v.versionGUID and vm.productTypeID=''app'' and vm.productName=ai.infovalue
+				and vm.accountID=a.AccountId and vm.ModuleID=m.moduleid
+		where vm.VersionModuleGUID is null
+
+		'
+	print @sqlstr
+	exec sp_executesql @sqlstr
+
+	set @sqlstr='
+		use '+@db+'
+					 
+		insert into oph_package.dbo.versmodlcolm(VersionColumnGUID, versionGUID, productTypeID, productName, 
+			accountID, ModuleID, colKey, colType, colOrder, titlecaption, colLength, createdDate)
+		select newid(), v.versionguid, ''app'', ''app'', 
+			a.accountid, m.moduleid, c.colKey, c.colType, c.colOrder, c.titlecaption, c.colLength, getdate()
+		--select *
+		from modlcolm c
+			inner join modl m on c.moduleguid=m.moduleguid
+			inner join acct a on m.AccountGUID=a.AccountGUID
+			inner join oph_package.dbo.vers v on cast(isnull(m.updateddate, m.createdDate) as date)=v.versionDate
+			left join oph_package.dbo.versmodlcolm vm 
+				on vm.versionGUID=v.versionGUID and vm.productTypeID=''app'' and vm.productName=''app'' 
+				and vm.accountID=a.AccountId and vm.ModuleID=m.moduleid and vm.colKey=c.colKey
+		where vm.VersionColumnGUID is null
+
+		'
+	print @sqlstr
+	exec sp_executesql @sqlstr
+
+	set @sqlstr='
+		use '+@db+'
+
+		insert into oph_package.dbo.versmodlcolminfo(VersionColumnInfoGUID, versionGUID, productTypeID, 
+			productName, accountID, ModuleID, colKey, InfoKey, InfoValue, createdDate)
+		select newid(), v.versionguid, ''app'', 
+			''app'', a.accountid, m.moduleid, c.colKey, i.infokey, i.InfoValue, getdate()
+		--select *
+		from modlcolminfo i
+			inner join modlcolm c on i.ColumnGUID=c.ColumnGUID
+			inner join modl m on c.moduleguid=m.moduleguid
+			inner join acct a on m.AccountGUID=a.AccountGUID
+			inner join oph_package.dbo.vers v on cast(isnull(m.updateddate, m.createdDate) as date)=v.versionDate
+			left join oph_package.dbo.versmodlcolminfo vm 
+				on vm.versionGUID=v.versionGUID and vm.productTypeID=''app'' and vm.productName=''app'' 
+				and vm.accountID=a.AccountId and vm.ModuleID=m.moduleid and vm.colKey=c.colKey and vm.InfoKey=i.InfoKey
+		where vm.VersionColumnInfoGUID is null
+
+		'
+	print @sqlstr
+	exec sp_executesql @sqlstr
+
+	set @sqlstr='
+		use '+@db+'
+		
+		insert into oph_package.dbo.versmodlinfo(VersionModuleInfoGUID, versionGUID, productTypeID, 
+			productName, accountID, ModuleID, InfoKey, InfoValue, createdDate)
+		select newid(), v.versionguid, ''app'', 
+			''app'', a.accountid, m.moduleid, i.infokey, i.infovalue, getdate()
+		--select *
+		from modlinfo i
+			inner join modl m on i.ModuleGUID=m.ModuleGUID and isnull(i.infokey, '''')<>''''
+			inner join acct a on m.AccountGUID=a.AccountGUID
+			inner join oph_package.dbo.vers v on cast(isnull(m.updateddate, m.createdDate) as date)=v.versionDate
+			left join oph_package.dbo.versmodlinfo vm 
+				on vm.versionGUID=v.versionGUID and vm.productTypeID=''app'' and vm.productName=''app'' 
+				and vm.accountID=a.AccountId and vm.ModuleID=m.moduleid and vm.InfoKey=i.InfoKey
+		where vm.VersionModuleInfoGUID is null
+
+		'
+	print @sqlstr
+	exec sp_executesql @sqlstr
+
+
+

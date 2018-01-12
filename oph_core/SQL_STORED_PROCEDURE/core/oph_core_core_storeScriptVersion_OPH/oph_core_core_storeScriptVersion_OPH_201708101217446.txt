@@ -1,0 +1,309 @@
+
+CREATE procedure [core].[storeScriptVersion_OPH] @isdebug bit=0
+--WITH ENCRYPTION
+as
+	--OPH_scripts
+
+	insert into oph_package.dbo.vers(versionGUID, versionDate)
+	select newid(), x.versionDate
+	from (
+		select cast(a.modify_date as date) versionDate
+		from sys.objects a
+			inner join (select id from sys.syscomments b where encrypted=0 group by id) x
+				on x.id=a.object_id							
+			inner join sys.schemas b
+				on a.schema_id=b.schema_id
+		where type in ('TR', 'FN', 'D', 'P', 'TF', 'R', 'V')
+		group by cast(a.modify_date as date) ) x
+		left join oph_package.dbo.vers y 
+			on x.versionDate=y.versionDate
+	where y.versionDate is null
+
+
+
+	insert into oph_package.dbo.versscrp(versionScriptGUID, versionGUID, 
+		productTypeID, productName, accountID, moduleGUID, schemaName, scriptName, scriptType, scriptContent, createdDate)
+	select newid(), y.versionGUID, 'core', 'OPH', 'OPH', x.moduleGUID, x.schemaName, objectName, x.[type], x.scriptContent, modify_date
+	from (
+		select cast(a.modify_date as date) versionDate, a.object_id, b.name schemaName, '00000000-0000-0000-0000-000000000000' moduleGUID,
+			a.name objectName, a.[type], a.modify_date, 
+			(select text [text()]
+				from sys.syscomments
+				where id=a.object_id and encrypted=0
+				for xml path('')) scriptContent,
+			case when a.modify_date=a.create_date then 1 else 0 end isNew--, b.text 
+		--select *
+		from sys.objects a
+			inner join (select id from sys.syscomments b where encrypted=0 group by id) x
+				on x.id=a.object_id			
+			inner join sys.schemas b
+				on a.schema_id=b.schema_id
+		where type in ('TR', 'FN', 'D', 'P', 'TF', 'R', 'V') and b.name in ('api', 'core', 'gen')
+			--and a.name='verifyToken'
+			--and a.name like '%'+@filterstr+'%'
+			--and (datediff(hour, a.modify_date, getdate())<= @lasthour or @lasthour=0)
+		) x
+		inner join oph_package.dbo.vers y
+			on x.versionDate=y.versionDate
+		left join oph_package.dbo.versscrp z
+			on y.versionGUID=z.versionGUID and z.productTypeID='core' and z.productName='OPH' 
+				and z.accountID='OPH' and x.moduleGUID=z.moduleguid and z.schemaName=x.schemaName 
+				and z.scriptName=x.objectName
+	where z.versionScriptGUID is null
+
+	--OPH_Tables
+
+	insert into oph_package.dbo.vers(versionGUID, versionDate)
+	select newid(), x.versionDate
+	from (
+		select versionDate
+		from (
+			select cast(a.modify_date as date) versionDate
+			from sys.objects a
+				inner join sys.schemas b
+					on a.schema_id=b.schema_id
+			where type in ('U') and b.name='dbo'
+			union
+			select cast(a.create_date as date) versionDate
+			from sys.objects a
+				inner join sys.schemas b
+					on a.schema_id=b.schema_id
+			where type in ('U') and b.name='dbo'
+			) x1
+		group by versiondate
+		) x
+		left join oph_package.dbo.vers y 
+			on x.versionDate=y.versionDate
+	where y.versionDate is null
+	
+
+
+	insert into oph_package.dbo.versscrp(versionScriptGUID, versionGUID, 
+		productTypeID, productName, accountID, moduleGUID, schemaName, scriptName, scriptType, scriptContent, createdDate)
+	select newid(), y.versionGUID, 'core', 'OPH', 'OPH', x.moduleguid, x.schemaName, objectName, x.[type], x.scriptContent, modify_date
+	from (
+		select cast(a.create_date as date) versionDate, 'create table '+e.name+'.['+a.name+'] ('+
+			stuff((select ', '+c.name+' '+d.name+ 
+				case when d.max_length=16 or d.precision>0 or c.user_type_id in (241) then ''
+					when c.max_length=-1 then '(max)' 
+					when c.user_type_id in (231) then '('+cast(c.max_length/2 as varchar(5))+')' 
+					when c.user_type_id in (167) then '('+cast(c.max_length as varchar(5))+')' 
+					 else '('+cast(d.max_length as varchar(5))+')' end+' '+case when c.is_nullable=0 then 'not ' else '' end+'null' 
+			from sys.columns c
+				inner join sys.types d
+					on c.user_type_id=d.user_type_id
+			where c.object_id=a.object_id
+			for xml path ('')), 1, 2, '')
+			+')' scriptContent, b.name schemaName, a.name objectName, a.[type], a.create_date modify_date, '00000000-0000-0000-0000-000000000000' moduleGUID
+		from sys.objects a
+			inner join sys.schemas b
+				on a.schema_id=b.schema_id and b.name='dbo'
+			inner join sys.schemas e
+				on a.schema_id=e.schema_id
+		where type='U' and a.name not in ('sysdiagrams')--, 'acct', 'acctdbse', 'acctinfo')
+
+		union
+
+		select cast(b.modify_date as date) versionDate, 'alter table ['+b.name+'] add ['+a.name+'] '+d.name+ 
+				case when d.max_length=16 or d.precision>0 or a.user_type_id in (241) then ''
+					when a.max_length=-1 then '(max)' 
+					when a.user_type_id in (231) then '('+cast(a.max_length/2 as varchar(5))+')' 
+					when a.user_type_id in (167) then '('+cast(a.max_length as varchar(5))+')' 
+					 else '('+cast(d.max_length as varchar(5))+')' end+' '+case when a.is_nullable=0 then 'not ' else '' end+'null '+
+					 case when e.definition is null then '' else 'CONSTRAINT '+e.name+' DEFAULT '+e.definition end scriptContent, 
+			c.name schemaName, b.name+'_'+a.name objectName, 'UC', b.modify_date, '00000000-0000-0000-0000-000000000000' moduleGUID
+		--select *  
+		from sys.columns a
+			inner join sys.types d on a.user_type_id=d.user_type_id
+			inner join sys.objects b on a.object_id=b.object_id
+			inner join sys.schemas c on b.schema_id=c.schema_id
+			left join sys.default_constraints e
+				on b.object_id=e.parent_object_id and a.column_id=e.parent_column_id --and a.name='docmaprv' 
+		where b.type='U' and c.name='dbo' and b.name not in ('sysdiagrams')--, 'acct', 'acctdbse', 'acctinfo')
+
+		union
+
+		select cast(a.modify_date as date) versionDate, 
+			'ALTER TABLE [dbo].['+a.name+'] ADD CONSTRAINT ['+c.name+'] PRIMARY KEY CLUSTERED (['+e.name+'])' scriptContent, 
+			s.name schemaName, c.name objectName, c.type, a.modify_date, '00000000-0000-0000-0000-000000000000' moduleGUID
+		--select * 
+		from sys.objects a
+			inner join sys.schemas s
+				on a.schema_id=s.schema_id and s.name='dbo'
+			inner join sys.indexes b
+				on a.object_id=b.object_id and b.type=1 --and a.name='acct'
+			inner join sys.key_constraints c
+				on b.object_id=c.parent_object_id
+			inner join sys.index_columns d
+				on d.index_id=b.index_id
+					and d.object_id=b.object_id
+			inner join sys.columns e
+				on e.column_id=d.column_id
+				and e.object_id=a.object_id
+		where a.type='U' and a.name not in ('sysdiagrams')--, 'acct', 'acctdbse', 'acctinfo')
+
+
+		union
+
+		select cast(a.modify_date as date) versionDate, 
+			'ALTER TABLE [dbo].['+a.name+'] ADD CONSTRAINT ['+c.name+']  DEFAULT '+c.definition+' FOR ['+e.name+']' scriptContent, 
+			s.name schemaName, c.name objectName, c.type, a.modify_date, '00000000-0000-0000-0000-000000000000' moduleGUID
+		--select * 
+		from sys.objects a
+			inner join sys.schemas s
+				on a.schema_id=s.schema_id and s.name='dbo'
+			--inner join sys.indexes b
+			--	on a.object_id=b.object_id and a.name='docmaprv' and b.type<>1
+			inner join sys.default_constraints c
+				on a.object_id=c.parent_object_id --and a.name='docmaprv' 
+			inner join sys.columns e
+				on e.column_id=c.parent_column_id
+				and e.object_id=a.object_id
+		where a.type='U' and a.name not in ('sysdiagrams')--, 'acct', 'acctdbse', 'acctinfo')
+
+		union
+
+		select cast(a.modify_date as date) versionDate, 
+			'CREATE '+CASE WHEN B.is_unique=1 then 'UNIQUE ' else'' end +'NONCLUSTERED INDEX ['+b.name+'] ON [dbo].['+a.name+']('+
+			stuff((
+				select ', '+e.name+' ASC' 
+				--SELECT * 
+				from sys.index_columns c
+					inner join sys.columns e
+						on e.column_id=c.column_id
+						and e.object_id=a.object_id
+				where b.index_id=c.index_id and b.object_id=c.object_id
+				for xml path('')), 1, 2, '')+')' scriptContent, 
+			s.name schemaName, b.name objectName, 'IX', a.modify_date, '00000000-0000-0000-0000-000000000000' moduleGUID
+				--, b.name, 'indexes', 16
+		--select * 
+		from sys.objects a
+			inner join sys.schemas s
+				on a.schema_id=s.schema_id and s.name='dbo'
+			inner join sys.indexes b
+				on a.object_id=b.object_id and b.type<>1 --and a.name='docmaprv' 
+		where a.type='U' and a.name not in ('sysdiagrams')--, 'acct', 'acctdbse', 'acctinfo')				
+
+		union
+
+		select cast(a.modify_date as date) versionDate,		
+			'ALTER TABLE [dbo].['+a.name+']  WITH CHECK ADD CONSTRAINT ['+b.name+'] FOREIGN KEY(['+e.name+'])
+			REFERENCES [dbo].['+c.name+'] (['+f.name+']) ON UPDATE CASCADE ON DELETE CASCADE' scriptContent, 
+			s.name schemaName, b.name objectName, 'FK', a.modify_date, '00000000-0000-0000-0000-000000000000' moduleGUID
+			--, b.name, 'foreign_keys', 17
+		--select * 
+		from sys.objects a
+			inner join sys.schemas s
+				on a.schema_id=s.schema_id and s.name='dbo'
+			inner join sys.foreign_keys b
+				on a.object_id=b.parent_object_id --and a.name='modl'
+			inner join sys.objects c
+				on b.referenced_object_id=c.object_id and c.name not in ('sysdiagrams')--, 'acct', 'acctdbse', 'acctinfo')	
+			inner join sys.foreign_key_columns d
+				on d.parent_object_id=a.object_id and c.object_id=d.referenced_object_id
+			inner join sys.columns e
+				on a.object_id=e.object_id and d.parent_column_id=e.column_id
+			inner join sys.columns f
+				on c.object_id=f.object_id and d.referenced_column_id=f.column_id
+		where a.type='U' and a.name not in ('sysdiagrams')--, 'acct', 'acctdbse', 'acctinfo')	
+
+		union 
+		select cast(a.modify_date as date) versionDate, 
+			'ALTER TABLE [dbo].['+a.name+'] CHECK CONSTRAINT ['+b.name+']'scriptContent, 
+			s.name schemaName, b.name objectName, 'FKC', a.modify_date, '00000000-0000-0000-0000-000000000000' moduleGUID
+		--select * 
+		from sys.objects a
+			inner join sys.schemas s
+				on a.schema_id=s.schema_id and s.name='dbo'
+			inner join sys.foreign_keys b
+				on a.object_id=b.parent_object_id --and a.name='modl'
+			inner join sys.objects c
+				on b.referenced_object_id=c.object_id and c.name not in ('sysdiagrams')--, 'acct', 'acctdbse', 'acctinfo')	
+		where a.type='U' and a.name not in ('sysdiagrams')--, 'acct', 'acctdbse', 'acctinfo')	
+		) x
+
+		inner join oph_package.dbo.vers y
+			on x.versionDate=y.versionDate
+		left join oph_package.dbo.versscrp z
+			on y.versionGUID=z.versionGUID and z.productTypeID='core' and z.productName='OPH' 
+				and z.accountID='OPH' and x.moduleGUID=z.moduleguid and z.schemaName=x.schemaName 
+				and z.scriptName=x.objectName
+	where z.versionScriptGUID is null
+
+	--file
+	declare @folderxml xml
+
+	--insert into @folderTable
+	exec gen.cmddir 'd:\vsonline\operahouse\core', @folderxml output
+
+	--select @folderxml
+
+	insert into oph_package.dbo.vers(versionGUID, versionDate, createdDate)
+	select newid(), versionDate, getdate()
+	from (
+		select cast(x.filedate as date) versionDate
+		from (
+			SELECT  
+				   Tbl.Col.value('folder[1]', 'nvarchar(255)') folder,  
+				   Tbl.Col.value('pathName[1]', 'nvarchar(255)') fileName,  
+				   Tbl.Col.value('fileDate[1]', 'datetime') fileDate
+
+			FROM   @folderxml.nodes('/files/file') Tbl(Col)) x
+			left join oph_package.dbo.vers y
+				on cast(x.filedate as date)=y.versionDate
+		where y.versionDate is null
+		group by cast(x.filedate as date)) x
+	
+
+	insert into oph_package.dbo.versfile(versionFileGUID, versionGUID, productTypeID, productName, accountID, pathName)
+	select newid(), y.versionguid, 'core', 'OPH', 'OPH', x.folder+x.pathName
+	from (
+		SELECT  
+			   Tbl.Col.value('folder[1]', 'nvarchar(255)') folder,  
+			   Tbl.Col.value('pathName[1]', 'nvarchar(255)') pathName,  
+			   Tbl.Col.value('fileDate[1]', 'datetime') fileDate
+
+		FROM   @folderxml.nodes('/files/file') Tbl(Col)) x
+		inner join oph_package.dbo.vers y
+			on cast(x.filedate as date)=y.versionDate
+		left join oph_package.dbo.versfile z
+			on z.versionGUID=y.versionGUID and z.productTypeID='core' 
+			and z.productName='OPH' and z.accountID='OPH' and z.pathName=x.folder+x.pathName
+	where z.versionFileGUID is null
+
+
+	--copy file
+
+	declare @path nvarchar(max)='d:\vsonline\operahouse\version\'
+	declare @rootpath nvarchar(max)='d:\vsonline\operahouse'
+	declare @sqlstr nvarchar(max)=
+		replace((
+		select distinct '
+			exec gen.cmdCreateFolders '''+@path+cast(year(versiondate) as nvarchar(4))+'\'+right('00'+cast(month(versiondate) as nvarchar(2)),2)+'\'+right('00'+cast(day(versiondate) as nvarchar(2)),2)+'''
+			'
+		from oph_package.dbo.vers v
+			inner join oph_package.dbo.versfile f on v.versionGUID=f.versionGUID
+		where f.productTypeID='core'
+		for xml path('')), '&#x0D;', '')
+
+	if @isdebug=1 print @sqlstr
+
+	exec sp_executesql @sqlstr
+
+
+	set @sqlstr=
+		replace((
+		select '
+			exec [gen].[cmdCopyFile] '''+f.pathname+''', '''+replace(f.pathname, @rootpath, @path+''+cast(year(versiondate) as nvarchar(4))+'\'+right('00'+cast(month(versiondate) as nvarchar(2)),2)+'\'+right('00'+cast(day(versiondate) as nvarchar(2)),2))+'''
+			'
+		from oph_package.dbo.vers v
+			inner join oph_package.dbo.versfile f on v.versionGUID=f.versionGUID
+		where f.productTypeID='core'
+		for xml path('')), '&#x0D;', '')
+
+	if @isdebug=1 print @sqlstr
+
+	exec sp_executesql @sqlstr
+
+	
+

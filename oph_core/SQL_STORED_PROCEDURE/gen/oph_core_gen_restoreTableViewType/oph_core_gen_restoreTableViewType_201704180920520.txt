@@ -1,0 +1,48 @@
+
+
+CREATE procedure [gen].[restoreTableViewType] @file nvarchar(1000), @isdebug bit=0
+--WITH ENCRPYTION
+as	
+	declare @sqlstr nvarchar(max), @sqlpar nvarchar(max)='@xmlData xml OUTPUT'
+	DECLARE @xmlData XML
+	set @sqlstr='
+		SET @xmlData = (
+		  SELECT * FROM OPENROWSET (
+			BULK '''+@file+''', SINGLE_CLOB
+		  ) AS xmlData
+		)'
+	exec sp_executesql @sqlstr, @sqlpar, @xmlData OUTPUT
+
+	if @isdebug=1 select @xmldata
+
+
+	--creator insert 
+	--select '	
+	--	--'+a.name+'
+	--	--insert '+a.name+'
+	--	select a.*
+	--	from (
+	--		SELECT 
+	--		  ref.value('''+b.name+'[1]'', ''uniqueidentifier'') AS '+b.name,
+	--		(	select ', ref.value('''+c.name+'[1]'', ''NVARCHAR(max)'') AS '+c.name
+	--			from sys.columns c
+	--			where c.object_id=a.object_id and c.column_id>1
+	--			for xml path('')
+	--		),
+	--		'
+	--		FROM @xmlData.nodes(''sqroot/tables/'+a.name+'/rows'') xmlData( ref )) a
+	--		left join '+a.name+' b
+	--			on a.'+b.name+'=b.'+b.name+'
+	--	--where b.'+b.name+' is null
+	--	'
+	--from sys.objects a
+	--	inner join sys.columns b 
+	--		on a.object_id=b.object_id and b.column_id=1	
+	--where type='U'
+	--order by a.name
+	--for xml path('')
+
+		
+
+
+

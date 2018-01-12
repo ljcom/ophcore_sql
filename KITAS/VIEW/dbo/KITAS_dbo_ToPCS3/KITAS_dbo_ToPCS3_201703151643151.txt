@@ -1,0 +1,33 @@
+
+
+
+
+
+
+
+
+CREATE view [dbo].[ToPCS3]
+as
+select a.PCSOGUID, a.DocNo, a.DocRefNo, a.DocDate, a.CarolGUID, a.Address, a.EVGRGUID, a.PAYMGUID, a.isPickedUp, a.TotalQty, a.TotalSales
+	, a1.parvaluedesc customstat
+	, case when a.StatusComment like '%waiting%' then 'Order' 
+		when a.StatusComment like '%closed%' then 'Done' 
+		else 'order'
+		end   comments
+	, b.UserName CustomerName, b.personalEmail personalEmail, c.Name division
+		, d.CustomerAddress, 'LOREAL' Company, d.Phone [Phone], d.City [City], d.PostalCode, 'Indonesia' [Country], d.fax
+	, a.Status, a.StatusComment, a.isDeleted, a.CreatedDate, a.CreatedUser, a.UpdatedDate, a.UpdatedUser, a.DeletedDate, a.DeletedUser, a.ClosedDate
+from toPCSO a
+left join Postat a1 on a.status = a1.parvalueid 
+left join coUSER b on b.userGUID = a.CarolGUID
+left join MoDIVN c on c.DIVNGUID = b.DIVNGUID
+left join (select a.CarolId, b.CustomerName, b.CustomerAddress, b.PostalCode, b.Fax, b.phone, b.City from CoUSER a
+				inner join MoCUST b on b.Address2 = a.CarolId
+			group by a.CarolId, b.CustomerName, b.CustomerAddress, b.PostalCode, b.Fax, b.phone, b.City
+		   ) d on d.CarolId = b.CarolId
+
+
+
+
+
+

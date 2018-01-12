@@ -1,0 +1,12 @@
+CREATE PROCEDURE [dbo].[YoPCSOSALE_sub3] @PCSOGUID uniqueidentifier
+as	--CreatedBy eLs ON Feb, 2017
+
+	select 
+		b.Code [id_product], b.Name [name_product], dbo.currMode(FirstPrice, 1, 'Indonesia') [price], 
+		dbo.currMode(DiscPrice, 1, 'Indonesia') [discount], (Qty - QtyReject - QtyReturn) [qty], 
+		dbo.currMode(TotalPrice, 1, 'Indonesia') [pay]
+	from ToPCSODETA a
+		left join MoPROD b ON a.PRODGUID = b.PRODGUID
+	where PCSOGUID = @PCSOGUID
+	order by a.UpdatedDate, a.CreatedDate
+

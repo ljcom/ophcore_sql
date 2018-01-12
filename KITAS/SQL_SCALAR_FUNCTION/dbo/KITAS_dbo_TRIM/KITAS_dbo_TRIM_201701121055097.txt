@@ -1,0 +1,13 @@
+
+CREATE FUNCTION [dbo].[TRIM](@input nvarchar(MAX))
+RETURNS nvarchar(MAX)
+as	--CreatedBy eLs
+BEGIN
+	Declare @result nvarchar(MAX)
+
+	set @result = RTRIM(LTRIM(@input))
+	set @result = IIF(@result = '', NULL, @result)
+
+	return @result
+END
+

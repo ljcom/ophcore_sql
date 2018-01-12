@@ -1,0 +1,16 @@
+
+CREATE TRIGGER [dbo].[tg_modlcolminfo_refresh]
+   ON  [dbo].[modlcolminfo]
+   AFTER INSERT, UPDATE
+AS 
+BEGIN
+	-- SET NOCOUNT ON added to prevent extra result sets from
+	-- interfering with SELECT statements.
+	SET NOCOUNT ON;
+	declare @columnGUID uniqueidentifier, @infokey nvarchar(50)
+	select @columnGUID=ColumnGUID, @infokey=InfoKey 
+	from inserted
+	if @infokey='isBrowsable' or @infokey='isViewable' or @infokey='colType'
+		exec gen.modlcolminfo_refresh @columnGUID	
+
+END

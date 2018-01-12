@@ -1,0 +1,13 @@
+
+CREATE PROCEDURE [api].[function_mail] @accountid varchar(50),
+	@hostGUID uniqueidentifier, 
+	@mode varchar(10), 
+	@code varchar(20), 
+	@GUID uniqueidentifier, 
+	@isDebug bit=0
+--WITH ENCRYPTION
+as
+
+
+
+

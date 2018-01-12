@@ -1,0 +1,27 @@
+
+create TRIGGER [dbo].[tg_modg_updatedDate] 
+   ON  [dbo].[modg]
+   AFTER UPDATE
+AS 
+BEGIN
+	set nocount on 
+
+	declare @guid nvarchar(max)=(
+		select cast(modulegroupguid as nvarchar(50))+'*'
+		from inserted
+		for xml path(''))
+
+	update x
+	set updatedDate=getdate()
+	--select * 
+	from inserted i inner join deleted d on i.modulegroupguid=d.modulegroupguid
+		inner join modg x on x.modulegroupguid=i.modulegroupguid
+	where isnull(i.updatedDate, '1/1/2000') = isnull(d.updatedDate, '1/1/2000')
+
+	declare @c nvarchar(max)='update: modg, '+@GUID
+
+	INSERT INTO evnt (EventGUID, AccountGUID, moduleGUID, DocGUID, timeRecord, Comment, CreatedDate, CreatedUser)
+	select newid(), null, null, null, 0, @c, getdate(), null
+
+END
+

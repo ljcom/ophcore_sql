@@ -1,0 +1,35 @@
+
+
+
+
+
+
+
+
+
+CREATE procedure [gen].[tobedeletesp]
+ as
+	 select * from sysobjects x
+		left join (
+			select tablename
+			from gen.cotablfiel a
+				inner join gen.cotabl b
+					on a.tableguid=b.tableguid	
+			where isViewable=1
+			group by tablename) w 
+			on substring(name,4,LEN(w.Tablename))=w.Tablename		
+	where xtype='P' 
+		and w.Tablename is null
+		and LEFT(name,1) in ('t', 'm', 'c', 's')	
+
+	 		
+
+
+
+
+
+
+
+
+
+

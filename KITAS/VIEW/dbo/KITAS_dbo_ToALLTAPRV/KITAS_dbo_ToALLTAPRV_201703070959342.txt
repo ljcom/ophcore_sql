@@ -1,0 +1,4 @@
+CREATE view dbo.ToALLTAPRV
+as --automatic creation by system, you have to remove this comment to customize this view
+ 	select ToPCSOAPRVGUID docApprovalGUID, PCSOGUID docGUID, ApprovalUserGUID, CurLvl, Lvl, Status, CreatedDate, UpdatedDate, CreatedUser, UpdatedUser, DelegateUserGUID, uGroupGUID, ReapprovalDate, rejectReason, isActive
+	from KITAS.oph.TaPCSOAPRV 

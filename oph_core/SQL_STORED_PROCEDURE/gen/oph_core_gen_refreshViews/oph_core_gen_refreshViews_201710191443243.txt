@@ -1,0 +1,50 @@
+
+
+CREATE procedure [gen].[refreshViews] @viewName nvarchar(100)=''
+as
+	DECLARE #cur CURSOR
+	READ_ONLY
+	FOR select replace(infokey, 'view', moduleid) , infovalue 
+		from modlinfo i
+			inner join modl m on i.moduleguid=m.moduleguid
+		where infokey like 'view%'
+
+	DECLARE @viewName1 nvarchar(50), @script nvarchar(max), @r nvarchar(max)
+	OPEN #cur
+
+	FETCH NEXT FROM #cur INTO @viewName1, @script
+	WHILE (@@fetch_status <> -1)
+	BEGIN
+		IF (@@fetch_status <> -2)
+		BEGIN
+			begin try
+				exec gen.createview @viewname1, @script, 'doc', 1, @r output
+			end try
+			begin catch
+				print @viewName
+				print error_message()
+			end catch
+		END
+		FETCH NEXT FROM #cur INTO @viewName1, @script
+	END
+
+	CLOSE #cur
+	DEALLOCATE #cur
+
+	declare @sqlstr nvarchar(max)='
+		declare @xstr nvarchar(max)=
+			replace((select ''exec [gen].[createTable] '''''+db_name()+''''', ''+isnull(migrateDB, databasename)+'', null, ''+moduleid+'', 0
+				''
+			from acctdbse a
+				inner join modl m on a.AccountDBGUID=m.AccountDBGUID
+			where (version <> ''4.0'' and migratedb is not null) or ismaster=0
+			for xml path ('''')), ''&'+'#x0d;'', '''')
+		
+		print @xstr
+		exec sp_executesql @xstr
+		'
+
+	print @sqlstr
+	exec sp_executesql @sqlstr
+	
+	

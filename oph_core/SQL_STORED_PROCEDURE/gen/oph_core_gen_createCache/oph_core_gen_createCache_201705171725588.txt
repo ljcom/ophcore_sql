@@ -1,0 +1,36 @@
+
+CREATE procedure [gen].[createCache] @code nvarchar(50)
+as
+	--hold karena performancenya tidak berubah banyak
+
+
+	--if @code='modlcolminfo' begin
+	--	if not exists (select * from sys.objects where name='_'+@code) 
+	--	begin
+	--		declare @cols nvarchar(max)=stuff(
+	--			(select ', '+infokey
+	--			from modlcolminfo
+	--			group by infokey
+	--			order by infokey
+	--			for xml path('')),1,2,'')
+
+	--		--print @cols
+
+	--		declare @sqlstr nvarchar(max)='
+	--			select *
+	--			into cache.[_modlcolminfo]
+	--			from 
+	--			(
+	--			  select columnguid, infokey, infovalue from modlcolminfo
+	--			) src
+
+	--			pivot
+	--			(
+	--			  max(infovalue)
+	--			  for infokey in ('+@cols+')
+	--			) piv'
+	
+	--		exec sp_executesql @sqlstr
+	--	end
+	--end
+

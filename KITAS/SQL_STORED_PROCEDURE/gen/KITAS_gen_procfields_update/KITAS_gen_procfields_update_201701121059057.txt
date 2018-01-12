@@ -1,0 +1,89 @@
+
+
+CREATE procedure [gen].[procfields_update] 
+		@tableName nvarchar(50), @insertstr varchar(8000) OUTPUT, @par varchar(8000) OUTPUT,
+		@updatestr varchar(8000) OUTPUT, @valuestr varchar(8000) OUTPUT 
+as
+	declare @colName nvarchar(50), @colOrder int, @type nvarchar(50), @len int, @isbrowsable bit, @isupdatable bit
+	declare @oTableName nvarchar(20)
+
+	set @oTableName=left(@tablename,1)+'o'+substring(@tablename, 3, len(@tablename)-2)
+
+	set @par = ''
+	set @insertstr = ''
+	set @updatestr = ''
+	set @valuestr = ''
+		
+	DECLARE curD CURSOR
+	   FOR 	select syscolumns.name, syscolumns.colOrder, x.name, case when syscolumns.xtype = 231 then syscolumns.length/2 when syscolumns.xtype = 167 then syscolumns.length else 0 end, isBrowsable, case when isEditable&lt;&gt;0 and isEditable&lt;90 then 1 else 0 end
+		from sysobjects
+			inner join syscolumns
+				on sysobjects.id = syscolumns.id
+			inner join systypes 
+				on syscolumns.xtype =  systypes.xtype 
+				and syscolumns.xusertype =  systypes.xusertype 
+			inner join systypes x
+				on x.xtype = systypes.xtype
+				and x.xtype = x.xusertype 				
+			inner join gen.cotabl b
+				on b.tablename=@tableName
+			inner join gen.cotablfiel
+				on gen.cotablfiel.colname = syscolumns.name
+				and gen.cotablfiel.tableGUID = b.tableGUID
+			inner join (
+				select distinct tableGUID
+				from gen.cotablfiel a
+				where isEditable in (1,2,4)) xc
+				on xc.tableGUID=gen.cotablfiel.tableGUID
+		where sysobjects.name = @oTableName
+		order by viewpageno, viewrowno, viewcolno, vieworderno,gen.cotablfiel.viewrowtype,gen.cotablfiel.viewrowtypeorder --syscolumns.colorder	--sysobjects.name, syscolumns.name, syscolumns.colOrder, systypes.name 
+
+	OPEN curD
+	FETCH NEXT FROM curD
+	into @colName, @colOrder, @type, @len, @isBrowsable, @isUpdatable
+	
+	WHILE @@FETCH_STATUS = 0
+	BEGIN	
+		if (@colOrder &gt; 1 and @colname not in ('UpdatedDate', 'UpdatedUser', 'DeletedDate', 'DeletedUser', 'CreatedDate', 'CreatedUser', 'isDeleted')
+			) and @isUpdatable = 1
+		begin
+			set @par = @par + ', @' + @colName + ' ' + @type + 
+				case 
+					when @len&gt;0 then '(' + convert(nvarchar(10), @len) + ')' 
+					when @len&lt;=0 and (@type='nvarchar' or @type='varchar') then '(max)' 
+					else '' end
+			set @insertstr = @insertstr + ', ' + @colName
+			if @type = 'real' or @type = 'real' or @type = 'money' or @type = 'float' or @type = 'smallmoney' begin
+				set @valuestr = @valuestr + ', dbo.fn_round(@' + @colName + ')'
+				set @updatestr = @updatestr + ', ' + @colName + ' = dbo.fn_round(@' + @colName + ')'
+			end
+			else begin
+				set @valuestr = @valuestr + ', @' + @colName
+				set @updatestr = @updatestr + ', ' + @colName + ' = @' + @colName 
+			end				
+		end
+
+		FETCH NEXT FROM curD
+		into @colName, @colOrder, @type, @len, @isBrowsable, @isUpdatable
+	end
+	CLOSE curD
+	DEALLOCATE curD
+
+	if len(@par)&gt;2 set @par = substring(@par, 3, len(@par) - 2)
+	if len(@insertstr)&gt;2 set @insertstr = substring(@insertstr, 3, len(@insertstr) - 2)
+	if len(@updatestr)&gt;2 set @updatestr = substring(@updatestr, 3, len(@updatestr) - 2)
+	if len(@valuestr)&gt;2 set @valuestr = substring(@valuestr, 3, len(@valuestr) - 2)
+
+
+
+
+
+
+
+
+
+
+
+
+
+

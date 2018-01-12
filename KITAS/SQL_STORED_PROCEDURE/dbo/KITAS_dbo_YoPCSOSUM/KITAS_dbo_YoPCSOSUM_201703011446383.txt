@@ -1,0 +1,13 @@
+CREATE PROCEDURE [dbo].[YoPCSOSUM] @HostGUID uniqueidentifier, @startDate date, @endDate date
+as	--CreatedBy eLs ON Feb, 2017
+
+	select 
+		CarolGUIDcbId [Member ID], CONVERT(varchar(50), DocDate, 106) [Tanggal Registrasi], CarolGUIDcbNm [Nama Lengkap], 
+		PRODGUIDcbId [Kode Produk], PRODGUIDcbNm [Nama Produk], FirstPrice [Harga per Unit], DiscPrice [Diskon per Unit], 
+		Qty, QtyReject, QtyReturn, TotalPrice [Sub Total], DocNo [Trans ID], DocRefNo [Receipt Number]
+	from oph.TcPCSO a
+		inner join oph.TaPCSODETA b ON a.PCSOGUID = b.PCSOGUID
+	where DocDate between @startDate and @endDate
+	order by DocDate desc
+
+

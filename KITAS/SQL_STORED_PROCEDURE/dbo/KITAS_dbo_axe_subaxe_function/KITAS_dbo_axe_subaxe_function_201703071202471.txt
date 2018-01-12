@@ -1,0 +1,107 @@
+CREATE PROCEDURE [dbo].[axe_subaxe_function]
+as	--CreatedBy eLs ON Mar, 2017
+
+	set nocount on
+	--Brand
+	delete MoSIGNBRAN
+	insert into MoSIGNBRAN (SIGNBRANGUID, SIGNGUID, Code, Name)
+	select 
+		BrandGUID, SIGNGUID, BrandCode, BrandName
+	from EF_MAIN.oph.MaSIGNBRAN a
+		inner join MoSIGN b ON a.SignatureGUID = b.SIGNGUID
+
+	--Axe
+	delete MoSIGNAXES
+	insert into MoSIGNAXES(SIGNAXESGUID, SIGNGUID, Code, Name)
+	select * from (
+		select 
+			AxeGUID, SignatureGUID, AxeCode, 
+			case RIGHT(AxeCode, 2)
+				when '01' then 'SKIN CARE'
+				when '02' then 'COSMETIC'
+				when '03' then 'PERFUMES'
+				when '05' then 'HAIR'
+				when '06' then 'ACCESSORIES'
+				when '99' then 'MISCELLANEOUS'
+			end [Name]
+		from EF_MAIN.oph.MaSIGNAXEE a
+			inner join MoSIGN b ON a.SignatureGUID = b.SIGNGUID
+	) X where Name is Not NULL
+
+	--Sub Axes
+	delete MoSIGNAXESSUBA
+	insert into MoSIGNAXESSUBA(SIGNAXESSUBAGUID, SIGNAXESGUID, Code, Name)
+	select * from (
+		select 
+			SubAxeGUID, AxeGUID, SubAxeCode,
+			case RIGHT(SubAxeCode, 2)
+				when '01' then 'WOMEN'
+				when '02' then 'WOMEN FACE'
+				when '03' then 'WOMEN BODY'
+				when '04' then 'MEN'
+				when '05' then 'HAIR'
+				when '06' then 'SUN CARE'
+				when '07' then 'ACCESSORIES'
+				when '08' then 'DEVICE'
+				when '09' then 'MIXED'
+				when '99' then 'MISCELLANEOUS'
+				when 'PA' then 'SOINS DE CHEVEUX'
+				when 'PF' then 'COSMETIC'
+				when 'PM' then 'SKIN CARE'
+				when 'PN' then 'SUN TANNING'
+				when '1A' then 'STYLING'
+				when '1B' then 'SHAMPOO'
+				when '1C' then 'HAIR COLOR'
+				when '1D' then 'PERMANENT'
+				when '1E' then 'CONDITIONER'
+			end [SubName]
+		--select a.*
+		from EF_MAIN.oph.MaSIGNAXEESAXE a
+			inner join MoSIGNAXES b ON a.AxeGUID = b.SIGNAXESGUID	
+			inner join MoSIGN c ON LEFT(a.SubAxeCode, 2) = c.Code AND b.SIGNGUID = c.SIGNGUID
+		where LEN(SubAxeCode) = 6
+	) Y where SubName is Not NULL
+
+	--Product Function
+	delete MoSIGNAXESSUBAFUNC
+	insert into MoSIGNAXESSUBAFUNC(SIGNAXESSUBAFUNCGUID, SIGNAXESSUBAGUID, Code, Name)
+	select 
+		FunctionGUID, SubAxeGUID, FunctionCode, funcName
+	from EF_MAIN.oph.MaSIGNAXEESAXEFUNC a
+		inner join MoSIGNAXESSUBA b ON a.SubAxeGUID = b.SIGNAXESSUBAGUID 
+			AND LEFT(FunctionCode, 4) = RIGHT(b.Code, 4)
+		inner join (
+			select 
+				funCode, case funCode 
+					when '02' then 'EAU DE PARFUM'
+					when '9E' then 'STYLING GELS'
+					when '29' then 'SPECIFIC BODY'
+					when '31' then 'FIRMING'
+					when '38' then 'SLIMMING'
+					when '67' then 'EYES SHADOW'
+					when '89' then 'OTHER CLEANSER &amp; TONER'
+					when '8E' then 'TONE ON TONE'
+					when 'A7' then 'OTHER STYLING'
+					when 'S1' then 'SKIN CARE'
+				else funcName end [funcName]
+			from (
+				select 
+					ROW_NUMBER() OVER(Partition By RIGHT(FunctionCode, 2) Order By FunctionName) [no],
+					RIGHT(FunctionCode, 2) funCode, UPPER(FunctionName) [funcName], maxFunc
+				from EF_MAIN.dbo.MoSIGNAXEESAXEFUNC a1
+					inner join (
+						select code, MAX(countFunc) [maxFunc] from (
+							select RIGHT(FunctionCode, 2) [code], COUNT(*) [countFunc]
+							from EF_MAIN.dbo.MoSIGNAXEESAXEFUNC group by RIGHT(FunctionCode, 2), FunctionName
+						) z group by code
+					) b1 ON RIGHT(FunctionCode, 2) = b1.code
+				group by RIGHT(FunctionCode, 2), FunctionName, maxFunc
+				having COUNT(FunctionName) = maxFunc
+			) zi where no = 1
+		) c ON RIGHT(FunctionCode, 2) = funCode
+	where LEN(FunctionCode) = 6
+
+	--delete all duplicated function
+	delete MoSIGNAXESSUBAFUNC where SIGNAXESSUBAFUNCGUID not in 
+		(select max(SIGNAXESSUBAFUNCGUID) from MoSIGNAXESSUBAFUNC group by SIGNAXESSUBAGUID, Code, Name)
+

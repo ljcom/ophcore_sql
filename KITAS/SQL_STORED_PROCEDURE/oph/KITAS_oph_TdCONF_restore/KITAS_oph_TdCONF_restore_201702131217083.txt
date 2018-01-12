@@ -1,0 +1,7 @@
+CREATE procedure oph.TdCONF_restore
+	@GUID uniqueidentifier, @hostGUID uniqueidentifier
+as --automatic creation by system, you have to remove this comment to customize this procedure
+ 	update ToCONF
+	set isDeleted = 0, deletedDate = null, deletedUser = null 
+	where CONFGUID = @GUID
+	select '' restored

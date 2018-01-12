@@ -1,0 +1,24 @@
+CREATE procedure [gen].[cmdCreateFolders] @folder nvarchar(max)
+as
+	declare @found int, @foundstr nvarchar(500)
+	declare @found2 int, @found2str nvarchar(500)
+	set @found=0
+
+	set @found=charindex('\', @folder, @found)
+
+	while @found &lt; len(@folder) begin
+		set @foundstr=left(@folder,@found)
+		print @foundstr
+
+		set @found2=charindex('\', @folder, @found+1)
+		print @found2
+		if @found2=0 set @found2=len(@folder)
+		set @found2str=substring(@folder,@found+1, @found2-@found)
+		print @found2str
+
+		exec gen.cmdcreatefolder @foundstr, @found2str
+		set @found=@found2
+	end
+
+
+

@@ -1,0 +1,28 @@
+
+
+
+
+CREATE procedure [gen].[acctinfo_save] @accountguid uniqueidentifier, @key nvarchar(50), @value nvarchar(max)
+as
+	if @accountguid is not null begin
+		if exists(select * from acctinfo where accountguid=@accountguid and infokey=@key)
+		begin
+			print 'update '+cast(@accountguid as nvarchar(50))
+			--update
+			update acctinfo
+			set Infovalue=@value
+			where accountguid=@accountguid and infokey=@key and Infovalue<>@value
+		end
+		else
+		begin
+			print 'insert '+cast(@accountguid as nvarchar(50))
+			--insert
+			insert into acctinfo (accountguid, infokey, infovalue)
+			values (@accountguid, @key, @value)
+		end
+	end
+
+
+
+
+

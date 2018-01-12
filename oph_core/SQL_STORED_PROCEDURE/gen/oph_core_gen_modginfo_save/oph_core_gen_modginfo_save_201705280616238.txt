@@ -1,0 +1,18 @@
+create procedure gen.modginfo_save @modulegroupguid uniqueidentifier, @key nvarchar(50), @value nvarchar(max)
+as
+	if exists(select * from modginfo where modulegroupguid=@modulegroupguid and infokey=@key)
+	begin
+		--update
+		update modginfo
+		set Infovalue=@value
+		where modulegroupguid=@modulegroupguid and infokey=@key
+	end
+	else
+	begin
+		--insert
+		insert into modginfo (modulegroupguid, infokey, infovalue)
+		values (@modulegroupguid, @key, @value)
+	end
+
+
+

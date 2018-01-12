@@ -1,0 +1,92 @@
+
+CREATE procedure [gen].[addproc] @procName nvarchar(50), @parameter varchar(max), 
+	@content varchar(max), @content1 varchar(max)='', @content2 varchar(max)='', 
+	@content3 varchar(max)='', @content4 varchar(max)='', @content5 varchar(max)='', @schema varchar(3)='oph', 
+	@isEnc bit=1, @isdebug bit=0
+as
+
+--ver 20141119
+
+	declare @sqlstr varchar(max)
+	declare @moduleGUID uniqueidentifier
+	select @moduleGUID = moduleGUID from coMODL where moduleId like '%' + moduleId + '%'
+
+	if exists (select * from sys.objects a
+				inner join syscomments b
+					on a.object_id=b.id
+				inner join sys.schemas c
+					on a.schema_id=c.schema_id
+				where a.name like @procName and encrypted=1
+					and c.name=@schema)
+	begin
+		set @sqlstr='drop procedure '+@schema+'.'+@procname
+		exec (@sqlstr)
+	end
+
+	if not exists (
+		select *
+		from sysObjects
+		where name = @procName) 
+	begin --not exists
+		set @sqlstr = 'create'+' '+'procedure '+@schema+'.' + @procName + char(13) + char(10) + 
+				@parameter + char(13) + char(10) +
+				case when @isEnc=1 then 'with encryption'+ char(13) + char(10) else '' end +
+				'as --automatic creation by system, you have to remove this comment to customize this procedure' + char(13) + char(10) + ' ' 
+print @procname
+print @parameter
+print @sqlstr+@content+@content1+@content2
+--print '---'
+		exec (@sqlstr+@content+@content1+@content2+@content3+@content4+@content5)
+
+	end
+	else
+	begin	--automatic
+		if exists (
+			select text from syscomments 
+			inner join sysObjects on sysComments.id = sysObjects.id
+			where sysObjects.name = @procName and text like '%as --automatic creation by system, you have to remove this comment to customize this procedure%')
+		begin
+			set @sqlstr = 'alter'+' '+'procedure '+@schema+'.' + @procName + char(13) + char(10) + 
+					@parameter + char(13) + char(10) +
+					case when @isEnc=1 then 'with encryption'+ char(13) + char(10) else '' end +
+					'as --automatic creation by system, you have to remove this comment to customize this procedure' + char(13) + char(10) + ' ' 
+
+			exec (@sqlstr+@content+@content1+@content2)
+		end
+		else --manual
+		begin
+			if exists (select text from syscomments 
+				inner join sysObjects on sysComments.id = sysObjects.id
+				where sysObjects.name = @procName and replace(replace(replace(replace(text,' ', ''),char(13),''),char(10),''),char(9),'') like '%' + replace(replace(replace(replace(@parameter,' ', ''),char(13),''),char(10),''),char(9),'') + '%') 
+			begin 
+				select @sqlstr = text 
+				from syscomments 
+					inner join sysObjects on sysComments.id = sysObjects.id
+				where sysObjects.name = @procName
+
+--				exec sp_CaMODLSCRP_save null, null, @moduleGUID, @procName, @parameter, @sqlstr, 0	--not automatic and increase version
+				
+			end
+			else
+			begin
+				select @sqlstr = text 
+				from syscomments 
+					inner join sysObjects on sysComments.id = sysObjects.id
+				where sysObjects.name = @procName
+
+--				exec sp_CaMODLSCRP_save null, null, @moduleGUID, @procName, @parameter, @sqlstr, 2	--error
+			end
+		end
+	end
+
+
+
+
+
+
+
+
+
+
+
+

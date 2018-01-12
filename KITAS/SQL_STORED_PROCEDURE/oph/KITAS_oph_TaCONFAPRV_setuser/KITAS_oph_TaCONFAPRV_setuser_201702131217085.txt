@@ -1,0 +1,78 @@
+CREATE procedure oph.TaCONFAPRV_setuser
+	@GUID uniqueidentifier, @hostGUID uniqueidentifier
+as --automatic creation by system, you have to remove this comment to customize this procedure
+ 	if dbo.fn_checkObject('dbo','TaCONFAPRV_setuser_custom')=0 begin
+
+		Declare @userGUID uniqueidentifier, @newguid uniqueidentifier, @ModuleGUID uniqueidentifier, @@tablename uniqueidentifier, @@approvalgroupGUID uniqueidentifier
+			,@createduser uniqueidentifier
+		select @userGUID=userguid from coUSERHOST where hostGUID=@hostGUID
+
+		select @ModuleGUID=ModuleGUID from CoMODL where Moduleid='TaCONF'
+
+		set @newguid=newid()
+
+		if not exists(	select *
+				from ToCONFAPRV
+				where CONFGUID = @guid and Lvl&gt;0)
+		begin
+			--declare @val money, @isIT bit, @isIV bit, @isPool bit
+			--set @val=0
+
+			-- insert all requestors
+			select @createduser=createduser from ToCONF where CONFGUID=@GUID
+
+			insert into ToCONFaprv(ToCONFAPRVGUID, curlvl, CONFGUID, lvl, approvalUserGUID, ugroupguid)
+			select newid(), null, @GUID, lvl, b.MemberUserGUID, b.ugroupguid
+			from  CoAPPRLVEL a
+				inner join cougrpuser1 b
+					on a.ApprovalGroupGUID=b.UGroupGUID
+				inner join coappr a1
+					on a.approvalguid=a1.approvalguid
+			where a1.moduleguid = @ModuleGUID 
+				and b.MemberUserGUID =@userGUID and a.lvl=0 and b.MemberUserGUID=@createduser
+
+			--insert the upper level users
+			declare @first integer
+			set @first=1
+
+			declare @a integer, @a1 integer, @level integer
+			declare @modluserGUID uniqueidentifier
+			set @a=1
+			set @a1=0
+
+			--LEVEL:100 USERGROUP:ADM
+			insert into ToCONFAPRV(CONFGUID, lvl, approvalUserGUID, curlvl, ugroupguid)
+			select distinct @GUID, currentLevel.lvl, currentUser.memberUserGUID, 1, currentLevel.ApprovalGroupGUID
+			from coAPPR a
+				inner join CoMODL b
+					on a.ModuleGUID=b.ModuleGUID
+					and b.ModuleId='TaCONF'
+				inner join CoAPPRLVEL currentLevel
+					on a.ApprovalGUID=currentLevel.ApprovalGUID
+					and currentLevel.ApprovalGroupGUID='7C1DFC68-7432-4C70-8F46-07B1B1CBF3BD'
+					inner join cougrpuser1 currentUser
+						on currentLevel.ApprovalGroupGUID=currentUser.UGroupGUID
+					--level bottom
+					left join dbo.CoAPPRLVEL bottomLevel
+						on bottomLevel.ApprovalGroupGUID in('A2D1B599-E149-4650-9E37-03463E0901AA')
+						left join cougrpuser1 bottomuser
+							on bottomLevel.ApprovalGroupGUID=bottomuser.UGroupGUID
+							inner join ToCONF e2
+								on (e2.CreatedUser=bottomuser.MemberUserGUID
+								and e2.CONFGUID=@GUID)
+			where 1=1
+
+		end
+
+		-- delete yang gak perlu approve
+		-- delete from ToCONFAPRV
+		-- where CONFGUID = @GUID and curlvl=1
+
+		exec oph.TaCONFAPRV_setUser_reset	
+
+		exec gen.newApprovalMark @GUID
+
+	end else
+
+		exec dbo.TaCONFAPRV_setuser_custom @GUID, @hostGUID
+

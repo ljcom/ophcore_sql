@@ -1,0 +1,151 @@
+
+
+
+CREATE procedure [api].[sync_checklatestevent] @accountid nvarchar(50), @token uniqueidentifier, @lvl int, @r xml=null output, @issilent bit=0
+	--, @code nvarchar(50)=null, @latestDate datetime=null
+as
+	--@lvl:
+	-- 0 -- global
+	-- 1 -- structure
+	-- 2 -- data
+
+	declare @dataDB nvarchar(50)
+	select @datadb=databasename 
+	--select *
+	from dbo.acctdbse d	
+		inner join dbo.acct a on a.AccountGUID=d.AccountGUID
+	where isMaster=1 and [version]='4.0' and accountid=@accountid
+
+	print @datadb
+
+	declare @sqlstr nvarchar(max)
+	declare @sqlstr1 nvarchar(max)
+	declare @sqlstr2 nvarchar(max)
+
+	if @lvl=0 begin
+
+		set @sqlstr1='		
+				select avg(gen.datetoint(updatedDate)) ud
+				from (	
+					select (isnull(updatedDate, createdDate)) updatedDate
+					from '+@dataDB+'.dbo.modl m
+					union all
+					select (isnull(c.updatedDate, c.createdDate))
+					from '+@dataDB+'.dbo.modl m
+						inner join '+@dataDB+'.dbo.modlcolm c on m.moduleguid=c.moduleguid
+					union all
+					select (isnull(i.updatedDate, i.createdDate))
+					from '+@dataDB+'.dbo.modl m
+						inner join '+@dataDB+'.dbo.modlcolm c  on m.moduleguid=c.moduleguid
+						inner join '+@dataDB+'.dbo.modlcolminfo i  on c.columnguid=i.columnguid
+					union all
+					select (isnull(i.updatedDate, i.createdDate))
+					from '+@dataDB+'.dbo.modl m
+						inner join '+@dataDB+'.dbo.modlinfo i  on m.moduleguid=i.moduleguid
+					--where i.infokey not in (''exceptionList'')
+				) x
+			'
+
+		set @sqlstr='
+			set @sqlstr1=
+				stuff(
+					(select ''union all select (isnull(updatedDate, createdDate)) ud from '+@dataDB+'.''+iif(settingmode=0,''dbo'', ''doc'')+''.[''+moduleid+''] ''
+					from '+@dataDB+'.dbo.modl m
+						inner join oph_core.dbo.acctdbse d on m.AccountDBGUID=d.AccountDBGUID
+						inner join oph_core.dbo.acct a on a.AccountGUID=d.AccountGUID
+						inner join '+@dataDB+'.sys.objects o on m.moduleid=o.name and o.type in(''U'', ''V'')
+					where (settingmode in (1, 3, 4) or (settingMode=0 and moduleid not in (''evnt'', ''http'', ''userhost''))) and accountid='''+@accountid+'''
+					for xml path('''')), 1, 10, '''')
+			'
+		--print @sqlstr
+		exec sp_executesql @sqlstr, N'@sqlstr1 nvarchar(max) OUTPUT', @sqlstr2 output 
+
+		set @sqlstr='
+			set @r=replace((
+				select 
+					(
+						select avg(gen.datetoint(ud)) updatedDate
+						from ('+isnull(@sqlstr2, 'select ''1/1/2000'' ud')+') x
+					) updatedDate, 
+					(
+						select ud modifiedDate
+						from ('+@sqlstr1+') x
+					) modifiedDate
+				for xml path(''replicationCheck''), root(''sqroot'')), ''&'+'#x0D;'', '''')
+
+				'+iif(@issilent=0, 'select @r', '')
+
+		--print @sqlstr
+		exec sp_executesql @sqlstr, N'@r xml output', @r output
+	end
+	else if @lvl=1 begin	
+		set @sqlstr='		
+			set @r = replace((
+				select (
+					select id, avg(gen.datetoint(updatedDate)) modifiedDate
+					from (
+						select moduleid id, isnull(updatedDate, createdDate) updatedDate
+						from '+@dataDB+'.dbo.modl m
+						union all
+						select moduleid, isnull(c.updatedDate, c.createdDate)
+						from '+@dataDB+'.dbo.modl m
+							inner join '+@dataDB+'.dbo.modlcolm c on m.moduleguid=c.moduleguid
+						union all
+						select moduleid, isnull(i.updatedDate, i.createdDate)
+						from '+@dataDB+'.dbo.modl m
+							inner join '+@dataDB+'.dbo.modlcolm c  on m.moduleguid=c.moduleguid
+							inner join '+@dataDB+'.dbo.modlcolminfo i  on c.columnguid=i.columnguid
+						--where i.infokey not like ''view%'' and i.infokey not like ''script%''
+						union
+						select moduleid, isnull(i.updatedDate, i.createdDate)
+						from '+@dataDB+'.dbo.modl m
+							inner join '+@dataDB+'.dbo.modlinfo i  on m.moduleguid=i.moduleguid
+						--where i.infokey not in (''exceptionList'')
+						) x
+					group by id
+					for xml path(''code''), type
+					) 
+				for xml path(''replicationCheck''), root(''sqroot'')		
+			), ''&'+'#x0D;'', '''')
+
+			'+iif(@issilent=0, 'select @r', '')
+
+		print @sqlstr
+		exec sp_executesql @sqlstr, N'@r xml output', @r output
+	end
+	else if @lvl=2 begin
+		set @sqlstr='		
+			set @sqlstr2=
+				stuff(
+					(select ''union  select ''''''+m.moduleid+'''''' code, avg(gen.datetoint(isnull(updatedDate, createdDate))) ud from '+@dataDB+'.''+iif(settingmode=0,''dbo'', ''doc'')+''.[''+moduleid+''] ''
+					from '+@dataDB+'.dbo.modl m
+						inner join oph_core.dbo.acctdbse d on m.AccountDBGUID=d.AccountDBGUID
+						inner join oph_core.dbo.acct a on a.AccountGUID=d.AccountGUID
+						inner join '+@dataDB+'.sys.objects o on m.moduleid=o.name and o.type in(''U'', ''V'')
+					where (settingmode in (1, 3, 4) or (settingMode=0 and moduleid not in (''evnt'', ''http'', ''userhost''))) and accountid='''+@accountid+'''
+					for xml path('''')), 1, 6, '''')
+			'
+		print @sqlstr
+		exec sp_executesql @sqlstr, N'@sqlstr2 nvarchar(max) OUTPUT', @sqlstr2 output 
+
+		set @sqlstr='
+			set @r=replace((
+				select (
+					select code id, ud updatedDate
+					from ('+@sqlstr2+') x
+					for xml path(''code''), type
+				)
+				for xml path(''replicationCheck''), root(''sqroot'')
+				), ''&'+'#x0D;'', '''')
+
+			'+iif(@issilent=0, 'select @r', '')
+			
+		--print @sqlstr	
+		exec sp_executesql @sqlstr, N'@r xml output', @r output
+	end
+	
+
+
+
+
+

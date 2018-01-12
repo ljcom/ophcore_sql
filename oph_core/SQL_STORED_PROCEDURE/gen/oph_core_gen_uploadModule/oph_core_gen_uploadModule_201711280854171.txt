@@ -1,0 +1,277 @@
+CREATE PROCEDURE gen.uploadModule @hostGUID uniqueidentifier, @code varchar(50), @filePath varchar(255)
+as	--CreatedBy eLs ON Nov, 2017
+
+--declare @hostGUID uniqueidentifier = gen.gethost('ap\iman.satyagraha'), @code varchar(50) = 'taiert', 
+--@filePath varchar(255) = 'D:\vsonline\OPERAHOUSE\documents\temp\EFORM\a2734335-ad0e-4f35-a473-12e12e2bed93_taiert.xls'
+
+declare @upState varchar(50), @comment varchar(255)
+if gen.fn_checkFile(@filepath)=1 begin
+	SET NOCOUNT ON
+	declare @tempTable nvarchar(100) = @code+'_'+LEFT(replace(newid(), '-', ''), 6)
+	declare @sqlstr nvarchar(MAX) = '
+		if object_id(''tempdb..##'+@tempTable+''') is not null drop table ##'+@tempTable+'
+		select * into ##' + @tempTable + ' from OPENROWSET(
+			''Microsoft.ace.OLEDB.12.0'',
+			''Excel 8.0;Database='+@filePath+';HDR=YES'',
+			''SELECT * FROM ['+@code+'$]''
+		) where DocGUID is NULL OR DocGUID != gen.ZeroGUID()
+		update ##' + @tempTable + ' set DocGUID = NEWID() where DocGUID is NULL'
+	begin try
+		exec(@sqlstr)	print 'select * from ##' + @tempTable
+
+		--set all columns become nvarchar(MAX)
+		declare @str nvarchar(MAX) = (
+			select 
+				'alter table ' + table_name + ' alter column ' + column_name + ' nvarchar(MAX)'+char(10)
+			from tempdb.information_schema.columns 
+			where TABLE_NAME like '%' + @tempTable + '%'
+			for xml path('')
+		) exec(@str)
+
+		if OBJECT_ID('tempdb..#ulv') is not null drop table #ulv
+		create table #ulv(idNo INT NOT NULL IDENTITY(1,1) PRIMARY KEY, DocGUID uniqueidentifier, L varchar(5))
+		set @sqlstr = 'select DocGUID, Level from ##' + @tempTable
+		insert into #ulv(DocGUID, L) exec(@sqlstr)
+
+		if exists(select * from #ulv) begin
+			if OBJECT_ID('tempdb..#clv') is not null drop table #clv
+			select 
+				IIF(orderNo = 0, 'H', 'L'+cast(ROW_NUMBER() OVER(Order by orderNo, ModuleId) - 1 as varchar(5))) [L], isNULL(sch.[schema], 'dbo') [schema], 
+				ModuleId, Parent, STUFF((
+					select ', '+quotename(colKey) from modlcolm a1
+						inner join modlcolminfo b1 ON a1.ColumnGUID = b1.ColumnGUID AND b1.InfoKey = 'iseditable' AND b1.InfoValue = '1'
+						inner join modlcolminfo c1 ON a1.ColumnGUID = c1.ColumnGUID AND c1.InfoKey = 'isviewable' AND b1.InfoValue = '1'
+						inner join modlinfo i ON a1.ModuleGUID = i.ModuleGUID AND i.InfoKey = 'AllowBrowse' AND i.InfoValue = '1'
+					where a1.ModuleGUID = clv.ModuleGUID
+					order by colorder for xml path ('')
+				), 1, 2, '') [cols]
+			into #clv
+			from (
+				select a.ModuleId, a.ModuleDescription, a.ModuleGUID, isNULL(a.OrderNo, 1) [orderNo], p.ModuleID [parent] from modl a
+					inner join modl p ON a.ParentModuleGUID = p.ModuleGUID
+				where p.ModuleID = @code
+				UNION
+				select ModuleId, ModuleDescription, ModuleGUID, 0, NULL from modl where ModuleID = @code
+			) clv
+				left join (
+					select a1.name [module], b1.name [schema] from sys.views a1
+						inner join sys.schemas b1 ON a1.schema_id = b1.schema_id
+				) sch ON clv.ModuleID = sch.module
+
+			--joining tempTable with comboTable
+			declare 
+				@cbColKey nvarchar(50), @cbTable nvarchar(50), @cbFieldKey nvarchar(50), @cbFieldId nvarchar(50), @cbFieldName nvarchar(50), 
+				@cbSchema nvarchar(5), @cbQuery nvarchar(MAX), @cbsql nvarchar(MAX), @cbUpdate nvarchar(MAX), @cbType nvarchar(5), @colorder int,
+				@moduleId varchar(50)
+
+			declare curcb cursor read_only for
+				select b.colorder, b.colKey, e.InfoValue, f.InfoValue, g.InfoValue, h.InfoValue from modl a
+					inner join modlcolm b ON a.ModuleGUID = b.ModuleGUID
+					inner join modlcolminfo c ON b.ColumnGUID = c.ColumnGUID AND c.InfoKey = 'isEditable' AND c.InfoValue = '1'
+					inner join modlcolminfo d ON b.ColumnGUID = d.ColumnGUID AND d.InfoKey = 'isViewable' AND d.InfoValue = '1'
+					inner join modlcolminfo e ON b.ColumnGUID = e.ColumnGUID AND e.InfoKey = 'comboTable' AND e.InfoValue != ''
+					left join modlcolminfo f ON b.ColumnGUID = f.ColumnGUID AND f.InfoKey = 'comboFieldKey' AND f.InfoValue != ''
+					left join modlcolminfo g ON b.ColumnGUID = g.ColumnGUID AND g.InfoKey = 'comboFieldId' AND g.InfoValue != ''
+					left join modlcolminfo h ON b.ColumnGUID = h.ColumnGUID AND h.InfoKey = 'comboFieldName' AND h.InfoValue != ''
+				where ModuleId in (select ModuleID from #clv)
+				order by colOrder
+			open curcb fetch next from curcb into @colorder, @cbColKey, @cbTable, @cbFieldKey, @cbFieldId, @cbFieldName
+			while @@FETCH_STATUS = 0 begin		
+				set @cbSchema = NULL
+				select @cbSchema = b.name from sys.views a
+					inner join sys.schemas b ON a.schema_id = b.schema_id
+				where a.name = @cbTable
+
+				if @cbTable like 'par(%' begin
+					select @cbType = 'par', @cbFieldKey = 'ParameterValueGUID', @cbTable = replace(replace(@cbTable, 'par(', ''), ')', '')
+					set @cbQuery = '(
+						select 
+							ParameterValueGUID, p2.ParameterValue, p2.ParameterDescription,
+							isNULL(p2.ParameterValue + isNULL('' - ''+ p2.ParameterDescription, ''''), isNULL(p2.ParameterDescription, '''')) [value]
+						from para p1
+							inner join paravalu p2 ON p1.ParameterGUID = p2.ParameterGUID
+						where ParameterId = '''+@cbTable+'''
+					) '+quotename(@cbTable+cast(@colorder as nvarchar(10)))
+				end
+				else if @cbTable like 'view(%' begin
+					select @cbType = 'view', @cbTable = replace(replace(@cbTable, 'view(', ''), ')', '')
+					set @cbQuery = '(
+						select '+@cbFieldKey+', '+isNULL(@cbFieldId+isNULL('+'' - ''+'+ @cbFieldName, ''), isNULL(@cbFieldName, '')) + 
+							' [value]'+isNULL(', '+quotename(@cbFieldId), '')+isNULL(', '+quotename(@cbFieldName), '') + 
+							' from doc.'+@code+'_'+@cbTable+'
+					) '+quotename(@cbTable+cast(@colorder as nvarchar(10)))
+				end
+				else begin 
+					set @cbType = 'table'
+					set @cbQuery = '(
+						select '+@cbFieldKey+', '+isNULL(@cbFieldId+isNULL('+'' - ''+'+ @cbFieldName, ''), isNULL(@cbFieldName, '')) + 
+							' [value]'+isNULL(', '+quotename(@cbFieldId), '')+isNULL(', '+quotename(@cbFieldName), '') + 
+							' from '+isNULL(@cbSchema, 'dbo')+'.'+quotename(@cbTable)+'
+					) '+quotename(@cbTable+cast(@colorder as nvarchar(10)))
+				end
+
+				if @cbType = 'par'
+					set @cbsql = isNULL(@cbsql, '')+'
+					left join '+@cbQuery+' 
+						ON '+quotename(@cbTable+cast(@colorder as nvarchar(10)))+'.value = a.'+@cbColKey+ '
+							OR '+quotename(@cbTable+cast(@colorder as nvarchar(10)))+'.ParameterValue = a.'+@cbColKey+ '
+							OR '+quotename(@cbTable+cast(@colorder as nvarchar(10)))+'.ParameterDescription = a.'+@cbColKey+ '
+							OR CAST('+quotename(@cbTable+cast(@colorder as nvarchar(10)))+'.ParameterValueGUID as varchar(50)) = a.'+@cbColKey
+				else
+					set @cbsql = isNULL(@cbsql, '')+'
+					left join '+@cbQuery+' 
+						ON '+quotename(@cbTable+cast(@colorder as nvarchar(10)))+'.value = a.'+@cbColKey+ ISNULL('
+							OR '+quotename(@cbTable+cast(@colorder as nvarchar(10)))+'.'+@cbFieldId+' = a.'+@cbColKey, '') + ISNULL('
+							OR '+quotename(@cbTable+cast(@colorder as nvarchar(10)))+'.'+@cbFieldName+' = a.'+@cbColKey, '') + '
+							OR CAST('+quotename(@cbTable+cast(@colorder as nvarchar(10)))+'.'+@cbFieldKey+' as varchar(50)) = a.'+@cbColKey
+
+				set @cbUpdate = ISNULL(@cbUpdate, '')+
+					', a.'+@cbColKey+' = isNULL(cast('+quotename(@cbTable+cast(@colorder as nvarchar(10)))+'.'+@cbFieldKey+' as varchar(50)), a.'+@cbColKey+')'
+
+				fetch next from curcb into @colorder, @cbColKey, @cbTable, @cbFieldKey, @cbFieldId, @cbFieldName
+			end
+			close curcb deallocate curcb
+
+			-- replacing all combos value in temptable with their own guid
+			set @sqlstr = '
+				update a set 
+					' +STUFF(@cbUpdate, 1, 2, '')+ '
+				--select *
+				from ##'+@tempTable+' [a] '+@cbsql
+			begin try
+				exec(@sqlstr)	--print @sqlstr
+
+				declare @rowNo int, @docGUID uniqueidentifier, @L varchar(5), @schema varchar(20), @mCode varchar(50), 
+					@mParent varchar(50), @cols varchar(MAX), @parentDocGUID uniqueidentifier, @prevParent varchar(50), 
+					@headGUID uniqueidentifier, @headParent varchar(50), @prevGUID uniqueidentifier, @childASparent varchar(50), 
+					@nextL varchar(5), @errNo varchar(50)
+
+				declare cssv cursor read_only for
+					select a.idNo, DocGUID, a.L, [schema], ModuleID, parent, cols from #ulv a
+						inner join #clv b ON a.L = b.L
+					order by idNo
+				open cssv fetch next from cssv into @rowNo, @docGUID, @L, @schema, @mCode, @mParent, @cols
+				while @@FETCH_STATUS = 0 begin
+					if @nextL is not NULL AND @nextL != @L goto nextcssv						
+
+					set @sqlstr = '
+					declare @hostGUID uniqueidentifier='''+cast(@hostGUID as varchar(50))+'''
+					declare @GUID uniqueidentifier = '''+cast(@docGUID as varchar(50))+'''
+					declare @saveList nvarchar(max)'+CHAR(10)
+
+					--HEADER SAVING STATEMENT
+					if @mParent is NULL begin 
+						select @headGUID = @docGUID, @headParent = @mCode
+						set @sqlstr = @sqlstr + '
+						set @saveList = (
+							select [@id], [value] from ##'+@tempTable+' 
+							unpivot (
+								[value] for [@id] in('+@cols+')
+							) x where DocGUID = '''+cast(@docGUID as varchar(50))+'''
+							for xml path(''field''), root(''sqroot'')
+						)'
+					end
+					else begin
+						--ALL HEADER's CHILDREN SAVING STATEMENT
+						if @headParent = @mParent 
+							select @parentDocGUID = @headGUID, @prevGUID = @docGUID, @childASparent = @mCode
+
+						--ALL CHILD has CHILDREN SAVING STATEMENT
+						else if @childASparent = @mParent 
+							select @parentDocGUID = @prevGUID, @prevGUID = @docGUID, @childASparent = @mCode
+
+						--UNKNOWN CONDTIION YET
+						else
+							select @parentDocGUID = @prevGUID, @prevGUID = @docGUID
+
+						set @sqlstr = @sqlstr + '
+						set @saveList = (
+							select * from (
+								select [@id], [value] from ##'+@tempTable+' 
+								unpivot ([value] for [@id] in('+@cols+')) x 
+								where DocGUID = '''+cast(@docGUID as varchar(50))+'''
+								UNION 
+								select ''DocGUID'', '+isNULL(''''+cast(@parentDocGUID as varchar(50))+'''', 'NULL') +'
+							) svl for xml path(''field''), root(''sqroot'')
+						)'
+					end
+					set @sqlstr = @sqlstr + '
+						if @saveList is Not NULL begin
+							print ''exec api.[save] ''''''+cast(@hostGUID as varchar(50))+'''''', '''''+@mCode+''''', '''''' +cast(@GUID as varchar(50))+ '''''', ''+isNULL(''''''''+@saveList+'''''''',''NULL'')
+							exec api.[save] @hostGUID, '''+@mcode+''', @GUID, @saveList 
+							print ''-------------------------------------------------------------''
+						end 
+						'+ case 
+							when @mParent is NULL then '
+							if not exists(select * from '+@schema+'.'+@mcode+' where DocGUID = @GUID) set @nextL = ''H''
+							else set @nextL = NULL'
+							else 'set @nextL = NULL'
+						end
+					begin try 
+						exec sp_executesql @sqlstr, N'@nextL varchar(5) output', @nextL output
+						if @nextL is not null begin
+							set @upState = 'attention'
+							set @errNo = isNULL(@errNo, '')+', '+CAST(@rowNo + 2 as varchar(5))
+						end
+					end try
+					begin catch
+						set @upState = 'warning'
+						set @comment = 'System has stopped saving at row '+cast(@rowNo + 1 as varchar(5))+' because of error while trying to save data at row number : '+cast(@rowNo + 2 as varchar(5)) +
+							'<br/><i>' + error_message() +'</i>'
+						print error_message()
+						print @sqlstr
+						break
+					end catch					
+				nextcssv:
+				fetch next from cssv into @rowNo, @docGUID, @L, @schema, @mCode, @mParent, @cols
+				end
+				close cssv deallocate cssv
+			end try
+			begin catch
+				set @upState = 'error'
+				set @comment = 'Something wrong with updating combos value'
+				print error_message()
+			end catch
+		end 
+		else begin
+			set @upState = 'attention'
+			set @comment = 'File is uploaded succesfully, but there is no data in file to be processed.'
+		end
+	end try
+	begin catch
+		set @upState = 'error'
+		set @comment = 'Error while loading data from uploaded file. Please try again or contact your administrator if this message recurred.'
+		print ERROR_MESSAGE()
+	end catch
+end
+else begin
+	set @upState = 'failure'
+	set @comment = 'File was not uploaded successfully! Please try again or contact your administrator if this message recurred.'
+	print 'file not found: '+@filepath
+end
+
+ENDLINE:
+if OBJECT_ID('tempdb..#ulv') is not null drop table #ulv
+if OBJECT_ID('tempdb..#clv') is not null drop table #clv
+set @sqlstr = 'if object_id(''tempdb..##'+@tempTable+''') is not null drop table ##'+@tempTable exec(@sqlstr)
+
+if @errNo is not null begin
+	set @upState = 'attention'
+	set @comment = 'Data was unsaved for row numbers: ' + stuff(@errNo, 1, 2, '') + '<br/>' + 
+		'If the data level header (H) was failed to save then also the other related levels (L).'
+end
+
+set @upState = ISNULL(@upState, 'success')
+set @comment = ISNULL(@comment, 'All data was saved successfully.')
+
+declare @file varchar(255) = RIGHT(@filePath, CHARINDEX('\', REVERSE(@filePath))-1)
+if CHARINDEX('_', REVERSE(@file), CHARINDEX('_', REVERSE(@file)) + 1) > 1
+	set @file = RIGHT(@file, CHARINDEX('_', REVERSE(@file), CHARINDEX('_', REVERSE(@file)) + 1) - 1)
+
+set @comment =  'File name: <strong>'+@file+'</strong><br/>' + @comment
+
+declare @time smalldatetime = getdate()
+declare @evcm varchar(255) = 'mode:upload|status: ' + @upState + '|comment: ' + @comment
+print @evcm
+exec gen.evnt_save @hostGUID, @code, NULL, @time, @evcm
+

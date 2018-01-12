@@ -1,0 +1,337 @@
+
+
+
+
+
+CREATE procedure [core].[addModule_v4_copy] @accountid nvarchar(50), @dataDB nvarchar(50), @migrateDB nvarchar(50), @isdelTable bit=0, @isdebug bit=0
+--WITH ENCRYPTION
+as
+	--declare @accountid nvarchar(50) = 'eform', @migrateDB nvarchar(50) = 'ef_main', @dataDB varchar(50) = 'eform_data', @isdebug bit=1
+
+	declare @accountguid uniqueidentifier, @accountdbGUID uniqueidentifier, @curMaster bit, @svrV3 nvarchar(50) 
+	
+	select @accountguid=a.AccountGUID, @accountdbGUID=AccountDBGUID, @curMaster=isMaster
+	from acct a
+		inner join acctdbse b on a.AccountGUID=b.AccountGUID
+	where b.DatabaseName=@dataDB and ismaster=1
+
+	select @svrV3=isnull(serverName, @@servername)
+	from acct a
+		inner join acctdbse b on a.AccountGUID=b.AccountGUID
+	where b.DatabaseName=@migrateDB and ismaster=1
+				
+	
+	declare @sqlstr nvarchar(max), @sqlpar nvarchar(max)
+
+	set @sqlstr=iif(@isdeltable=1, '
+		delete from '+@dataDB+'.dbo.thme
+		delete from '+@dataDB+'.dbo.thmepage
+		delete from '+@dataDB+'.dbo.msta
+		delete from '+@dataDB+'.dbo.mstastat
+		delete from '+@dataDB+'.dbo.modg
+		delete from '+@dataDB+'.dbo.menu
+		delete from '+@dataDB+'.dbo.widg
+		delete from '+@dataDB+'.dbo.para
+
+		', '')+'
+		insert '+@dataDB+'.dbo.thme (ThemeGUID, AccountGUID, ThemeCode, ThemeName, ThemeFolder, createdDate, updatedDate)
+		select a.ThemeGUID, '''+cast(@accountguid as varchar(50))+''', a.ThemeCode, a.ThemeName, a.ThemeFolder, a.createdDate, a.updatedDate 
+		from '+@svrV3+'.'+@migrateDB+'.dbo.thme a
+			left join '+@dataDB+'.dbo.thme b on a.themeguid=b.themeguid
+		where b.themeguid is null
+
+		insert '+@dataDB+'.dbo.thmepage (ThemePageGUID, ThemeGUID, pageURL, isDefault, createdDate, updatedDate)
+		select a.ThemePageGUID, a.ThemeGUID, a.pageURL, a.isDefault, a.createdDate, a.updatedDate
+		from '+@svrV3+'.'+@migrateDB+'.dbo.thmepage a
+			left join '+@dataDB+'.dbo.thmepage b on a.themepageguid=b.themepageguid or (a.pageurl=b.pageurl and a.themeguid=b.themeguid)
+		where b.themepageguid is null
+
+		insert '+@dataDB+'.dbo.msta (ModuleStatusGUID, AccountGUID, ModuleStatusName, ModuleStatusDescription, isDefault, createdDate, updatedDate)
+		select a.ModuleStatusGUID, '''+cast(@accountguid as varchar(50))+''', a.ModuleStatusName, a.ModuleStatusDescription, a.isDefault, a.createdDate, a.updatedDate
+		from '+@svrV3+'.'+@migrateDB+'.dbo.msta a
+			left join '+@dataDB+'.dbo.msta b on a.modulestatusguid=b.modulestatusguid or a.ModuleStatusName=b.ModuleStatusName
+		where b.modulestatusguid is null
+
+		insert '+@dataDB+'.dbo.mstastat (ModuleStatusDetailGUID, ModuleStatusGUID, StateID, StateCode, StateName, StateDesc, isDefault, createdDate, updatedDate)
+		select a.ModuleStatusDetailGUID, a.ModuleStatusGUID, a.StateID, a.StateCode, a.StateName, a.StateDesc, a.isDefault, a.createdDate, a.updatedDate
+		from '+@svrV3+'.'+@migrateDB+'.dbo.mstastat a
+			left join '+@dataDB+'.dbo.mstastat b on a.[ModuleStatusDetailGUID]=b.[ModuleStatusDetailGUID] 
+		where b.ModuleStatusDetailGUID is null
+		
+		insert '+@dataDB+'.dbo.modg (ModuleGroupGUID, AccountGUID, ModuleGroupID, ModuleGroupName, ModuleGroupDescription, AccountDBGUID, ImagePath, SortOrder, isDefault, createdDate, updatedDate)
+		select a.ModuleGroupGUID, '''+cast(@accountguid as varchar(50))+''', a.ModuleGroupID, a.ModuleGroupName, a.ModuleGroupDescription, a.AccountDBGUID, a.ImagePath, a.SortOrder, a.isDefault, a.createdDate, a.updatedDate
+		from '+@svrV3+'.'+@migrateDB+'.dbo.modg a
+			left join '+@dataDB+'.dbo.modg b on a.[ModuleGroupGUID]=b.[ModuleGroupGUID] or a.[ModuleGroupID]=b.[ModuleGroupID]
+		where b.ModuleGroupGUID is null'
+
+	if @isdebug=1 print @sqlstr
+	exec sp_executesql @sqlstr
+
+	set @sqlstr='
+		insert '+@dataDB+'.dbo.modginfo (EnvInfoGUID, ModuleGroupGUID, InfoKey, InfoValue, createdDate, updatedDate)
+		select a.EnvInfoGUID, a.ModuleGroupGUID, a.InfoKey, a.InfoValue, a.createdDate, a.updatedDate
+		from '+@svrV3+'.'+@migrateDB+'.dbo.modginfo a
+			left join '+@dataDB+'.dbo.modginfo b on a.[EnvInfoGUID]=b.[EnvInfoGUID] 
+		where b.EnvInfoGUID is null
+
+		insert '+@dataDB+'.dbo.menu (MenuGUID, AccountGUID, MenuID, MenuCode, MenuDescription, createdDate, updatedDate)
+		select a.MenuGUID, '''+cast(@accountguid as varchar(50))+''', a.MenuID, a.MenuCode, a.MenuDescription, a.createdDate, a.updatedDate
+		from '+@svrV3+'.'+@migrateDB+'.dbo.menu a
+			left join '+@dataDB+'.dbo.menu b on a.[MenuGUID]=b.[MenuGUID] or a.[MenuCode]=b.[MenuCode]
+		where b.MenuGUID is null
+
+		insert '+@dataDB+'.dbo.menusmnu (MenuDetailGUID, MenuGUID, SubMenuDescription, Tag, URL, OrderNo, caption, type, upperSubmenuGUID, icon_fa, icon_url, attachment, createdDate, updatedDate)
+		select a.MenuDetailGUID, a.MenuGUID, a.SubMenuDescription, a.Tag, a.URL, a.OrderNo, a.caption, a.[type], a.upperSubmenuGUID, a.icon_fa, a.icon_url, a.attachment, a.createdDate, a.updatedDate
+		from '+@svrV3+'.'+@migrateDB+'.dbo.menusmnu a
+			left join '+@dataDB+'.dbo.menusmnu b on a.[MenuDetailGUID]=b.[MenuDetailGUID] 
+		where b.MenuDetailGUID is null
+
+		insert '+@dataDB+'.dbo.widg (widgetGUID, AccountGUID, widgetId, widgetDescription, sqlStr, createdDate, updatedDate, widgetType, sqlFilter)
+		select a.widgetGUID, '''+cast(@accountguid as varchar(50))+''', a.widgetId, a.widgetDescription, a.sqlStr, a.createdDate, a.updatedDate, a.widgetType, a.sqlFilter
+		from '+@svrV3+'.'+@migrateDB+'.dbo.widg a
+			left join '+@dataDB+'.dbo.widg b on a.[widgetGUID]=b.[widgetGUID] or a.[widgetId]=b.[widgetId]
+		where b.widgetGUID is null
+
+		insert '+@dataDB+'.dbo.para (ParameterGUID, AccountGUID, ParameterId, ParameterDescription, parentParameterGUID, createdDate, updatedDate)
+		select a.ParameterGUID, '''+cast(@accountguid as varchar(50))+''', a.ParameterId, a.ParameterDescription, a.parentParameterGUID, a.createdDate, a.updatedDate
+		from '+@svrV3+'.'+@migrateDB+'.dbo.para a
+			left join '+@dataDB+'.dbo.para b on a.[ParameterGUID]=b.[ParameterGUID] or a.[ParameterId]=b.[ParameterId]
+		where b.ParameterGUID is null
+
+		insert '+@dataDB+'.dbo.paravalu (ParameterValueGUID, ParameterGUID, ParameterValue, ParameterDescription, ParentValueGUID, createdDate, updatedDate)
+		select a.ParameterValueGUID, a.ParameterGUID, a.ParameterValue, a.ParameterDescription, a.ParentValueGUID, a.createdDate, a.updatedDate
+		from '+@svrV3+'.'+@migrateDB+'.dbo.paravalu a
+			left join '+@dataDB+'.dbo.paravalu b on a.[ParameterValueGUID]=b.[ParameterValueGUID] 
+		where b.ParameterValueGUID is null
+		'
+
+	if @isdebug=1 print @sqlstr
+	exec sp_executesql @sqlstr
+
+	set @sqlstr='
+		select ''insert into '+@dataDB+'.dbo.modl (ModuleGUID, AccountGUID, ModuleID, ModuleDescription, parentmoduleguid, modulegroupguid,
+					settingMode, ModuleStatusGUID, themepageguid, AccountDBGUID, needLogin)
+				values (''+iif(cast(a.moduleguid as nvarchar(50)) is null, ''null'', ''''''''+cast(a.moduleguid as nvarchar(50))+'''''''')+'', 
+					'''''+cast(@accountguid as varchar(50))+''''', 
+					''''''+a.ModuleId+'''''', ''+iif(cast(a.ModuleDescription as nvarchar(50)) is null, ''null'', ''''''''+cast(a.ModuleDescription as nvarchar(50))+'''''''')+'', 
+					''+iif(cast(a.parentmoduleguid as nvarchar(50)) is null, ''null'', ''''''''+cast(a.parentmoduleguid as nvarchar(50))+'''''''')+'', 
+					''+iif(cast(a.modulegroupguid as nvarchar(50)) is null, ''null'', ''''''''+cast(a.modulegroupguid as nvarchar(50))+'''''''')+'', 
+					''+iif(cast(a.settingmode as nvarchar(50)) is null, ''null'', ''''''''+cast(a.settingmode as nvarchar(50))+'''''''')+'', 
+					''+iif(cast(a.ModuleStatusGUID as nvarchar(50)) is null, ''null'', ''''''''+cast(a.ModuleStatusGUID as nvarchar(50))+'''''''')+'', 
+					''+iif(cast(a.themepageguid as nvarchar(50)) is null, ''null'', ''''''''+cast(a.themepageguid as nvarchar(50))+'''''''')+'', 
+					''+iif(cast(d.accountdbguid as nvarchar(50)) is null, ''null'', ''''''''+cast(d.accountdbguid as nvarchar(50))+'''''''')+'', 
+					''+iif(a.needlogin=1, ''1'', ''0'')+'')''
+				
+		from '+@svrV3+'.'+@migrateDB+'.dbo.modl a
+			left join '+@svrV3+'.'+@migrateDB+'.dbo.acctdbse a1 on a.accountdbguid=a1.accountdbguid-- and a.moduleid not like ''%APRV''
+			left join acctdbse d on (d.migratedb=a1.DatabaseName or d.migratedb=a1.migrateDB) and d.AccountGUID='''+cast(@accountguid as varchar(50))+'''
+
+			left join '+@svrV3+'.'+@migrateDB+'.dbo.msta e on a.modulestatusguid=e.modulestatusguid
+			left join '+@dataDB+'.dbo.msta e1 on e1.ModuleStatusName=e.ModuleStatusName
+
+			left join '+@svrV3+'.'+@migrateDB+'.dbo.thmepage f on f.themepageguid=a.themepageguid 
+			left join '+@svrV3+'.'+@migrateDB+'.dbo.thme f1 on f1.themeguid=f.themeguid 
+			left join '+@dataDB+'.dbo.thmepage f2 on f2.themeguid=f1.themeguid and f.pageurl=f2.pageurl
+
+			left join '+@svrV3+'.'+@migrateDB+'.dbo.modg g on a.modulegroupguid=g.modulegroupguid
+			left join '+@dataDB+'.dbo.modg g2 on g2.modulegroupid=g.modulegroupid
+
+			left join '+@dataDB+'.dbo.modl b on a.ModuleID=b.ModuleID --AND a.ModuleGUID = b.ModuleGUID
+		where b.ModuleGUID is null --o.type=''U'' and --AND a.isdeleted = 0 --and left(a.moduleid,1) not in (''P'', ''C'') --AND a.AccountDBGUID is Not NULL 
+		'
+	if @isdebug=1 print @sqlstr
+	exec core.slowExecute @sqlstr
+
+	set @sqlstr='
+		update b
+		set ModuleDescription=a.ModuleDescription, parentmoduleguid=a.parentmoduleguid, settingMode=a.settingmode, b.AccountDBGUID=d.AccountDBGUID, 
+			ModuleStatusGUID=e1.ModuleStatusGUID, themepageguid=f2.themepageguid, needLogin=a.needLogin, modulegroupguid=g.modulegroupguid
+		from '+@svrV3+'.'+@migrateDB+'.dbo.modl a
+			left join '+@svrV3+'.'+@migrateDB+'.dbo.acctdbse a1 on a.accountdbguid=a1.accountdbguid-- and a.moduleid not like ''%APRV''
+			left join acctdbse d on (d.migratedb=a1.DatabaseName or d.migratedb=a1.migrateDB) and d.AccountGUID='''+cast(@accountguid as varchar(50))+'''
+			
+			left join '+@svrV3+'.'+@migrateDB+'.dbo.msta e on a.modulestatusguid=e.modulestatusguid
+			left join '+@dataDB+'.dbo.msta e1 on e1.ModuleStatusName=e.ModuleStatusName
+
+			left join '+@svrV3+'.'+@migrateDB+'.dbo.thmepage f on f.themepageguid=a.themepageguid 
+			left join '+@svrV3+'.'+@migrateDB+'.dbo.thme f1 on f1.themeguid=f.themeguid 
+			left join '+@dataDB+'.dbo.thmepage f2 on f2.themeguid=f1.themeguid and f.pageurl=f2.pageurl
+
+			left join '+@svrV3+'.'+@migrateDB+'.dbo.modg g on a.modulegroupguid=g.modulegroupguid
+			left join '+@dataDB+'.dbo.modg g2 on g2.modulegroupid=g.modulegroupid
+
+			left join '+@dataDB+'.dbo.modl b on a.ModuleID=b.ModuleID --AND a.ModuleGUID = b.ModuleGUID
+		where b.ModuleDescription<>a.ModuleDescription or isnull(b.parentmoduleguid, newid())<>a.parentmoduleguid or b.settingMode<>a.settingmode 
+			or isnull(b.ModuleStatusGUID, newid())<>e1.ModuleStatusGUID or isnull(b.themepageguid, newid())<>f2.themepageguid 
+			or isnull(b.AccountDBGUID, newid())<>d.AccountDBGUID or b.needLogin<>a.needLogin or b.modulegroupguid<>g.modulegroupguid
+		'
+
+	if @isdebug=1 print @sqlstr
+	exec sp_executesql @sqlstr
+
+	set @sqlstr='	 
+			select ''insert into '+@dataDB+'.dbo.modlinfo (ModuleInfoGUID, ModuleGUID, InfoKey, InfoValue)
+				values (''''''+cast(a.ModuleInfoGUID as nvarchar(50))+'''''', ''''''+cast(a.ModuleGUID as nvarchar(50))+'''''', ''''''+a.InfoKey+'''''', ''''''+a.InfoValue+'''''')''
+			from '+@svrV3+'.'+@migrateDB+'.dbo.modlinfo a
+				left join '+@dataDB+'.dbo.modlinfo b on a.ModuleInfoGUID=b.ModuleInfoGUID or (a.moduleguid=b.moduleguid and a.infokey=b.infokey)
+			where b.ModuleInfoGUID is null	and (a.InfoKey not like ''view%'' and a.InfoKey not like ''script%'' and a.InfoKey not like ''index%''  and a.InfoKey not like ''unique%'')
+				and a.infovalue is not null
+			'
+
+	if @isdebug=1 print @sqlstr 
+	exec core.slowExecute @sqlstr
+
+	set @sqlstr='	 
+			select ''insert into '+@dataDB+'.dbo.modlinfo (ModuleInfoGUID, ModuleGUID, InfoKey, InfoValue)
+				values (''''''+cast(a.ModuleInfoGUID as nvarchar(50))+'''''', ''''''+cast(a.ModuleGUID as nvarchar(50))+'''''', ''''''+a.InfoKey+'''''', ''''''+a.InfoValue+'''''')''
+			from '+@svrV3+'.'+@migrateDB+'.dbo.modlinfo a
+				left join '+@dataDB+'.dbo.modlinfo b on a.ModuleInfoGUID=b.ModuleInfoGUID or (a.moduleguid=b.moduleguid and a.infokey=b.infokey)
+			where b.ModuleInfoGUID is null	and (a.InfoKey = ''view'')
+				and a.infovalue is not null
+			'
+
+	if @isdebug=1 print @sqlstr 
+	exec core.slowExecute @sqlstr
+
+	set @sqlstr=iif(@isdeltable=1, 'delete from '+@dataDB+'.dbo.modlcolm', '')
+
+	if @isdebug=1 print @sqlstr
+	exec sp_executesql @sqlstr
+
+	set @sqlstr='select ''insert into '+@dataDB+'.dbo.modlcolm (ColumnGUID, ModuleGUID, colKey, colType, colOrder, titlecaption, createdDate, updatedDate, colLength)
+			values (''''''+cast(a.ColumnGUID as nvarchar(50))+'''''', ''''''+cast(a.ModuleGUID as nvarchar(50))+'''''', 
+			''''''+a.colKey+'''''', ''''''+cast(a.colType as nvarchar(10))+'''''', ''''''+cast(a.colOrder as nvarchar(10))+'''''', ''+isnull(''''''''+a.titlecaption+'''''''', ''null'')+'', 
+			''''''+cast(a.createdDate as nvarchar(50))+'''''', ''+isnull(''''''''+cast(a.updatedDate as nvarchar(50))+'''''''', ''null'')+'', ''+
+			isnull(''''''''+cast(a.colLength as nvarchar(10))+'''''''', ''null'')+'')''
+		from '+@svrV3+'.'+@migrateDB+'.dbo.modlcolm a
+			left join '+@dataDB+'.dbo.modlcolm b on a.ColumnGUID=b.ColumnGUID or (a.colkey=b.colkey and a.moduleguid=b.moduleguid)
+		where b.ColumnGUID is null 
+	'
+	
+	if @isdebug=1 print @sqlstr 
+	exec core.slowExecute @sqlstr
+
+	set @sqlstr='
+		update a
+		set titlecaption=b.titlecaption
+		--select a.titlecaption, b.titlecaption 
+		from '+@dataDB+'.dbo.modlcolm a
+			inner join '+@dataDB+'.dbo.modl a2 on a.ModuleGUID=a2.ModuleGUID
+			inner join '+@svrV3+'.'+@migrateDB+'.dbo.modl b2 on a2.moduleid=b2.moduleid 
+			inner join '+@svrV3+'.'+@migrateDB+'.dbo.modlcolm b on b2.moduleguid=b.moduleguid and b.colKey=a.colKey
+		where isnull(a.titlecaption, '''')<>isnull(b.titlecaption, '''')
+	'
+	if @isdebug=1 print @sqlstr
+	exec sp_executesql @sqlstr
+
+	set @sqlstr=iif(@isdeltable=1, 'delete from '+@dataDB+'.dbo.modlcolminfo', '')
+
+	if @isdebug=1 print @sqlstr
+	exec sp_executesql @sqlstr
+
+	set @sqlstr='select ''insert into '+@dataDB+'.dbo.modlcolminfo (ColumnInfoGUID, ColumnGUID, InfoKey, InfoValue, createdDate, updatedDate)
+			values (''''''+cast(a.ColumnInfoGUID as nvarchar(50))+'''''', ''''''+cast(a5.ColumnGUID as nvarchar(50))+'''''', 
+			''''''+a.InfoKey+'''''', ''''''+a.InfoValue+'''''',
+			''''''+cast(a.createdDate as nvarchar(50))+'''''', ''+isnull(''''''''+cast(a.updatedDate as nvarchar(50))+'''''''', ''null'')+'')''
+		from '+@svrV3+'.'+@migrateDB+'.dbo.modlcolminfo a
+			left join '+@svrV3+'.'+@migrateDB+'.dbo.modlcolm a2 on a.columnguid=a2.columnguid
+			left join '+@svrV3+'.'+@migrateDB+'.dbo.modl a3 on a2.moduleguid=a3.moduleguid
+			left join '+@dataDB+'.dbo.modl a4 on a3.moduleid=a4.moduleid 
+			left join '+@dataDB+'.dbo.modlcolm a5 on a2.colkey=a5.colkey and a4.moduleguid=a5.moduleguid
+			left join '+@dataDB+'.dbo.modlcolminfo b on a5.columnguid=b.columnguid and b.infokey=a.infokey
+		where b.ColumnInfoGUID is null and a.infovalue is not null
+	'
+	
+	if @isdebug=1 print @sqlstr 
+	exec core.slowExecute @sqlstr
+
+	set @sqlstr='
+			use '+@dataDB+' 
+			declare @sqlstr1 nvarchar(max)
+			set @sqsltr1 =''DISABLE TRIGGER dbo.tg_modlcolminfo_refresh ON dbo.modlcolminfo;''
+			
+			exec sp_executesql @sqlstr1'
+	if @isdebug=1 print @sqlstr 
+	exec sp_executesql @sqlstr
+
+	set @sqlstr='
+		update a
+		set infovalue=b.infovalue
+		--select a.infokey, a.infovalue, b.infokey, b.infovalue
+		from '+@dataDB+'.dbo.modlcolminfo a
+			inner join '+@dataDB+'.dbo.modlcolm a1 on a.columnguid=a1.columnguid
+			inner join '+@dataDB+'.dbo.modl a2 on a1.ModuleGUID=a2.ModuleGUID
+			inner join '+@svrV3+'.'+@migrateDB+'.dbo.modl b2 on a2.moduleid=b2.moduleid 
+			inner join '+@svrV3+'.'+@migrateDB+'.dbo.modlcolm b1 on b1.moduleguid=b2.moduleguid
+			inner join '+@svrV3+'.'+@migrateDB+'.dbo.modlcolminfo b on b.ColumnGUID=b1.ColumnGUID and b.InfoKey=a.InfoKey
+		where isnull(a.infovalue, '')<>isnull(b.infovalue, '')
+	
+		'
+	if @isdebug=1 print @sqlstr 
+	exec sp_executesql @sqlstr
+
+	set @sqlstr='
+			use '+@dataDB+' 
+			declare @sqsltr1 nvarchar(max)
+			set @sqsltr1 =''ENABLE TRIGGER dbo.tg_modlcolminfo_refresh ON dbo.modlcolminfo;''
+			
+			exec sp_executesql @sqlstr1'
+	if @isdebug=1 print @sqlstr 
+	exec sp_executesql @sqlstr
+
+
+
+	set @sqlstr=iif(@isdeltable=1, 'delete from '+@dataDB+'.dbo.modlinfo', '')
+
+	if @isdebug=1 print @sqlstr 
+	exec sp_executesql @sqlstr
+
+	set @sqlstr='
+		select ''insert into '+@dataDB+'.dbo.modlinfo (ModuleInfoGUID, ModuleGUID, InfoKey, InfoValue)
+			values (''''''+cast(a.ModuleInfoGUID as nvarchar(50))+'''''', ''''''+cast(a.ModuleGUID as nvarchar(50))+'''''', ''''''+a.InfoKey+'''''', ''''''+replace(a.InfoValue, '''''''', '''''''''''')+'''''')''
+		from '+@svrV3+'.'+@migrateDB+'.dbo.modlinfo a
+			left join '+@dataDB+'.dbo.modlinfo b on a.ModuleInfoGUID=b.ModuleInfoGUID or (a.moduleguid=b.moduleguid and a.infokey=b.infokey)
+		where b.ModuleInfoGUID is null and a.infovalue is not null'
+		
+	if @isdebug=1 print @sqlstr 
+	exec core.slowExecute @sqlstr
+
+	set @sqlstr='
+	--user (tidak perlu, ambil dari oph saja)
+	--insert into '+@dataDB+'.dbo.[user] (UserGUID, AccountGUID, UserID, UserName, Email, [Password], ConfirmPassword, AutoLogin, LastLogin, ExpiryPwd)
+	--select a.UserGUID, '''+cast(@accountguid as varchar(50))+''', a.userid, a.UserName, isnull(a.Email,''''), isnull(a.[Password],''''), isnull(a.ConfirmPassword,''''), a.AutoLogin, null, a.ExpiryPwd
+	--from '+@svrV3+'.'+@migrateDB+'.dbo.[user] a
+	--	left join '+@dataDB+'.dbo.[user] b on a.userguid=b.Userguid or a.userid=b.userid
+	--where b.UserGUID is null 
+
+	--ugrp
+	insert into '+@dataDB+'.dbo.ugrp (UGroupGUID, AccountGUID, GroupID, GroupDescription, allExceptUser, TokenUser, allExceptEnv, TokenEnv, allExceptModule)
+	select a.UGroupGUID, '''+cast(@accountguid as varchar(50))+''', a.GroupId, a.GroupDescription, 0, a.TokenUser, 1, null, 0 
+	from '+@svrV3+'.'+@migrateDB+'.dbo.ugrp a
+		left join '+@dataDB+'.dbo.ugrp b on a.uGroupguId=b.uGroupguID
+	where b.UGroupGUID is null
+
+	insert into '+@dataDB+'.dbo.ugrpmodl (AccessGUID, UGroupGUID, ModuleGUID, AllowAccess, AllowAdd, AllowEdit, AllowDelete, AllowForce, AllowWipe)
+	select a.accessguid, b2.UGroupGUID, b3.ModuleGUID, isnull(a.AllowAccess, 0), isnull(a.AllowAdd, 0), isnull(a.AllowEdit, 0), isnull(a.AllowDelete, 0), isnull(a.AllowForce, 0), isnull(a.AllowWipe, 0)
+	from '+@svrV3+'.'+@migrateDB+'.dbo.ugrpmodl a
+		inner join '+@svrV3+'.'+@migrateDB+'.dbo.ugrp a2 on a.UGroupGUID=a2.UGroupGUID
+		inner join '+@svrV3+'.'+@migrateDB+'.dbo.modl a3 on a.ModuleGUID=a3.moduleguid
+		inner join '+@dataDB+'.dbo.ugrp b2 on a2.ugroupguid=b2.ugroupguid
+		inner join '+@dataDB+'.dbo.modl b3 on a3.Moduleguid=b3.moduleguid
+		left join '+@dataDB+'.dbo.ugrpmodl b on b.moduleguid=b3.ModuleGUID and b.UGroupGUID=b2.UGroupGUID
+	where b.AccessGUID is null 
+
+	insert into '+@dataDB+'.dbo.modlappr (ApprovalGUID, ModuleGUID, ApprovalGroupGUID, UpperGroupGUID, BottomGroupGUID, Lvl, SQLfilter, ZoneGroup)
+	select a.approvalguid, b3.ModuleGUID, a.approvalgroupguid, a.uppergroupguid, a.bottomgroupguid, a.Lvl, a.SqlFilter, a.ZoneGroup
+	from '+@svrV3+'.'+@migrateDB+'.dbo.modlappr a
+		--inner join '+@svrV3+'.'+@migrateDB+'.dbo.modl a2 on a.ApprovalGUID=a2.ApprovalGUID
+		inner join '+@dataDB+'.dbo.modl b3 on a.Moduleguid=b3.moduleguid
+		left join '+@dataDB+'.dbo.modlappr b on b.approvalguid=a.approvalguid
+	where b.ApprovalGUID is null
+
+	'
+
+	if @isdebug = 1 print @sqlstr 
+	exec sp_executesql @sqlstr
+
+

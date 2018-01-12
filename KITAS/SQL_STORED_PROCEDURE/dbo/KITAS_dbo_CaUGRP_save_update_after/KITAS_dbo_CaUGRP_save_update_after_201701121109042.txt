@@ -1,0 +1,52 @@
+
+CREATE PROCEDURE [dbo].[CaUGRP_save_update_after]
+	@GUID uniqueidentifier, @hostGUID uniqueidentifier, @isUpdate bit
+as	--CreatedBy eLs ON Aug, 2016
+
+--declare @GUID uniqueidentifier = '132BF2E3-9CEC-4965-8E1C-25658493C603', @hostGUID uniqueidentifier, @isUpdate bit=1
+
+	declare @TokenUser varchar(MAX), @sqlstr nvarchar(MAX)
+	select @TokenUser = TokenUser from CoUGRP where UGroupGUID = @GUID
+
+	--Inserting new user
+	--isUser
+	set @sqlstr = 
+		'insert into CoUGRPUSER(UGroupGUID, MemberFlag, isUser, MemberUserGUID, isGroup, MemberGroupGUID, MemberName)' + CHAR(10) +
+		'select ''' + cast(@GUID as varchar(50)) + ''', ''isUser'', 1, UserGUID, 0, NULL, UserId + '' - '' + UserName ' + CHAR(10) +
+		'from CoUSER a left join CoUGRPUSER b ' + CHAR(10) +
+		CHAR(9)+'ON a.UserGUID = b.MemberUserGUID AND UGroupGUID = ''' + cast(@GUID as varchar(50)) + '''' + CHAR(10) +
+		'where MemberUserGUID is NULL AND UserGUID in('''+ REPLACE(@TokenUser, '*', ''', ''') +''')'
+
+	exec(@sqlstr) 
+
+	--isGroup
+	set @sqlstr = 
+		'insert into CoUGRPUSER(UGroupGUID, MemberFlag, isUser, MemberUserGUID, isGroup, MemberGroupGUID, MemberName)' + CHAR(10) +
+		'select ''' + cast(@GUID as varchar(50)) + ''', ''isGroup'', 0, NULL, 1, a.UGroupGUID, GroupId + '' - '' + GroupDescription' + CHAR(10) +
+		'from CoUGRP a left join CoUGRPUSER b ' + CHAR(10) +
+		CHAR(9)+'ON a.UGroupGUID = b.MemberGroupGUID AND b.UGroupGUID = ''' + cast(@GUID as varchar(50)) + '''' + CHAR(10) +
+		'where b.MemberGroupGUID is NULL AND a.UGroupGUID in('''+ REPLACE(@TokenUser, '*', ''', ''') +''')'	
+
+	exec(@sqlstr)
+
+	--Deleting an un-used user
+	--isUser
+	set @sqlstr = 
+		'delete a from CoUGRPUSER a' + CHAR(10) +
+		CHAR(9)+'left join CoUSER b ON a.MemberUserGUID = b.UserGUID' + CHAR(10) +
+		'where UGroupGUID = ''' + CAST(@GUID as varchar(50)) + ''' AND MemberFlag = ''isUser''' + CHAR(10) +
+		CHAR(9)+'AND MemberUserGUID not in('''+ REPLACE(@TokenUser, '*', ''', ''') +''')'
+
+	exec(@sqlstr)
+
+	--isGroup
+	set @sqlstr = 
+		'delete a from CoUGRPUSER a' + CHAR(10) +
+		CHAR(9)+'left join CoUGRP b ON a.MemberGroupGUID = b.UGroupGUID' + CHAR(10) +
+		'where a.UGroupGUID = ''' + CAST(@GUID as varchar(50)) + ''' AND MemberFlag = ''isGroup''' + CHAR(10) +
+		CHAR(9)+'AND MemberGroupGUID not in('''+ REPLACE(@TokenUser, '*', ''', ''') +''')'
+
+	exec(@sqlstr)
+
+
+

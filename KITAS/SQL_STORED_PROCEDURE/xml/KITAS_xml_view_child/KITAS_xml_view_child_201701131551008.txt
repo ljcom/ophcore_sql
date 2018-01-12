@@ -1,0 +1,128 @@
+
+CREATE PROCEDURE [xml].[view_child] @hostGUID uniqueidentifier, @tablename varchar(100), 
+	@GUID uniqueidentifier, @editMode int=0, @debug int=0
+as
+--declare 
+--	@hostGUID uniqueidentifier = gen.gethost('ap\edrick.LEONARDO', null), @tablename varchar(100) = 'TaPROD', 
+--	@GUID uniqueidentifier = 'A74720DE-87B0-4849-ADF6-526E49EC9FEA', @editMode int=0, @debug int=1
+
+	declare 
+		@skinFolder varchar(50), @xinfo varchar(max),@tablename1 nvarchar(20),@UGroupGUID uniqueidentifier,@userGUID varchar(50),
+		@UGroup int,@atablename varchar(100), @otablename varchar(100),@parentTable varchar(100), @headTable  varchar(100) 
+
+	set @aTableName= left(@tablename,1)+ 'a' +right(@tablename,len(@tablename)-2 )	
+	set @parentTable= SUBSTRING(@aTableName,1,6) 
+	set @headTable=SUBSTRING(@aTableName,1,1)
+	set @oTableName=left(@parentTable,1)+ 'o' +right(@parentTable,len(@parentTable)-2 )
+
+	--fieldkey
+	declare @fieldKey varchar(100), @minCol int
+	select @minCol=min(colorder)
+	from gen.coTABL a
+		inner join gen.coTABLFIEL b
+			on a.TableGUID=b.tableGUID
+	where tablename=@atablename 
+	
+	select @fieldKey=ColName
+	from gen.coTABL a
+		inner join gen.coTABLFIEL b
+			on a.TableGUID=b.tableGUID
+	where tablename=@atablename and b.colorder=@mincol
+
+	print @fieldkey
+
+	declare @allowBrowse bit = 0, @isDeletedTable bit = 0
+	--skin
+	select @skinFolder = c.skinFolder, @userGUID = convert(nvarchar(50), a.userGUID)
+	from CoUSER a
+		inner join CoUSERHOST b
+			on a.userguid=b.userguid
+		inner join CoSKIN c
+			on a.skinguid=c.skinguid
+	where b.hostguid = @hostguid
+
+	set @tablename1 = substring(@tablename,3,4)
+	if substring(@tablename,2,1) = 'd' set @isDeletedTable=1
+	if substring(@tablename,2,1) &lt;&gt; 'a' set @tablename='ta'+@tablename1
+		
+	--select @allowBrowse = a.allowBrowse from CoUGRPMODL a
+	--	inner join coMODL b
+	--		on a.ModuleGUID=b.ModuleGUID
+	--where b.moduleid = @tablename
+
+	--select @UGroupGUID=UGroupGUID from coUSERUGRP where UserGUID=@UserGUID
+	
+print @GUID
+
+	declare @childrenFilter nvarchar(max), @childResult nvarchar(max)
+
+	select @childrenFilter=childrenFilter from comodl where moduleid=@atablename
+
+	set @childrenFilter=
+		'declare @GUID uniqueidentifier = '''+convert(varchar(50), @GUID)+''''+char(10)+
+		@childrenFilter
+
+	declare @child table(field varchar(max))
+	insert into @child(field) exec(@childrenFilter)
+	select @childResult = field from @child
+
+	--xinfo
+	set @xinfo= '
+		select
+			'''+@tablename+'''  ''tableName'',
+			case when isnull(moduleDescription,'''')='''' then null else moduleDescription end ''description'',
+			'''+@fieldKey+''' ''fieldKey'',
+			isnull((	select '+@fieldKey+' 
+						from oph.'+@tablename+' '+@tablename+'
+						where '+@fieldKey+'='''+convert(varchar(50),@GUID)+'''),'''+case when @editMode=2 then convert(varchar(50),newid()) else '00000000-0000-0000-0000-000000000000' end+''') ''GUID'',
+			'''+@skinfolder+''' ''skinFolder'','+
+			cast(@editMode as varchar(1))+' ''editMode'','+
+			--cast(@allowAdd as varchar(1))+' ''permission/allowAdd'','+
+			--cast(@allowEdit as varchar(1))+' ''permission/allowEdit'','+
+			--cast(@allowDelete as varchar(1))+' ''permission/allowDelete'','+
+			--cast(isnull(@UGroup,'') as varchar(1))+' ''permission/Group'','+
+			--cast(@allowWipe as varchar(1))+' ''permission/allowWipe''
+			' null
+		from coMODL a
+		where moduleid='''+@atablename+'''
+		for xml path(''''), type'
+
+	print @editmode
+	--select @allowadd, @allowBrowse, @allowClose, @allowDelete, @allowEdit, @allowWipe, @UGroup
+	declare @xchild varchar(max)
+	
+	set @xchild='
+	select c.moduleid ''child/tableName'', 
+		c.ModuleDescription ''child/childTitle'',
+		b.allowadd ''child/info/permission/allowAdd'',
+		b.allowedit ''child/info/permission/allowEdit'',
+		b.allowdelete ''child/info/permission/allowDelete'',
+		b.allowprint ''child/info/permission/allowPrint'',
+		b.allowexport ''child/info/permission/allowExport'',
+		b.SubOrderByStr ''child/info/OrderBy''
+	--select *
+	from coMODL a
+		inner join coMODLSMOD b
+			on a.ModuleGUID=b.ModuleGUID and b.allowbrowse=1
+		inner join coMODL c
+			on c.moduleguid=b.submoduleguid
+	where a.ModuleId='''+@atableName+''''+ IIF(isNULL(@childrenFilter,'') = '', '', 'and b.submoduleguid in ('+@childResult+')')+'
+	order by OrderNo
+	for xml path(''''), type'
+	
+	declare @x2 varchar(max)
+	set @x2='
+	select 
+		(	select ('+@xinfo+')
+		for xml path(''''), type
+		) ''info'',
+		(	select ('+@xchild+')
+		for xml path(''''), type
+		) ''children'', null
+	for xml path(''view''), root'
+
+	if @debug=1 select @x2 [x2], @xinfo [xInfo], @xchild [xChild]
+	else exec(@x2)
+
+
+

@@ -1,0 +1,33 @@
+
+
+
+CREATE proc [api].[theme_form_v4] @moduleguid nvarchar(max),@guid nvarchar(max),@database nvarchar(max)
+as
+
+declare @sqlstr nvarchar(max)
+
+select @sqlstr =  
+'
+use '+@database+'
+
+	select columnguid,moduleguid,infokey,infovalue,null,null From (select convert(nvarchar(max),colkey) as colkey, convert(nvarchar(max),coltype) as coltype ,convert(nvarchar(max),colorder) as colorder,moduleguid,columnguid from modlcolm) as a 
+	unpivot (infovalue for infokey in(colkey,coltype,colorder)) as upvt where moduleguid ='''+@moduleguid+'''
+	union
+	select a.columnguid,moduleguid,infokey,infovalue,null,null from modlcolminfo a join modlcolm b on a.columnguid = b.columnguid where moduleguid ='''+@moduleguid+'''
+	union
+	select ColumnGUID,b.moduleguid,''colValue'',ColValue,colvaluedate,colvaluemoney From docmcolm a join docm b on a.docguid = b.docguid join modlcolm c on a.ColKey = c.colKey and b.ModuleGUID = c.ModuleGUID where a.docguid ='''+@guid+'''
+	order by columnguid,infokey
+
+
+--select a.columnguid,moduleguid,sectionno,rowtitle,colno,coltype,a.colkey,fieldno,iseditable,isnullable,colvalue,titlecaption,rowno,[length],align,cols,width,preview from modlcolm a join(
+--select *
+--From  (select infovalue,infokey,columnguid from modlcolminfo)  as a
+--	pivot (max(infovalue) for infokey in ([align],[cols],[fieldNo],[isEditable],[isNullable],[length],[preview],[rowNo],[rowTitle],[sectionNo],[titlecaption],width)) as pvt
+--) as b on a.ColumnGUID = b.ColumnGUID
+--join (select colkey,colvalue from docmcolm where docguid ='''+convert(nvarchar(max),@guid)+''') as c on c.colkey = a.colkey
+--where moduleguid = '''+convert(nvarchar(max),@moduleguid)+''''
+
+exec (@sqlstr)
+
+
+

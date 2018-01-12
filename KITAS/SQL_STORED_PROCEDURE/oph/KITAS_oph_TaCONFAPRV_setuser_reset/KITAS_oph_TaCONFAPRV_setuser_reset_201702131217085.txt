@@ -1,0 +1,57 @@
+CREATE procedure oph.TaCONFAPRV_setuser_reset
+	
+as --automatic creation by system, you have to remove this comment to customize this procedure
+ 	declare @pguid uniqueidentifier, @uGUID uniqueidentifier, @i int
+	DECLARE #currr CURSOR
+	READ_ONLY
+	FOR select CONFGUID, ApprovalUserGUID, min(lvl)
+		from ToCONFAPRV
+
+		group by CONFGUID, ApprovalUserGUID
+		having count(*)&gt;1
+
+	OPEN #currr
+
+	FETCH NEXT FROM #currr INTO @pGUID, @uGUID, @i
+	WHILE (@@fetch_status &lt;&gt; -1)
+	BEGIN
+		IF (@@fetch_status &lt;&gt; -2)
+		BEGIN
+			delete from ToCONFAPRV
+			where CONFGUID=@pGUID and approvaluserGUID=@uGUID
+				and lvl&gt;@i
+		END
+		FETCH NEXT FROM #currr INTO @pGUID, @uGUID, @i
+	END
+
+	CLOSE #currr
+	DEALLOCATE #currr
+
+	declare @xguid uniqueidentifier
+
+	DECLARE #currr1 CURSOR
+	READ_ONLY
+	FOR select CONFGUID, ApprovalUserGUID,
+	max(convert(varchar(100), ToCONFAPRVGUID))
+		from ToCONFAPRV
+		group by CONFGUID, ApprovalUserGUID
+		having count(*)&gt;1
+
+	OPEN #currr1
+
+	FETCH NEXT FROM #currr1 INTO @pGUID, @uGUID, @xGUID
+	WHILE (@@fetch_status &lt;&gt; -1)
+	BEGIN
+		IF (@@fetch_status &lt;&gt; -2)
+		BEGIN
+			delete from ToCONFAPRV
+			where CONFGUID=@pGUID and approvaluserGUID=@uGUID
+				and ToCONFAPRVGUID&lt;&gt;@xGUID
+
+		END
+		FETCH NEXT FROM #currr1 INTO @pGUID, @uGUID, @xGUID
+	END
+
+	CLOSE #currr1
+	DEALLOCATE #currr1
+

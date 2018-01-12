@@ -1,0 +1,18 @@
+
+CREATE PROCEDURE [gen].[VerifyHost] @accountid varchar(50), @hostGUID uniqueidentifier
+--WITH ENCRPYTION
+as
+	if exists(
+		select * 
+		from userhost a
+			inner join [user] c
+				on c.userguid=a.userguid
+			inner join acct b 
+				on c.accountGUID=b.AccountGUID
+		where hostguid=@hostguid and accountid=@accountid) 
+
+		select @hostguid
+	else
+		select null
+
+

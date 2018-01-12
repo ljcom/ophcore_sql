@@ -1,0 +1,10 @@
+
+CREATE VIEW [dbo].[MoCTGR_1]
+as	--CreatedBy eLs ON Jan, 2017
+
+	select 
+		CTGRGUID, ID, Name, PARNCTGRGUID, CreatedDate, CreatedUser, UpdatedDate, UpdatedUser
+	from MoCTGR 
+	where isDeleted = 0 AND PARNCTGRGUID is NULL 
+
+

@@ -1,0 +1,273 @@
+
+
+
+CREATE procedure [api].[function_execute] 
+	@hostGUID uniqueidentifier, 
+	@code varchar(20),
+	@GUID uniqueidentifier, @comment varchar(max), @isDebug bit=0
+--WITH ENCRYPTION
+as
+	declare @ver varchar(10), @db varchar(50), @typecode varchar(1)
+	exec gen.getDBInfo @hostguid, @code, @ver output, @db output, @typecode output
+
+	declare @moduleGUID uniqueidentifier
+	select @moduleguid=ModuleGUID from modl where moduleid=@code
+
+	declare @dbcode varchar(100)=@db+'dbo'+quotename(@code)
+	declare @primaryCol varchar(50)
+	declare @docRefno varchar(50), --@docNo varchar(50), 
+		@docDate varchar(50)
+
+	--if @ver='3.0' and exists(select * from docm where moduleguid=@moduleguid) begin
+	--	set @ver='4.0'
+	--	set @db=db_name()
+	--	set @dbcode=@db+'dbo.docm'
+	--	set @primaryCol='docGUID'
+	--	set @docDate='docDate'
+	--	set @docRefno='docRefNo'
+	--end
+	--else begin
+		if @ver='3.0' set @dbcode=@db+'.dbo.'+stuff(@code,2,1,'o')
+		exec api.getPrimaryKey @hostguid, @code, @primaryCol OUTPUT
+		exec api.getPrimaryCol @hostguid, @code, 2, @docDate OUTPUT	--docdate
+		--exec api.getPrimaryCol @hostGUID, @code, 3, @docNo OUTPUT	--docno
+		exec api.getPrimaryCol @hostguid, @code, 4, @docRefno OUTPUT	--docrefno	
+
+	--end
+
+	declare @isExists bit=0
+	declare @sqlstr nvarchar(max), @sqlpar nvarchar(max)
+
+	--run standard
+	declare @userGUID uniqueidentifier
+	declare @msg nvarchar(100)='', @isCancel bit=0
+
+	--get user information
+	select @userGUID=userguid from USERHOST where hostGUID=@hostGUID
+	
+	--check custom execute
+	declare @custom_proc nvarchar(max)=@code+'_execute_custom'
+	declare @custom_par nvarchar(max)='@GUID uniqueidentifier, @hostGUID uniqueidentifier'
+
+	set @isExists=0 
+	exec gen.checkObject @custom_proc, 'dbo', @db, @isExists OUTPUT
+
+	if @isExists=1 begin
+		print 'Execute Custom'
+		set @custom_proc='exec '+@db+'.dbo.'+@custom_proc+' '''+CAST(@GUID AS VARCHAR(50))+''', '''+CAST(@hostGUID AS VARCHAR(50))+''''
+		--set @custom_proc=@db+'.dbo'+@custom_proc
+		exec sp_executesql @custom_proc, @custom_par, @GUID, @hostGUID
+
+		--set @sqlstr = 'exec '+@db+'.dbo.'+ @custom_proc +' '+'@GUID='+isnull(''''+convert(nvarchar(max),@GUID)+'''','NULL')+',@hostGUID='+isnull(''''+convert(nvarchar(max),@hostGUID)+'''','NULL')
+		--if @isdebug = 1 select @sqlstr
+		--exec sp_executesql @sqlstr,N'@msg nvarchar(max) output',@msg output
+	end
+	else begin
+		--check additional before execute
+		declare @before_proc nvarchar(max)=@code+'_execute_before'
+		declare @before_par nvarchar(max)='@GUID uniqueidentifier, @hostGUID uniqueidentifier, @isCancel OUTPUT, @msg OUTPUT'
+		set @isExists=0
+		exec gen.checkObject @before_proc, 'dbo', @db, @isExists OUTPUT
+
+		if @isExists=1 begin
+			set @before_proc='exec '+@db+'.dbo.'+@before_proc+' '''+CAST(@GUID AS VARCHAR(50))+''', '''+CAST(@hostGUID AS VARCHAR(50))+''', @isCancel OUTPUT, @msg OUTPUT'
+			--set @before_proc=@db+'.dbo.'+@before_proc
+			exec sp_executesql @before_proc, @before_par, @GUID, @hostGUID, @isCancel OUTPUT, @msg OUTPUT
+		end
+
+		-- put check process to make sure this user allow to execute --
+
+		if @isCancel=0 begin
+			--run if only not cancelled
+			
+			set @sqlstr='
+				declare @statuscomment varchar(max), @delegateUserGUID uniqueidentifier, @skipMail bit=0, @approve int, @lvl int 
+
+				--begin tran
+
+				select @approve = status
+				from '+@dbcode+'
+				where '+@primaryCol+' = @GUID
+
+				if @approve <> 500
+				begin
+					set @approve = 400
+					if exists(
+						select * from '+@dbcode+'
+						where status=300 and '+@primaryCol+'=@GUID and createduser=@userGUID) 
+							and exists(select * from '+@dbcode+'APRV where '+@primaryCol+'=@GUID)
+
+						delete from '+@dbcode+'APRV where '+@primaryCol+'=@GUID
+					else
+					if exists(
+						select * from '+@dbcode+'
+						where status=300 and '+@primaryCol+'= @GUID and createduser<>@userGUID) 
+							and exists(select * from '+@dbcode+'APRV where '+@primaryCol+'=@GUID) begin
+						set @approve=300
+					end
+
+					exec api.function_execute_setUser @hostGUID, @code, @GUID, @isDebug 
+
+					declare @totApproval int
+					select @totApproval=COUNT(*) from '+@dbcode+'APRV where '+@primaryCol+'=@GUID and Lvl>0
+
+					if @totApproval=0 set @approve=0
+
+					declare @minlvl1 int,@sumLVL int
+					declare @username varchar(1000), @username2 varchar(max)
+
+					if @approve=400 begin
+						select @minlvl1=min(lvl)
+						from '+@dbcode+'APRV						
+						where '+@primaryCol+' = @GUID and isnull(status,0)<400 and approvaluserGUID = @userGUID
+
+						if exists(select * from '+@dbcode+'APRV
+							where '+@primaryCol+' = @GUID and approvaluserGUID = @userGUID
+								and (isnull(Status,0)<400 and lvl=@minlvl1))
+						begin 
+							update '+@dbcode+'APRV 
+								set	status = 
+										case 
+										when approvalUserGUID = @userguid then 400
+										when 	approvalUserGUID <> @userGUID
+											and @approve in (100, 200)
+										and lvl >= @lvl and status in (300, 400) then 200
+										else status end,
+									updatedDate = getdate(),
+									curlvl =
+										case
+										when isnull(curlvl, 0) < @lvl then @lvl
+										else curlvl end,
+									delegateUserGUID = @delegateUserGUID
+								where '+@primaryCol+' = @GUID and approvaluserGUID = @userGUID
+									and isnull(Status,0)<400 and lvl=@minlvl1
+
+						end
+						else set @skipMail=1
+
+						select @sumLVL=count(lvl) from '+@dbcode+'APRV where '+@primaryCol+' = @GUID
+
+						if (select count(*) from '+@dbcode+'APRV where '+@primaryCol+'= @GUID and status=400)=@sumLVL begin
+							select @username = username
+							from '+@dbcode+'APRV
+								inner join '+@db+'.dbo.couser
+									on '+@dbcode+'APRV.approvalUserGUID = coUSER.userGUID
+							where '+@primaryCol+' = @GUID and approvalUserGUID=@userGUID
+								and status=400
+
+							set @statusComment=@username
+						end
+						else
+						begin
+							if exists(select * from '+@dbcode+'APRV
+								where
+									'+@primaryCol+'= @GUID
+									and isnull(status,0)<400 and isactive=1) 
+							begin	
+								declare @minlvl int
+								select @minlvl=min(lvl) from '+@dbcode+'APRV where '+@primaryCol+' = @GUID and isnull(status,0)<400 and isactive=1	
+								DECLARE #cur cursor FOR
+									select username
+									from '+@dbcode+'APRV
+										inner join '+@db+'.dbo.couser
+											on '+@dbcode+'APRV.approvalUserGUID = coUSER.userGUID
+									where '+@primaryCol+' = @GUID and lvl = @minlvl and isnull(status,0)<400
+
+								OPEN #cur
+								FETCH next from #cur into @username
+
+								WHILE @@fetch_status=0
+								BEGIN
+									if @username2 is null
+										set @username2 = @username
+									else 
+										set @username2 = @username2+'', ''+@username
+
+									FETCH next from #cur into @username
+								END
+								CLOSE #cur
+								DEALLOCATE #cur 
+
+								set @statusComment = @username2
+								select @approve=100	
+							end
+						end 
+					end
+
+					if @approve=400
+						set @msg=''2Approval Succesfully''
+					else if @approve=300
+						set @msg=''3Rejected Submission is failed. You are not the requestor.''
+					else if @approve=100
+						set @msg=''2Submission Succesfully''
+					else begin 
+						set @msg=''3Submission is failed since you don''''t have any approval users above you.''
+					end
+
+					update '+@dbcode+'
+					set updateddate=getdate(),status = @approve, 
+						StatusComment = case @approve
+							when 0 then ''Recently Created''
+							when 100 then ''For approval by ''
+							when 200 then ''Re-approval by''
+							when 300 then ''Not Approved by ''
+							when 400 then ''Approved by '' end+@statusComment
+					where '+@primaryCol+' = @GUID and @approve in (100, 400)
+
+					if exists(	
+						select * 
+						from '+@dbcode+' a
+						where '+@primaryCol+' = @GUID
+							and status = 400 and a.'+@docrefno+' is null) 
+
+					begin
+						declare @docDate1 smalldatetime
+						declare @autono varchar(10)
+
+						select @docDate1 = '+@docDate+'
+						from '+@dbcode+'
+						where '+@primaryCol+' = @GUID and status=400 and '+@docrefno+' is null
+	
+						exec '+@db+'.gen.getNumber '''+@code+''', @docDate1, 1, @autono OUTPUT
+
+						update '+@dbcode+'
+						set '+@docrefno+'=@autono --, statusComment = ''
+						where  '+@primaryCol+' = @GUID and status = 400 and '+@docrefno+' is null
+
+					end
+				end
+
+				--commit tran
+
+				--if @skipMail=0 exec api.function_mail @hostGUID, ''execute'', @code, @GUID'
+			
+			
+			set @sqlpar ='@hostGUID uniqueidentifier, @code varchar(20), @GUID uniqueidentifier, @userGUID uniqueidentifier, @isdebug bit, @msg varchar(max) OUTPUT'
+			
+			exec sp_executesql @sqlstr, @sqlpar, @hostGUID, @code, @GUID, @userGUID, @isdebug, @msg OUTPUT
+			if @isdebug=1 print left(@sqlstr,4000)
+			if @isdebug=1 	select @hostGUID, @code, @GUID, @userGUID, @sqlstr, @sqlpar
+			if @isdebug=1 print substring(@sqlstr,4001,8000)
+			if @isdebug=1 print @sqlpar
+			print len(@sqlstr)
+
+			--additional procedure after execution
+			declare @after_proc nvarchar(max)=@code+'_execute_after'
+			declare @after_par nvarchar(max)='@GUID uniqueidentifier, @hostGUID uniqueidentifier'
+
+			set @isExists=0
+			exec gen.checkObject @after_proc, 'dbo', @db, @isExists OUTPUT
+
+			if @isExists=1 begin
+				set @after_proc='exec '+@db+'.dbo.'+@after_proc+' '''+CAST(@GUID AS VARCHAR(50))+''', '''+CAST(@hostGUID AS VARCHAR(50))+''''
+				--set @after_proc=@db+'.dbo.'+@after_proc
+				exec sp_executesql @after_proc, @after_par, @GUID, @hostGUID
+			end
+		end
+	end
+
+	select @msg executed
+
+
+
+

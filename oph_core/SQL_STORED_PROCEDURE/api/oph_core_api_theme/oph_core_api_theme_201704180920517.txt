@@ -1,0 +1,302 @@
+
+
+
+CREATE procedure [api].[theme] @accountid varchar(50), @dbcore varchar(50), @hostGUID uniqueidentifier, @code varchar(50), @GUID uniqueidentifier, @envCode varchar(10)=null, @isDebug bit=0
+--WITH ENCRYPTION
+as
+	declare @theme varchar(50)
+	exec gen.getDBInfo @accountid, @dbcore, @code, @themename=@theme output
+
+	declare @userGUID uniqueidentifier--, @accountGUID uniqueidentifier
+
+	select @userGUID=a.userGUID--, @accountGUID=b.accountGUID 
+	from userhost a 
+		inner join [user] b on a.userguid=b.userguid
+	where hostguid=@hostguid
+
+	--select @envCode=ModuleGroupID
+	--from modg 
+	--where (ModuleGroupID=@envCode or (ModuleGroupID='' and isDefault=1))
+
+	--select @themeFolder=d.ThemeFolder 
+	--from modg a 
+	--	inner join modginfo b 
+	--		on a.ModuleGroupGUID= b.EnvGUID and b.InfoKey = 'themeCode' 
+	--	inner join acct c 
+	--		on a.AccountGUID=c.AccountGUID 
+	--	inner join thme d 
+	--		on d.themecode=b.infovalue and d.AccountGUID=c.AccountGUID
+	--where --c.AccountId = '" + accountid + "' AND 
+	--	a.modulegroupid=@envcode
+
+	select (
+		select (
+			--info
+			select (
+				--account
+				select @accountid account 
+				) account, 
+				
+				--themeFolder
+				@theme 'themeFolder',
+				--title
+				(	select ModuleDescription 
+					from modl a
+					where moduleid=@code) title, 
+				--code
+				(	select moduleid id, ModuleDescription name,api.settingmode(settingmode) as settingMode 
+					from modl  a
+					where moduleid=@code
+					for xml path(''), elements, type) code, 
+				--user
+				(select a.userGUID, userId, userName, '' userURL, hostGUID 
+				from userhost a
+					inner join [user] b
+						on a.userguid=b.userguid
+				where hostguid=@hostGUID
+				for xml path(''), elements, type) [user]	 
+			for xml path(''), elements, type
+			) info,
+			(select 'CTGRGUID' '@key', 'ID' '@fieldId', 'Name' '@GroupDescription',  'PARNCTGRGUID' '@Parent', 'Category' 'caption', 'maCTGRFRON' 'code' for xml path('filter'), elements, type
+			) filters,
+			(select 'BRANGUID' '@key', 'ID' '@fieldId', 'Name' '@GroupDescription', 'PARNBRANGUID' '@Parent', 'Division' 'caption', 'maBRANFRON' 'code' for xml path('filter'), elements, type
+			) filters,
+			--menus
+			(select menucode '@code', 
+				--submenus
+				(select 'guid' '@GUID', type '@mode', 
+					tag 'type', caption, url pageURL, icon_fa fa,
+					--submenus
+					(select 'guid' '@GUID', type '@mode',
+						tag 'type', caption, url pageURL, icon_fa fa
+					from menusmnu c
+					where c.uppersubmenuGUID=b.MenudetailGUID
+					order by orderno asc
+					for xml path('submenu'), elements, type) submenus
+				from menusmnu b
+				where b.menuGUID=a.MenuGUID
+				order by orderno asc
+				for xml path('submenu'), elements, type) submenus
+			from menu a
+				--inner join modl b
+				--	on a.AccountGUID=b.AccountGUID
+				--inner join acct c on c.AccountGUID=b.AccountGUID
+			--where moduleid=@code and accountid=@accountid
+			for xml path('menu'), elements, type) menus
+		for xml path(''), elements, type
+		) header, 
+		'' footer
+	for xml path('sqroot')
+
+--	declare @xml xml='&lt;sqroot&gt;
+--  &lt;header&gt;
+--    &lt;info&gt;
+--      &lt;account&gt;L'OR?AL&lt;/account&gt;
+--      &lt;themeFolder&gt;themeONE&lt;/themeFolder&gt;
+--      &lt;user&gt;
+--        &lt;userId&gt;Sam&lt;/userId&gt;
+--        &lt;userName&gt;Samuel Surya&lt;/userName&gt;
+--        &lt;userURL&gt;&lt;/userURL&gt;
+--        &lt;oriUserId /&gt;
+--        &lt;oriUserName /&gt;
+--        &lt;hostGUID&gt;3394C92E-C9C2-4F29-8889-E705A832C383&lt;/hostGUID&gt;
+--      &lt;/user&gt;
+--      &lt;title&gt;&lt;/title&gt;
+--      &lt;code&gt;
+--        &lt;id&gt;HRRC&lt;/id&gt;
+--        &lt;name&gt;REQUEST FOR RECRUITMENT&lt;/name&gt;
+--      &lt;/code&gt;
+--    &lt;/info&gt;
+--    &lt;menus&gt;
+--      &lt;menu code="sidebar"&gt;
+--        &lt;submenus&gt;
+--          &lt;submenu mode="label"&gt;
+--            &lt;caption&gt;MAIN NAVIGATION&lt;/caption&gt;
+--          &lt;/submenu&gt;
+--          &lt;submenu GUID=""&gt;
+--            &lt;caption&gt;Dashboard&lt;/caption&gt;
+--            &lt;pageURL&gt;#&lt;/pageURL&gt;
+--            &lt;icon&gt;
+--              &lt;fa&gt;fa-dashboard&lt;/fa&gt;
+--            &lt;/icon&gt;
+--          &lt;/submenu&gt;
+--          &lt;submenu GUID="" mode="treeroot"&gt;
+--            &lt;caption&gt;Modules&lt;/caption&gt;
+--            &lt;pageURL&gt;#&lt;/pageURL&gt;
+--            &lt;icon&gt;
+--              &lt;fa&gt;fa-tasks&lt;/fa&gt;
+--            &lt;/icon&gt;
+--            &lt;submenus&gt;
+--              &lt;submenu GUID="" mode="treeview"&gt;
+--                &lt;mode&gt;treeview&lt;/mode&gt;
+--                &lt;caption&gt;Inventory&lt;/caption&gt;
+--                &lt;pageURL&gt;#&lt;/pageURL&gt;
+--                &lt;icon&gt;
+--                  &lt;fa&gt;&lt;/fa&gt;
+--                &lt;/icon&gt;
+--                &lt;submenus&gt;
+--                  &lt;submenu GUID="" mode="treeview"&gt;
+--                    &lt;caption&gt;Consignment P&amp;#038;D&lt;/caption&gt;
+--                    &lt;pageURL&gt;#&lt;/pageURL&gt;
+--                    &lt;icon&gt;
+--                      &lt;fa&gt;&lt;/fa&gt;
+--                    &lt;/icon&gt;
+--                  &lt;/submenu&gt;
+--                  &lt;submenu GUID="" mode="treeview"&gt;
+--                    &lt;caption&gt;Direct P &amp;#038; D&lt;/caption&gt;
+--                    &lt;pageURL&gt;#&lt;/pageURL&gt;
+--                    &lt;icon&gt;
+--                      &lt;fa&gt;&lt;/fa&gt;
+--                    &lt;/icon&gt;
+--                  &lt;/submenu&gt;
+--                  &lt;submenu GUID="" mode="treeview"&gt;
+--                    &lt;caption&gt;PR/PVL Purchase&lt;/caption&gt;
+--                    &lt;pageURL&gt;#&lt;/pageURL&gt;
+--                    &lt;icon&gt;
+--                      &lt;fa&gt;&lt;/fa&gt;
+--                    &lt;/icon&gt;
+--                  &lt;/submenu&gt;
+--                &lt;/submenus&gt;
+--              &lt;/submenu&gt;
+--              &lt;submenu GUID="" mode="treeview"&gt;
+--                &lt;mode&gt;treeview&lt;/mode&gt;
+--                &lt;caption&gt;SAP Validation&lt;/caption&gt;
+--                &lt;pageURL&gt;#&lt;/pageURL&gt;
+--                &lt;icon&gt;
+--                  &lt;fa&gt;&lt;/fa&gt;
+--                &lt;/icon&gt;
+--                &lt;submenus&gt;
+--                  &lt;submenu GUID="" mode="treeview"&gt;
+--                    &lt;caption&gt;New Vendor Request&lt;/caption&gt;
+--                    &lt;pageURL&gt;#&lt;/pageURL&gt;
+--                    &lt;icon&gt;
+--                      &lt;fa&gt;&lt;/fa&gt;
+--                    &lt;/icon&gt;
+--                  &lt;/submenu&gt;
+--                &lt;/submenus&gt;
+--              &lt;/submenu&gt;
+--            &lt;/submenus&gt;
+--          &lt;/submenu&gt;
+--          &lt;submenu GUID="" mode="treeroot"&gt;
+--            &lt;caption&gt;Reports&lt;/caption&gt;
+--            &lt;pageURL&gt;#&lt;/pageURL&gt;
+--            &lt;icon&gt;
+--              &lt;fa&gt;fa-book&lt;/fa&gt;
+--            &lt;/icon&gt;
+--          &lt;/submenu&gt;
+--          &lt;submenu GUID=""&gt;
+--            &lt;caption&gt;Settings&lt;/caption&gt;
+--            &lt;pageURL&gt;#&lt;/pageURL&gt;
+--            &lt;icon&gt;
+--              &lt;fa&gt;fa-cog&lt;/fa&gt;
+--            &lt;/icon&gt;
+--          &lt;/submenu&gt;
+--        &lt;/submenus&gt;
+--      &lt;/menu&gt;
+--      &lt;menu code="newdocument"&gt;
+--        &lt;submenus&gt;
+--          &lt;submenu GUID="69073C10-AD35-4989-80E8-07B676E62D2E"&gt;
+--            &lt;code&gt;SAPV&lt;/code&gt;
+--            &lt;caption&gt;SAP Validation&lt;/caption&gt;
+--            &lt;pageURL&gt;mode=browse&amp;code=VEND&amp;ndb=1&amp;mg=SAPV&amp;option=4&amp;fact=&lt;/pageURL&gt;
+--            &lt;nbNew&gt;1&lt;/nbNew&gt;
+--            &lt;lvl&gt;10&lt;/lvl&gt;
+--          &lt;/submenu&gt;
+--          &lt;submenu GUID="2C4900AA-4F8F-4E1C-B938-21F735C8CC8B"&gt;
+--            &lt;code&gt;FXAS&lt;/code&gt;
+--            &lt;caption&gt;Fixed Asset&lt;/caption&gt;
+--            &lt;pageURL&gt;mode=browse&amp;code=TaFASC&amp;ndb=1&amp;mg=FSAX&amp;acc=EF_FXAS&amp;option=4&amp;fact=&lt;/pageURL&gt;
+--            &lt;nbNew&gt;0&lt;/nbNew&gt;
+--            &lt;lvl&gt;10&lt;/lvl&gt;
+--          &lt;/submenu&gt;
+--          &lt;submenu GUID="5723268A-98CE-47B7-A005-47105750CA13"&gt;
+--            &lt;code&gt;EHRD&lt;/code&gt;
+--            &lt;caption&gt;Human Resources&lt;/caption&gt;
+--            &lt;pageURL&gt;mode=browse&amp;code=taHRRR&amp;ndb=1&amp;mg=EHRD&amp;acc=EF_EHRD&amp;option=4&amp;fact=&lt;/pageURL&gt;
+--            &lt;nbNew&gt;0&lt;/nbNew&gt;
+--            &lt;lvl&gt;10&lt;/lvl&gt;
+--          &lt;/submenu&gt;
+--          &lt;submenu GUID="24E727CF-29ED-4968-A7C4-8DF5BEE2ED8A"&gt;
+--            &lt;code&gt;ITEQ&lt;/code&gt;
+--            &lt;caption&gt;IT Equipment&lt;/caption&gt;
+--            &lt;pageURL&gt;mode=browse&amp;code=taIERQ&amp;ndb=1&amp;mg=ITEQ&amp;acc=EF_ITEQ&amp;option=4&amp;fact=&lt;/pageURL&gt;
+--            &lt;nbNew&gt;0&lt;/nbNew&gt;
+--            &lt;lvl&gt;10&lt;/lvl&gt;
+--          &lt;/submenu&gt;
+--          &lt;submenu GUID="C96F2DB4-C7CE-444F-91BC-F45ACD31A45A"&gt;
+--            &lt;code&gt;STRD&lt;/code&gt;
+--            &lt;caption&gt;STRAD Scientific&lt;/caption&gt;
+--            &lt;pageURL&gt;mode=browse&amp;code=MaPAD9&amp;ndb=1&amp;mg=STRD&amp;acc=EF_STRD&amp;option=4&amp;fact=&lt;/pageURL&gt;
+--            &lt;nbNew&gt;0&lt;/nbNew&gt;
+--            &lt;lvl&gt;10&lt;/lvl&gt;
+--          &lt;/submenu&gt;
+--          &lt;submenu GUID="29C52B16-622A-42E0-B98B-F9C4EED5C261"&gt;
+--            &lt;code&gt;PROJ&lt;/code&gt;
+--            &lt;caption&gt;Project&lt;/caption&gt;
+--            &lt;pageURL&gt;mode=browse&amp;code=TaPREQ&amp;ndb=1&amp;mg=PROJ&amp;acc=EF_PROJ&amp;option=4&amp;fact=&lt;/pageURL&gt;
+--            &lt;nbNew&gt;0&lt;/nbNew&gt;
+--            &lt;lvl&gt;10&lt;/lvl&gt;
+--          &lt;/submenu&gt;
+--          &lt;submenu GUID="4E2BFE53-00D7-450C-9440-BC1D1790542B"&gt;
+--            &lt;code&gt;FINA&lt;/code&gt;
+--            &lt;caption&gt;Finance&lt;/caption&gt;
+--            &lt;pageURL&gt;mode=browse&amp;code=TaDEDU&amp;ndb=1&amp;mg=FINA&amp;acc=EF_FINA&amp;option=4&amp;fact=&lt;/pageURL&gt;
+--            &lt;nbNew&gt;0&lt;/nbNew&gt;
+--            &lt;lvl&gt;10&lt;/lvl&gt;
+--          &lt;/submenu&gt;
+--        &lt;/submenus&gt;
+--      &lt;/menu&gt;
+--      &lt;menu code="primary"&gt;
+--        &lt;submenus&gt;
+--          &lt;submenu&gt;
+--            &lt;caption&gt;xx&lt;/caption&gt;
+--            &lt;pageURL&gt;#&lt;/pageURL&gt;
+--            &lt;submenus&gt;
+--              &lt;submenu GUID=""&gt;
+--                &lt;caption&gt;My Profile&lt;/caption&gt;
+--                &lt;pageURL&gt;#&lt;/pageURL&gt;
+--              &lt;/submenu&gt;
+--              &lt;submenu GUID=""&gt;
+--                &lt;caption&gt;Account&lt;/caption&gt;
+--                &lt;pageURL&gt;#&lt;/pageURL&gt;
+--              &lt;/submenu&gt;
+--              &lt;submenu GUID=""&gt;
+--                &lt;caption&gt;Log Off&lt;/caption&gt;
+--                &lt;pageURL&gt;#&lt;/pageURL&gt;
+--              &lt;/submenu&gt;
+--            &lt;/submenus&gt;
+--          &lt;/submenu&gt;
+--        &lt;/submenus&gt;
+--      &lt;/menu&gt;
+--      &lt;menu code="footer"&gt;
+--        &lt;submenus&gt;
+--          &lt;submenu&gt;
+--            &lt;caption&gt;About Us&lt;/caption&gt;
+--            &lt;pageURL&gt;#&lt;/pageURL&gt;
+--          &lt;/submenu&gt;
+--          &lt;submenu&gt;
+--            &lt;caption&gt;Help&lt;/caption&gt;
+--            &lt;pageURL&gt;#&lt;/pageURL&gt;
+--          &lt;/submenu&gt;
+--        &lt;/submenus&gt;
+--      &lt;/menu&gt;
+--    &lt;/menus&gt;
+--  &lt;/header&gt;
+--&lt;/sqroot&gt;'
+
+--	select @xml
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

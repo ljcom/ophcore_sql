@@ -1,0 +1,356 @@
+CREATE procedure [core].[createDB] @accountid varchar(50), @dbmove varchar(50), @isDropDB bit=0, @isdebug bit=0
+--with encryption
+as
+	create table #tocreate (createScript nvarchar(max), createName varchar(50), createType varchar(50), orderNo int)
+
+	if @dbmove<>'oph_core' and @isDropDB=1 begin
+		insert into #tocreate (createScript, createName, createType, orderNo)
+		select 'drop procedure '+b.name+'.['+a.name+']', a.name, 'procedures', 1 
+		from sys.objects a
+			inner join sys.schemas b on a.schema_id=b.schema_id
+		where type='P'
+		order by create_date desc
+	end
+
+
+	insert into #tocreate (createScript, createName, createType, orderNo)
+	select 'create schema '+name createScript, name createName, 'schemas' createType, 11 orderNo
+	--into #tocreate
+	from sys.schemas
+	where schema_id<>1 and principal_id=1 and name<>'core'
+	
+	union
+
+	select 'create table '+e.name+'.['+a.name+'] ('+
+		stuff((select ', '+c.name+' '+d.name+ 
+			case when d.max_length=16 or d.precision>0 or c.user_type_id in (241) then ''
+				when c.max_length=-1 then '(max)' 
+				when c.user_type_id in (231) then '('+cast(c.max_length/2 as varchar(5))+')' 
+				 else '('+cast(d.max_length as varchar(5))+')' end+' '+case when c.is_nullable=0 then 'not ' else '' end+'null'
+		from sys.columns c
+			inner join sys.types d
+				on c.user_type_id=d.user_type_id
+		where c.object_id=a.object_id
+		for xml path ('')), 1, 2, '')
+		+')', a.name, 'objects', 12
+	from sys.objects a
+		inner join sys.schemas b
+			on a.schema_id=b.schema_id and b.name='dbo'
+		inner join sys.schemas e
+			on a.schema_id=e.schema_id
+	where type='U' and a.name not in ('sysdiagrams', 'acct', 'acctdbse', 'acctinfo')
+
+	union
+
+	select 'ALTER TABLE [dbo].['+a.name+'] ADD CONSTRAINT ['+c.name+'] PRIMARY KEY CLUSTERED (['+e.name+'])', c.name, 'key_constraints', 13
+	from sys.objects a
+		inner join sys.indexes b
+			on a.object_id=b.object_id and b.type=1 --and a.name='acct'
+		inner join sys.key_constraints c
+			on b.object_id=c.parent_object_id
+		inner join sys.index_columns d
+			on d.index_id=b.index_id
+				and d.object_id=b.object_id
+		inner join sys.columns e
+			on e.column_id=d.column_id
+			and e.object_id=a.object_id
+	where a.type='U' and a.name not in ('sysdiagrams', 'acct', 'acctdbse', 'acctinfo')
+
+	union
+
+	select 'ALTER TABLE [dbo].['+a.name+'] ADD CONSTRAINT ['+c.name+']  DEFAULT '+c.definition+' FOR ['+e.name+']', c.name, 'default_constraints', 14
+	--select * 
+	from sys.objects a
+		--inner join sys.indexes b
+		--	on a.object_id=b.object_id and a.name='docmaprv' and b.type<>1
+		inner join sys.default_constraints c
+			on a.object_id=c.parent_object_id --and a.name='docmaprv' 
+		inner join sys.columns e
+			on e.column_id=c.parent_column_id
+			and e.object_id=a.object_id
+	where a.type='U' and a.name not in ('sysdiagrams', 'acct', 'acctdbse', 'acctinfo')
+
+	union
+
+	select 'CREATE NONCLUSTERED INDEX ['+b.name+'] ON [dbo].['+a.name+']('+
+		stuff((
+			select ', '+e.name+' ASC' 
+			from sys.index_columns c
+				inner join sys.columns e
+					on e.column_id=c.column_id
+					and e.object_id=a.object_id
+			where b.index_id=c.index_id and b.object_id=c.object_id
+			for xml path('')), 1, 2, '')+')', b.name, 'indexes', 15
+	--select * 
+	from sys.objects a
+		inner join sys.indexes b
+			on a.object_id=b.object_id and b.type<>1 --and a.name='docmaprv' 
+	where a.type='U' and a.name not in ('sysdiagrams', 'acct', 'acctdbse', 'acctinfo')				
+
+	union
+
+	select 'ALTER TABLE [dbo].['+a.name+']  WITH CHECK ADD  CONSTRAINT ['+b.name+'] FOREIGN KEY(['+e.name+'])
+	REFERENCES [dbo].['+c.name+'] (['+f.name+'])', b.name, 'foreign_keys', 16
+	--select * 
+	from sys.objects a
+		inner join sys.foreign_keys b
+			on a.object_id=b.parent_object_id --and a.name='modl'
+		inner join sys.objects c
+			on b.referenced_object_id=c.object_id and c.name not in ('sysdiagrams', 'acct', 'acctdbse', 'acctinfo')	
+		inner join sys.foreign_key_columns d
+			on d.parent_object_id=a.object_id and c.object_id=d.referenced_object_id
+		inner join sys.columns e
+			on a.object_id=e.object_id and d.parent_column_id=e.column_id
+		inner join sys.columns f
+			on c.object_id=f.object_id and d.referenced_column_id=f.column_id
+	where a.type='U' and a.name not in ('sysdiagrams', 'acct', 'acctdbse', 'acctinfo')	
+
+	union 
+	select 'ALTER TABLE [dbo].['+a.name+'] CHECK CONSTRAINT ['+b.name+']', b.name, 'foreign_keys', 17
+	--select * 
+	from sys.objects a
+		inner join sys.foreign_keys b
+			on a.object_id=b.parent_object_id --and a.name='modl'
+		inner join sys.objects c
+			on b.referenced_object_id=c.object_id and c.name not in ('sysdiagrams', 'acct', 'acctdbse', 'acctinfo')	
+	where a.type='U' and a.name not in ('sysdiagrams', 'acct', 'acctdbse', 'acctinfo')	
+
+	union
+	
+	select 'CREATE TYPE ['+b.name+'].['+a.name+'] AS TABLE('+
+			stuff((select ', ['+c.name +'] '+g.name+
+				case when c.max_length=16 or c.precision>0 or c.user_type_id in (241) then ''
+					when c.max_length=-1 then '(max)' 
+					when c.user_type_id in (231) then '('+cast(c.max_length/2 as varchar(5))+')' 
+					else '('+cast(c.max_length as varchar(5))+')' end+' '+case when c.is_nullable=0 then 'not ' else '' end+'null'
+			from sys.columns c 
+				inner join sys.types g
+					on c.user_type_id=g.user_type_id
+			where c.object_id=a.type_table_object_id
+			for xml path('')), 1, 2, '')+
+			isnull((select ', PRIMARY KEY CLUSTERED (['+e.name+'] ASC)'
+			from sys.key_constraints d
+				inner join sys.index_columns f
+					on f.object_id=d.parent_object_id
+				inner join sys.columns e
+					on e.column_id=f.column_id
+					and e.object_id=d.parent_object_id
+			where d.parent_object_id=a.type_table_object_id
+			for xml path('')),'')+')', a.name, 'table_types', 18
+	--select * 
+	from sys.table_types a
+		inner join sys.schemas b
+			on a.schema_id=b.schema_id
+	where b.schema_id<>1 and b.principal_id=1 
+	
+	union
+
+	select 
+		replace(replace(replace(replace(replace((select text+'' 
+		from sys.syscomments c
+		where c.id=a.object_id
+		for xml path('')
+		), '&#x0D;', char(13)), '#x0A;', char(10)), '&lt;', '<'), '&gt;', '>'), '--WITH ENCRYPTION', 'WITH ENCRYPTION'), a.name, 'procedures', 19
+	from sys.objects a
+		inner join sys.schemas b
+			on a.schema_id=b.schema_id and b.schema_id<>1 and b.principal_id=1
+		inner join (select id from sys.syscomments b where encrypted=0 group by id) x
+			on x.id=a.object_id
+	where a.type='P' and b.name<>'core'
+
+	union
+
+	select 
+		replace(replace(replace(replace(replace((select text+'' 
+		from sys.syscomments c
+		where c.id=a.object_id
+		for xml path('')
+		), '&#x0D;', char(13)), '#x0A;', char(10)), '&lt;', '<'), '&gt;', '>'), '--WITH ENCRYPTION', 'WITH ENCRYPTION'), a.name, 'objects', 20
+	from sys.objects a
+		inner join sys.schemas b
+			on a.schema_id=b.schema_id and b.schema_id<>1 and b.principal_id=1
+		inner join (select id from sys.syscomments b where encrypted=0 group by id) x
+			on x.id=a.object_id
+	where a.type='FN'
+
+
+	declare @sqlstr nvarchar(max)
+
+	if @isdebug=1 
+		select * 
+		from #tocreate
+		order by orderno
+
+	DECLARE #cur CURSOR
+	READ_ONLY
+	FOR 
+		select createScript, createName, createType, orderNo 
+		from #tocreate
+		order by orderno
+
+	DECLARE @script nvarchar(max), @name varchar(50), @oType varchar(50), @ret bit=0, @oNo int
+	OPEN #cur
+
+	FETCH NEXT FROM #cur INTO @script, @name, @oType, @oNo
+	WHILE (@@fetch_status <> -1)
+	BEGIN
+		IF (@@fetch_status <> -2)
+		BEGIN
+			set @sqlstr='if '+case when @oNo<10 then 'not ' else '' end+'exists(select * from '+@dbmove+'.sys.'+@oType+' where name='''+@name+''') set @ret=1 else set @ret=0'
+			if @isdebug=1 print @sqlstr
+			exec sp_executesql @sqlstr, N'@ret bit output', @ret output
+			
+			if @ret=0 begin
+				print @sqlstr
+				set @sqlstr='
+					exec '+@dbmove+'.dbo.sp_executesql @s'
+
+				set @script=replace(replace(replace(replace(@script, '&#x0D;', char(13)), '#x0A;', char(10)), '&lt;', '<'), '&gt;', '>')
+
+				select @script+''
+				for xml path('')
+
+				--if @isdebug=1 print @script
+				exec sp_executesql @sqlstr, N'@s nvarchar(max)', @script
+			end
+		END
+		FETCH NEXT FROM #cur INTO @script, @name, @oType, @oNo
+	END
+
+	CLOSE #cur
+	DEALLOCATE #cur
+
+	--insert themes
+	set @sqlstr='
+		declare @accountGUID uniqueidentifier
+		select @accountGUID=accountGUID from acct where accountid='''+@accountid+'''
+
+		--add modules
+		exec core.addModules '''+@accountid+''', '''+@dbmove+'''
+		
+		--msta
+		insert into '+@dbmove+'.dbo.[msta] 
+		select a.ModuleStatusGUID, @AccountGUID, a.ModuleStatusName, a.ModuleStatusDescription, a.isDefault
+		from [msta] a 
+			left join '+@dbmove+'.dbo.[msta] b on a.moduleStatusGUID=b.moduleStatusGUID where b.moduleStatusGUID is null
+
+		--mstastat
+		insert into '+@dbmove+'.dbo.[mstastat] 
+		select a.ModuleStatusDetailGUID, a.ModuleStatusGUID, a.StateID, a.StateCode, a.StateDesc, a.StateName, a.isDefault
+		from [mstastat] a 
+			left join '+@dbmove+'.dbo.[mstastat] b on a.moduleStatusGUID=b.moduleStatusGUID where b.moduleStatusGUID is null
+
+		declare @moduleStatusGUID uniqueidentifier
+		select @moduleStatusGUID=moduleStatusGUID 
+		from '+@dbmove+'.dbo.[msta] 
+		where isdefault=1
+
+		update '+@dbmove+'.dbo.modl
+		set moduleStatusGUID=@moduleStatusGUID
+		where moduleStatusGUID is null
+
+		--update themes
+		insert into '+@dbmove+'.dbo.thme 
+		select a.ThemeGUID, @AccountGUID, a.ThemeCode, a.ThemeName, a.ThemeFolder 
+		from thme a 
+			left join '+@dbmove+'.dbo.thme b on a.themeGUID=b.themeGUID where b.themeGUID is null
+		
+		insert into '+@dbmove+'.dbo.thmepage 
+		select a.* from thmepage a 
+			left join '+@dbmove+'.dbo.thmepage b on a.themePageGUID=b.themePageGUID where b.themePageGUID is null
+
+		declare @themePageGUID uniqueidentifier
+		select @themePageGUID=themePageGUID from '+@dbmove+'.dbo.thmepage where isdefault=1
+		
+		update '+@dbmove+'.dbo.modl set themePageGUID=@themePageGUID where themepageGUID is null'
+
+	set @sqlstr=@sqlstr+'
+
+		--add modules groups
+		insert into '+@dbmove+'.dbo.modg (ModuleGroupGUID, AccountGUID, ModuleGroupID, ModuleGroupName, ModuleGroupDescription, AccountDBGUID, ImagePath, SortOrder, isDefault)
+		select newid(), @accountGUID, a.DatabaseName, a.DatabaseName, a.DatabaseName, a.AccountDBGUID, null, null, case when isMaster=1 and version=''4.0'' then 1 else 0 end
+		from acctdbse a 
+			left join '+@dbmove+'.dbo.modg b on a.accountDBGUID=b.accountDBGUID
+		where a.AccountGUID=@accountguid and b.moduleGroupGUID is null
+
+		--frontpage
+		insert into '+@dbmove+'.dbo.modginfo (EnvInfoGUID, EnvGUID, InfoKey, InfoValue)
+		select newid(), c.ModuleGroupGUID, ''frontPage'', moduleid
+		--select * 
+		from '+@dbmove+'.dbo.modl a inner join acctdbse b on a.AccountDBGUID=b.AccountDBGUID
+			inner join '+@dbmove+'.dbo.modg c on a.AccountDBGUID=c.AccountDBGUID and a.moduleid=''modl''
+			left join '+@dbmove+'.dbo.modginfo d on d.envGUID=c.moduleGroupGUID and d.infoKey=''frontPage'' 
+		where d.envInfoGUID is null'
+
+	set @sqlstr=@sqlstr+'
+
+		declare @moduleGroupGUID uniqueidentifier
+		select @moduleGroupGUID=moduleGroupGUID
+		from '+@dbmove+'.dbo.modl a inner join acctdbse b on a.AccountDBGUID=b.AccountDBGUID
+			inner join '+@dbmove+'.dbo.modg c on a.AccountDBGUID=c.AccountDBGUID and a.moduleid=''modl''
+
+		print @moduleGroupGUID
+
+		if not exists(select * from '+@dbmove+'.dbo.modginfo where infoKey=''signinPage'' and envGUID=@moduleGroupGUID)
+			insert into '+@dbmove+'.dbo.modginfo (EnvInfoGUID, EnvGUID, InfoKey, InfoValue)
+			select newid(), @ModuleGroupGUID, ''signinPage'', ''login''
+
+		--themeCode
+		if not exists(select * from '+@dbmove+'.dbo.modginfo where infoKey=''themeCode'' and envGUID=@moduleGroupGUID)
+			insert into '+@dbmove+'.dbo.modginfo (EnvInfoGUID, EnvGUID, InfoKey, InfoValue)
+			select newid(), @ModuleGroupGUID, ''themeCode'', themeCode
+			--select * 
+			from '+@dbmove+'.dbo.thme'
+
+	set @sqlstr=@sqlstr+'
+
+		insert into '+@dbmove+'.dbo.modlcolminfo (ColumnInfoGUID, ColumnGUID, InfoKey, InfoValue)
+		select newid(), a.ColumnGUID, ''isBrowsable'', 1
+		from '+@dbmove+'.dbo.modlcolm a 
+			left join '+@dbmove+'.dbo.modlcolminfo b on a.columnGUID=a.columnGUID and b.infokey=''isBrowsable''
+		where (colkey like ''%id'' or colkey like ''%name'' or colkey like ''%description'' or colkey like ''%code'' or colkey like ''%key'' or colkey like ''%value'' 
+			--or colkey in ('''', '''')
+			) and colType<>36 and b.columninfoguid is null
+
+		insert into '+@dbmove+'.dbo.modlcolminfo (ColumnInfoGUID, ColumnGUID, InfoKey, InfoValue)
+		select newid(), a.ColumnGUID, ''isViewable'', 1
+		from '+@dbmove+'.dbo.modlcolm a 
+			left join '+@dbmove+'.dbo.modlcolminfo b on a.columnGUID=a.columnGUID and b.infokey=''isViewable''
+		where (colkey like ''%id'' or colkey like ''%name'' or colkey like ''%description'' or colkey like ''%key'' or colkey like ''%value'' 
+			--or colkey in ('''', '''')
+			) and colType<>36 and b.columninfoguid is null
+
+		insert into '+@dbmove+'.dbo.modlcolminfo (ColumnInfoGUID, ColumnGUID, InfoKey, InfoValue)
+		select newid(), a.ColumnGUID, ''primaryCol'', 5
+		from '+@dbmove+'.dbo.modlcolm a 
+			left join '+@dbmove+'.dbo.modlcolminfo b on a.columnGUID=a.columnGUID and b.infokey=''primaryCol''
+		where (colkey like ''%id'' or colkey like ''%key''
+			--or colkey in ('''', '''')
+			) and colType<>36 and b.columninfoguid is null
+
+		--login
+		declare @pageLoginGUID uniqueidentifier
+		select @pageLoginGUID=themePageGUID 
+		from '+@dbmove+'.dbo.thmepage where pageUrl=''login''
+
+		if not exists(select * from '+@dbmove+'.dbo.modl where moduleid=''login'')
+			insert into '+@dbmove+'.dbo.modl (ModuleGUID, AccountGUID, ModuleID, ModuleDescription, settingMode, AccountDBGUID, 
+				ParentModuleGUID, OrderNo, needLogin, ThemePageGUID, ModuleStatusGUID)
+			values (newid(), @accountGUID, ''login'', ''login'', 6, null, 
+				null, null, 0, @pageLoginGUID, null)	
+		
+		exec core.refresh '''+@accountid+'''
+
+		--user
+		insert into '+@dbmove+'.dbo.[user] 
+		select a.UserGUID, @AccountGUID, a.UserID, a.UserName, a.Email, a.Password, a.ConfirmPassword, a.AutoLogin, a.LastLogin, a.ExpiryPwd, a.isDeleted 
+		from [user] a 
+			left join '+@dbmove+'.dbo.[user] b on a.userGUID=b.userGUID where b.userGUID is null
+		
+		exec '+@dbmove+'.gen.changePassword '''+@accountid+''', '''+db_name()+''', ''admin'', null, ''12345678''
+
+		'
+	if @isdebug=1 print @sqlstr
+	exec sp_executesql @sqlstr
+
+

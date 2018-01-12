@@ -1,0 +1,58 @@
+
+create procedure gen.[slowExecute] @sqlstr nvarchar(max), @seq int=1, @isdebug bit=0
+as
+	declare @startTime datetime=current_timestamp
+	declare @newGUID nvarchar(50)=replace(cast(newid() as nvarchar(50)), '-', '')
+	declare @isExists bit=0, @n int=0
+
+	declare @sqlstr3 nvarchar(max)='
+		set @isExists=iif(exists('+@sqlstr+'),1,0)	'
+	exec sp_executesql @sqlstr3, N'@isExists bit output', @isExists output
+
+	while @isExists=1 and @n<@seq
+	begin
+		set nocount on
+		set @startTime=current_timestamp
+		declare @sqlstr2 nvarchar(max)='
+			DECLARE #cur'+@newguid+' CURSOR
+			READ_ONLY
+			FOR '+@sqlstr+'
+
+			DECLARE @sqlstr1 nvarchar(max)
+			OPEN #cur'+@newguid+'
+
+			FETCH NEXT FROM #cur'+@newguid+' INTO @sqlstr1
+			WHILE (@@fetch_status <> -1)
+			BEGIN
+				IF (@@fetch_status <> -2)
+				BEGIN
+					begin try
+						exec sp_executesql @sqlstr1
+					end try
+					begin catch 
+					SELECT  
+						ERROR_NUMBER() AS ErrorNumber  
+						,ERROR_SEVERITY() AS ErrorSeverity  
+						,ERROR_STATE() AS ErrorState  
+						,ERROR_PROCEDURE() AS ErrorProcedure  
+						,ERROR_LINE() AS ErrorLine  
+						,ERROR_MESSAGE() AS ErrorMessage;  
+					end catch
+				END
+				FETCH NEXT FROM #cur'+@newguid+' INTO @sqlstr1
+			END
+
+			CLOSE #cur'+@newguid+'
+			DEALLOCATE #cur'+@newguid+''
+
+		if @isdebug=1 print @sqlstr2
+		exec sp_executesql @sqlstr2
+
+		set @n=@n+1
+		print 'seq:'+cast(@n as nvarchar(10))+' time:'+cast(datediff(s, @starttime, current_timestamp) as nvarchar(10))+' secs'
+
+		exec sp_executesql @sqlstr3, N'@isExists bit output', @isExists output
+	end
+
+
+

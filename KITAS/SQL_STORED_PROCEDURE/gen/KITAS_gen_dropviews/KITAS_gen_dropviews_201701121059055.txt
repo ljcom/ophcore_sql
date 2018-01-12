@@ -1,0 +1,46 @@
+
+
+
+
+
+
+
+
+
+
+
+CREATE procedure [gen].[dropviews]
+as 
+	declare @id int, @tableName nvarchar(50), @sqlstr varchar(8000), @view nvarchar(50), @parameter nvarchar(400), @content varchar(8000)
+	declare @selectstr varchar(8000), @browsestr varchar(8000), @wherestr varchar(8000)
+	declare @joinStr varchar(8000), @jStr varchar(8000), 
+		@extselectIdStr varchar(8000), @extselectNameStr varchar(8000), @esStr varchar(8000), @esnStr varchar(8000), @newstr varchar(8000)
+	declare @status nvarchar(50)
+
+	DECLARE cur CURSOR
+	   FOR 	select id, name from sysobjects	
+		where xtype in ('V')
+	
+	OPEN cur
+	FETCH NEXT FROM cur
+	into @id, @tableName 
+	
+	WHILE @@FETCH_STATUS = 0
+	BEGIN	
+		exec gen.dropview @tablename
+
+		FETCH NEXT FROM cur
+		into @id, @tableName
+	end
+	CLOSE cur
+	DEALLOCATE cur
+
+
+
+
+
+
+
+
+
+

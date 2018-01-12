@@ -1,0 +1,9 @@
+create procedure oph.CaUSERFRON_list
+@account nvarchar(20), @GUID uniqueidentifier=null, @hostGUID uniqueidentifier
+as --automatic creation by system, you have to remove this comment to customize this procedure
+ 	declare @newid uniqueidentifier
+	set @newid = newid()
+
+	select CaUSERFRON.UserId, CaUSERFRON.UserName, CaUSERFRON.PersonalEmail, CaUSERFRON.MobilePhone, CaUSERFRON.Password, CaUSERFRON.ConfirmPassword
+	from oph.CaUSERFRON CaUSERFRON
+	where isnull(UserGUID, @newid)=case when @GUID is null then isnull(UserGUID, @newid) else @GUID end

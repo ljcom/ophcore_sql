@@ -1,0 +1,49 @@
+
+
+CREATE function [gen].[codex](@hostGUID uniqueidentifier, @code nvarchar(50), @coderef nvarchar(50)=null)--, @reversed bit=0)
+RETURNS nvarchar(max)
+--WITH ENCRYPTION
+as
+begin
+	declare @codestr nvarchar(max)
+	declare @ver nvarchar(10), @db nvarchar(50), @setmode nvarchar(1)
+	--exec gen.getDBInfo @hostguid, @code, @ver output, @db output, @typecode output
+	--if @reversed=0 begin
+		if left(@code, 3)='par' begin
+			set @code=replace(replace(@code, 'par(', ''), ')', '')
+			set @codestr='(select v.parameterValueGUID, v.parameterValue parValueId, v.parameterDescription parValueDesc from para p inner join paravalu v on p.ParameterGUID=v.ParameterGUID where ParameterId='''+@code+''') '
+		end
+		else if left(@code, 4)='view' begin
+			set @code=replace(replace(@code, 'view(', ''), ')', '')
+			set @codestr='doc.'+@coderef+'_'+@code
+		end
+		else begin
+			select @setmode=settingMode from modl where moduleid=@code
+			if isnull(@setmode,0)='0' begin
+				set @codestr='['+@code+']'
+			end
+			else begin
+				set @codestr='doc.['+@code+']'--('''+cast(@hostguid as nvarchar(50))+''')'
+			end
+		end
+	--end
+	--else begin	--reversed
+	--	if left(@code, 3)<>'par' begin
+	--		declare @mod nvarchar(50)
+	--		select @setmode=settingMode, @mod=replace(cast(ModuleGUID as nvarchar(50)),'-', '')
+	--		from modl where moduleid=@code
+
+	--		if isnull(@setmode,0)='0' begin
+	--			set @codestr='['+@code+']'
+	--		end
+	--		else begin
+				
+	--			set @codestr='doc.['+@code+']'--('''+cast(@hostguid as nvarchar(50))+''')'
+	--		end
+	--	end
+	--end
+	return @codestr
+
+end
+
+

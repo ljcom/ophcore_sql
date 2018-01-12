@@ -1,0 +1,29 @@
+CREATE procedure oph.TaCONF_reopen
+	@GUID uniqueidentifier, @hostGUID uniqueidentifier
+as --automatic creation by system, you have to remove this comment to customize this procedure
+ 	if dbo.fn_checkObject('dbo','TaCONF_reopen_custom')=1 begin
+		exec dbo.TaCONF_reopen_custom @GUID, @hostGUID
+	end
+	else begin
+
+		declare @userGUID uniqueidentifier, @userName nvarchar(100)
+		declare @isCancel bit=0, @msg nvarchar(max)=''
+		
+		select @userGUID=userguid from coUSERHOST where hostGUID=@hostGUID
+		
+		select @username=username
+		from coUSER
+		where userguid=@userguid
+
+		if dbo.fn_checkObject('dbo','TaCONF_reopen_before')=1 exec dbo.TaCONF_reopen_before @GUID, @hostGUID, @isCancel OUTPUT, @msg OUTPUT
+		if @iscancel=0 begin
+			update ToCONF
+			set status = 400,statuscomment='reopen by   '+ @username
+			where status = 500 and CONFGUID = @GUID
+		
+		
+		end
+
+		select @msg reopen
+	end
+

@@ -1,0 +1,199 @@
+
+
+
+
+CREATE procedure [core].[migrateData_eachDB_v2] @accountid nvarchar(50), @coreDB nvarchar(50), 
+	@dataDB nvarchar(50), @svr nvarchar(50), @v3db nvarchar(50)
+as
+
+	print 'obsolete'
+	--create table #migrate (DocGUID uniqueidentifier, AccountGUID uniqueidentifier, ModuleGUID uniqueidentifier, 
+	--	DocNo nvarchar(50), DocRefNo nvarchar(50), DocDate datetime, DocSummary nvarchar(50), ID nvarchar(50), [Description] nvarchar(50), [Status] int, 
+	--	StatusComment nvarchar(max), CreatedDate datetime, CreatedUser uniqueidentifier, isClosed bit, isDeleted bit)
+
+	--declare @accountGUID uniqueidentifier
+	--select @accountguid=AccountGUID 
+	--from acct where accountid=@accountid
+	
+	--declare @uGUID uniqueidentifier=newid()	
+	--declare @sqlstr nvarchar(max)
+
+	--set @sqlstr=N'
+
+	--	select N''
+	--		insert into '+@dataDB+'.dbo.modlcolminfo (ColumnInfoGUID, ColumnGUID, InfoKey, InfoValue)
+	--		select newid(), c.columnGUID, ''''primaryCol'''', ''''1'''' 
+	--		from '+@dataDB+'.dbo.modl m
+	--			inner join '+@dataDB+'.dbo.modlcolm c
+	--				on m.moduleguid=c.moduleguid and c.colkey=''''''+isnull(cast(d1.colKey as nvarchar(50)),''null'')+''''''
+	--			left join '+@dataDB+'.dbo.modlcolminfo i
+	--				on c.columnguid=i.columnguid and i.infokey=''''primaryCol'''' --and i.infokey=''''1''''
+	--		where m.moduleguid=''''''+isnull(cast(c.moduleguid as nvarchar(50)),''null'')+''''''
+	--			and i.columninfoguid is null
+
+	--		insert into '+@dataDB+'.dbo.docm (DocGUID, AccountGUID, ModuleGUID, status, statuscomment,
+	--			CreatedDate, updatedDate, isClosed, isDeleted, oldId)
+	--		select newid(), '''''+cast(@accountguid as nvarchar(50))+''''', 
+	--			''''''+isnull(cast(c.moduleguid as nvarchar(50)),''null'')+'''''', 
+	--			isnull(''+isnull(cast(Status.colkey as nvarchar(50)),''0'')+'',0), ''+isnull(cast(StatusComment.colkey as nvarchar(50)),''null'')+'', 
+	--			isnull(''+isnull(createdDate.colkey, ''getdate()'')+'', getdate()), ''+isnull(updatedDate.colkey, ''null'')+'', 0, isnull(''+isnull(isDeleted.colkey, ''0'')+'', 0), 
+	--			''+isnull(cast(d1.colKey as nvarchar(50)),''null'')+''  
+	--		from '+@svr+'.'+@v3db+'.dbo.''+a.name+'' a
+	--			left join (select docguid, oldid, moduleguid from '+@dataDB+'.dbo.docm) b 
+	--				on cast(a.''+isnull(cast(d1.colKey as nvarchar(50)),''null'')+'' as nvarchar(50)) = b.oldid
+	--					and b.moduleguid=''''''+isnull(cast(c.moduleguid as nvarchar(50)),''null'')+''''''
+	--		where b.docGUID is null
+	--		'' Insertstr, c.moduleid tablename--, b2.name APRVTableName
+	--	into ##tempInsert'+replace(cast(@uGUID as nvarchar(50)), '-', '')+'
+	--	from (select * from '+@svr+'.'+@v3db+'.sys.objects x where x.type=''U'') a 
+	--		inner join '+@dataDB+'.dbo.modl c on c.moduleid=a.name
+	--		inner join '+@dataDB+'.dbo.modlcolm d1 on c.moduleguid=d1.ModuleGUID 
+	--			and d1.colorder=(
+	--				select column_id
+	--				from '+@svr+'.'+@v3db+'.sys.index_columns b 
+	--					inner join '+@svr+'.'+@v3db+'.sys.indexes b1 on b.index_id=b1.index_id and b1.object_id=b.object_id
+	--						and b1.is_primary_key=1
+	--				where a.object_id=b.object_id)
+	--		left join '+@dataDB+'.dbo.modlcolm Status on c.moduleguid=Status.ModuleGUID and Status.colkey=''Status''
+	--		left join '+@dataDB+'.dbo.modlcolm StatusComment on c.moduleguid=StatusComment.ModuleGUID and StatusComment.colkey=''StatusComment''
+	--		left join '+@dataDB+'.dbo.modlcolm createdDate on c.moduleguid=createdDate.ModuleGUID and createdDate.colkey=''createdDate''
+	--		left join '+@dataDB+'.dbo.modlcolm d91 on c.moduleguid=d91.ModuleGUID and d91.colkey=''createdUser''
+	--		left join '+@dataDB+'.dbo.modlcolm updatedDate on c.moduleguid=updatedDate.ModuleGUID and updatedDate.colkey=''updatedDate''
+	--		left join '+@dataDB+'.dbo.modlcolm updatedUser on c.moduleguid=updatedUser.ModuleGUID and updatedUser.colkey=''updatedUser''
+	--		left join '+@dataDB+'.dbo.modlcolm isDeleted on c.moduleguid=isDeleted.ModuleGUID and isDeleted.colkey=''isDeleted''
+	--	where left(a.name,1) not in (''C'', ''D'', ''P'')
+		
+		
+	--'
+	
+	--print @sqlstr
+	--exec sp_executesql @sqlstr
+	--set @sqlstr='
+	--	select insertStr, tablename--, APRVTableName 
+	--		from ##tempInsert'+replace(cast(@uGUID as nvarchar(50)), '-', '')+'
+	--		order by tablename
+
+	--	DECLARE #cur CURSOR
+	--	READ_ONLY
+	--	FOR select insertStr, tablename--, APRVTableName 
+	--		from ##tempInsert'+replace(cast(@uGUID as nvarchar(50)), '-', '')+'
+	--		order by tablename
+
+	--	DECLARE @insertStr nvarchar(max), @tblName nvarchar(50), @aTblName nvarchar(50)
+	--	OPEN #cur
+
+	--	FETCH NEXT FROM #cur INTO @insertStr, @tblName--, @aTblName
+	--	WHILE (@@fetch_status <> -1)
+	--	BEGIN
+	--		IF (@@fetch_status <> -2)
+	--		BEGIN
+	--			print @tblName
+	--			print @insertStr
+	--			exec sp_executesql @insertStr
+	--			exec core.migrateData_addColumns_v2 '''+@accountid+''', '''+@coreDB+''',  '''+@datadb+''', '''+@svr+''', '''+@v3db+''', @tblName
+				
+	--			--if isnull(@aTblName, '''')<>'''' begin
+	--			--	exec core.migrateData_addApproval '''+@accountid+''', '''+@coreDB+''',  '''+@datadb+''', '''+@v3db+''', @tblName
+	--			--end
+	--		END
+	--		FETCH NEXT FROM #cur INTO @insertStr, @tblName--, @aTblName
+	--	END
+
+	--	CLOSE #cur
+	--	DEALLOCATE #cur
+
+	--	--talk migrate sekaligus
+	--	--exec core.migrateData_addTalk '''+@accountid+''', '''+@coreDB+''',  '''+@datadb+''', '''+@v3db+'''
+	--'
+	----print @sqlstr
+	--exec sp_executesql @sqlstr
+
+	----update parentdocguid
+	--set @sqlstr=N'
+	
+	--	DECLARE #cur5 CURSOR
+	--	READ_ONLY
+	--	FOR 
+	--		select --c.moduleguid, c.moduleid, cc.colKey, p.moduleguid, p.moduleid, pc.colkey, 
+	--			''update dc
+	--			set parentDocGUID=dp.docguid
+	--			from '+@dataDB+'.dbo.docm dc 
+	--				inner join '+@dataDB+'.dbo.docmcolm dcc on dc.docguid=dcc.docguid 
+	--					and colkey=''''''+cc.colKey+'''''' 
+	--					and dc.ModuleGUID=''''''+cast(c.moduleguid as nvarchar(50))+''''''
+	--				inner join '+@dataDB+'.dbo.docmcolm dpc on dpc.colkey=''''''+pc.colKey+'''''' 
+	--				inner join '+@dataDB+'.dbo.docm dp on dp.docguid=dpc.docguid and dp.moduleguid=''''''+cast(p.moduleguid as nvarchar(50))+''''''
+	--			where isnull(dpc.colvalue,'''''''')+isnull(cast(dpc.colvaluemoney as nvarchar(10)),'''''''')=isnull(dcc.colvalue,'''''''')+isnull(cast(dcc.ColValueMoney as nvarchar(10)),'''''''')
+	--			''
+	--		from '+@dataDB+'.dbo.modl c 
+	--			inner join '+@dataDB+'.dbo.modlcolm cc on c.moduleguid=cc.ModuleGUID 
+	--			inner join '+@dataDB+'.dbo.modlcolminfo cc1 on cc.ColumnGUID=cc1.ColumnGUID 
+	--				and cc1.InfoKey=''isparentkey'' and cc1.InfoValue=''1''
+	--			inner join '+@dataDB+'.dbo.modl p on c.ParentModuleGUID=p.moduleguid
+	--			inner join '+@dataDB+'.dbo.modlcolm pc on p.moduleguid=pc.ModuleGUID 
+	--			inner join '+@dataDB+'.dbo.modlcolminfo pc1 on pc.ColumnGUID=pc1.ColumnGUID 
+	--				and pc1.InfoKey=''primaryCol'' and pc1.InfoValue=''1''
+	--		where c.ParentModuleGUID is not null
+
+
+	--	DECLARE @sqlstrx nvarchar(max)
+	--	OPEN #cur5
+
+	--	FETCH NEXT FROM #cur5 INTO @sqlstrx
+	--	WHILE (@@fetch_status <> -1)
+	--	BEGIN
+	--		IF (@@fetch_status <> -2)
+	--		BEGIN
+	--			print @sqlstrx		
+	--			exec sp_executesql @sqlstrx
+	--		END
+	--		FETCH NEXT FROM #cur5 INTO @sqlstrx
+	--	END
+
+	--	CLOSE #cur5
+	--	DEALLOCATE #cur5'
+
+	--print @sqlstr
+	--exec sp_executesql @sqlstr
+
+	----declare @ranGUID nvarchar(50)=replace(cast(newid() as nvarchar(50)), '-', '')
+	------migrate combo
+	----set @sqlstr='
+	----select --m.moduleid, 
+	----		d.docguid docguid, dc.colkey, --dc.colvalue, 
+	----		dc.colvaluemoney colid, --mcb.moduleid, mccb.colkey, 
+	----		ccb.colvaluemoney cbid, dcb.docguid cbdocGUID
+	----	into ##temp'+@ranGUID+'
+	----	from '+@dataDB+'.dbo.modl m 
+	----		inner join '+@dataDB+'.dbo.modlcolm mc on m.moduleguid=mc.moduleguid
+	----		inner join '+@dataDB+'.dbo.modlcolminfo coltype on mc.columnguid=coltype.columnguid and coltype.infokey=''coltype'' and coltype.infovalue=''32''
+	----		inner join '+@dataDB+'.dbo.modlcolminfo combotable on mc.columnguid=combotable.columnguid and combotable.infokey=''combotable'' and combotable.infovalue like ''doc[(]%''
+	----		inner join '+@dataDB+'.dbo.docm d on mc.moduleguid=d.moduleguid
+	----		inner join '+@dataDB+'.dbo.docmcolm dc on d.docguid=dc.docguid and dc.colkey=mc.colkey
+	----		inner join '+@dataDB+'.dbo.modl mcb on mcb.moduleid=replace(replace(combotable.infovalue, ''doc('', ''''), '')'', '''')
+	----		inner join '+@dataDB+'.dbo.modlcolm mccb on mcb.moduleguid=mccb.moduleguid 
+	----		inner join '+@dataDB+'.dbo.modlcolminfo mccbi on mccb.columnguid=mccbi.columnguid and mccbi.infokey=''primarycol'' and mccbi.infovalue=''1''
+	----		inner join '+@dataDB+'.dbo.docm dcb on mcb.moduleguid=dcb.moduleguid
+	----		inner join '+@dataDB+'.dbo.docmcolm ccb on dcb.docguid=ccb.docguid and ccb.colkey=mccb.colkey 
+	----'
+	----print @sqlstr
+	----exec sp_executesql @sqlstr
+
+	----set @sqlstr='
+	----	select  
+	----		''update docmcolm set oldid=''''''+cast(colid as nvarchar(10))+''''''
+	----		where docguid=''''''+cast(docguid as nvarchar(50))+'''''' and colkey=''''''+colkey+''''''
+	----		and oldid is null
+	
+	----		update docmcolm set colvalue=''''''+cast(cbdocguid as nvarchar(50))+'''''', colvaluemoney=null
+	----		where docguid=''''''+cast(docguid as nvarchar(50))+'''''' and colkey=''''''+colkey+''''''
+	----		and oldid is not null
+	----		'' 
+	----	from (
+	----		select *
+	----		from ##temp'+@ranGUID+') x
+	----	where x.colid=x.cbid'
+	----exec core.slowExecute @sqlstr, 100, 1
+
+
+

@@ -1,0 +1,34 @@
+
+
+CREATE TRIGGER [dbo].[tg_modl_update]
+   ON  [dbo].[modl]
+   AFTER update
+AS 
+BEGIN
+	SET NOCOUNT ON;
+	if exists(
+		select * from inserted i
+			inner join deleted d on i.moduleguid=d.ModuleGUID
+		where i.ModuleID<>d.moduleid
+		) begin
+		RAISERROR ('You cannot change ModuleID.', 16, 1)
+		ROLLBACK TRANSACTION
+	end
+	else if update(settingmode) begin
+		if exists(select * from inserted where settingmode=4) begin
+			declare @v4db nvarchar(50), @code nvarchar(50)
+			declare @sqlstr nvarchar(max)
+
+			set @sqlstr = replace((
+			select 'use '+db_name()+N'
+				exec [gen].[createTable] '''+db_name()+''', '''+isnull(migratedb, databasename)+''', null, '''+moduleid+''', 0, 0
+				'
+			from inserted i inner join acctdbse a on a.AccountDBGUID=i.AccountDBGUID
+			for xml path('')), '&'+'#x0D', '')
+
+			print @sqlstr
+		exec sp_executesql @sqlstr
+		end
+	end
+END
+

@@ -1,0 +1,17 @@
+
+CREATE function [gen].[getHost] (@userId nvarchar(50), @userGUID uniqueidentifier=null)
+returns uniqueidentifier
+as
+begin
+	declare @hostGUID uniqueidentifier
+
+	select @hostguid=hostguid 
+	from couserhost x 
+		inner join CoUSER y
+			on x.UserGUID=y.UserGUID
+	where y.userid=@userid 
+		or x.userguid= @userguid
+	
+	return @hostGUID
+end
+

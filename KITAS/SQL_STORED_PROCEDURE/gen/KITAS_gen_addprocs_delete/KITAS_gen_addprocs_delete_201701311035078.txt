@@ -1,0 +1,111 @@
+CREATE PROCEDURE [gen].[addprocs_delete] @tablename nvarCHAR(50), @otablename nvarCHAR(50), 
+	@colname nvarCHAR(50), @isdeleted bit, @isEnc bit=1, @isdebug bit=0
+as
+	--declare @tablename nvarCHAR(50) = 'MaEVEN', @otablename nvarCHAR(50) = 'MoEVEN', @colname nvarCHAR(50) = 'EVENGUID', 
+	--	@isdeleted bit = 1, @isEnc bit=1, @isdebug bit=1
+
+	declare @sp nvarCHAR(4000), @parameter nvarCHAR(4000), @content nvarCHAR(4000), @dTableName nvarCHAR(50)
+	
+	set @dTableName = left(@tableName,1) + 'd' + substring(@tableName,3,len(@tablename)-2) 
+
+	if @isDeleted=1 begin	--ModifiedBy eLs
+		set @sp = @tableName + '_delete'
+		set @parameter = CHAR(9) + '@GUID uniqueidentifier, @hostGUID uniqueidentifier'
+		set @content = CHAR(13) + CHAR(10) +
+			CHAR(9) + 'declare @isCancel bit = 0, @msg nvarchar(250) = ''''' + CHAR(13) + CHAR(10) + 
+			CHAR(13) + CHAR(10) + 
+			CHAR(9) + 'if dbo.fn_checkObject(''dbo'','''+@tablename+'_delete_custom'') = 1 ' + CHAR(13) + CHAR(10) + 
+			CHAR(9) + CHAR(9) + 'exec dbo.'+@tablename+'_delete_custom @GUID, @hostGUID' + CHAR(13) + CHAR(10) +
+			CHAR(13) + CHAR(10) +
+			CHAR(9) + 'else begin' + CHAR(13) + CHAR(10) + 
+			CHAR(9) + CHAR(9) + 'if dbo.fn_checkObject(''dbo'','''+@tablename+'_delete_before'') = 1 ' + CHAR(13) + CHAR(10) + 
+			CHAR(9) + CHAR(9) + CHAR(9) + 'exec dbo.'+@tablename+'_delete_before @GUID, @hostGUID, @isCancel OUTPUT, @msg OUTPUT' + CHAR(13) + CHAR(10) + 
+			CHAR(13) + CHAR(10) + 
+			CHAR(9) + CHAR(9) + 'if @isCancel = 0 begin' + CHAR(13) + CHAR(10) + 
+			CHAR(9) + CHAR(9) + CHAR(9) + 'update ' + @oTableName + ' set ' + CHAR(13) + CHAR(10) + 
+			CHAR(9) + CHAR(9) + CHAR(9) + CHAR(9) + 'isDeleted = 1, DeletedDate = GETDATE(), DeletedUser = gen.getUser(@hostGUID)' + CHAR(13) + CHAR(10) + 
+			CHAR(9) + CHAR(9) + CHAR(9) + 'where ' + @colname + ' = @GUID' + CHAR(13) + CHAR(10) + 
+			CHAR(13) + CHAR(10) + 
+			CHAR(9) + CHAR(9) + CHAR(9) + 'if dbo.fn_checkObject(''dbo'','''+@tablename+'_delete_after'') = 1' + CHAR(13) + CHAR(10) + 
+			CHAR(9) + CHAR(9) + CHAR(9) + CHAR(9) + 'exec dbo.'+@tablename+'_delete_after @GUID, @hostGUID' + CHAR(13) + CHAR(10) + 
+			CHAR(9) + CHAR(9) + 'end' +CHAR(13) + CHAR(10) + 
+			CHAR(13) + CHAR(10) + 
+			CHAR(9) + CHAR(9) + 'select @msg deleted' + CHAR(13) + CHAR(10) +
+			CHAR(9) + 'end'
+				
+		if @isdebug = 1
+			select @sp [Delete Procedure], @content [Content]
+		else
+			exec gen.addproc @sp, @parameter, @content, @isEnc=@isenc
+	
+		--wipe
+		set @sp = '' + @dtableName + '_wipe' 
+		set @parameter = CHAR(9) + '@GUID uniqueidentifier, @hostGUID uniqueidentifier'
+		set @content = 
+				CHAR(9) + 'declare @msg nvarCHAR(100)' + CHAR(13) + CHAR(10) + 
+				CHAR(9) + 'set @msg =''''' + CHAR(13) + CHAR(10) + 
+		
+				CHAR(9) + 'delete '+ CHAR(13) + CHAR(10) + 
+				CHAR(9) + 'from ' + @oTableName + ' where ' + @colname + ' = @GUID' + CHAR(13) + CHAR(10) + CHAR(13) + CHAR(10) + 
+
+				CHAR(9) + 'if exists(select * from oph.' + @dtableName + CHAR(13) + CHAR(10) + 
+				CHAR(9) + CHAR(9) + 'where ' + @colname + ' = @GUID)' + CHAR(13) + CHAR(10) + 
+				CHAR(9) + CHAR(9) + 'set @msg=''This record cannot be wiped. It might still be used by other tables.''' + CHAR(13) + CHAR(10) + 
+				CHAR(9) + 'else' + CHAR(13) + CHAR(10) + 
+				CHAR(9) + CHAR(9) + 'select @msg wiped'
+
+		if @isdebug = 1
+			select @sp [Wipe Procedure], @content [Content]
+		else
+			exec gen.addproc @sp, @parameter, @content, @isEnc=@isenc
+
+		--restore
+		set @sp = '' + @dtableName + '_restore' 
+		set @parameter = CHAR(9) + '@GUID uniqueidentifier, @hostGUID uniqueidentifier'
+		set @content = 	CHAR(9) + 'update ' + @oTableName + CHAR(13) + CHAR(10) + 
+				CHAR(9) + 'set isDeleted = 0, deletedDate = null, deletedUser = null ' + CHAR(13) + CHAR(10) + 
+				CHAR(9) + 'where ' + @colname + ' = @GUID' + CHAR(13) + CHAR(10) + 
+				CHAR(9) + 'select '''' restored'
+
+		if @isdebug = 1 
+			select @sp [Restore Procedure], @content [Content]
+		else
+			exec gen.addproc @sp, @parameter, @content, @isEnc=@isenc
+					
+	end
+	/*
+	else begin
+		set @sp = @tableName + '_delete' 
+		set @parameter = CHAR(9) + '@GUID uniqueidentifier, @hostGUID uniqueidentifier'
+		set @content = 	
+				CHAR(9) + 'if dbo.fn_checkObject(''dbo'','''+@tablename+'_delete_custom'')=0 begin' + CHAR(13) + CHAR(10) + 
+				CHAR(9) + CHAR(9) + 'declare @userGUID uniqueidentifier' + CHAR(13) + CHAR(10) + 
+				CHAR(9) + CHAR(9) + 'declare @isCancel bit = 0, @msg nvarCHAR(MAX) =''''' + CHAR(13) + CHAR(10) + 
+				CHAR(9) + CHAR(9) + CHAR(13) + CHAR(10) + 
+				CHAR(9) + CHAR(9) + 'select @userGUID=userguid from coUSERHOST where hostGUID=@hostGUID' + CHAR(13) + CHAR(10) + 
+				CHAR(9) + CHAR(9) + CHAR(13) + CHAR(10) + 
+				CHAR(9) + CHAR(9) + 'if dbo.fn_checkObject(''dbo'','''+@tablename+'_delete_before'')=1 exec dbo.'+@tablename+'_delete_before @GUID, @hostGUID, @isCancel OUTPUT, @msg OUTPUT' + CHAR(13) + CHAR(10) + 
+				CHAR(9) + CHAR(9) + CHAR(13) + CHAR(10) + 
+				CHAR(9) + CHAR(9) + 'if @isCancel = 0 ' + CHAR(13) + CHAR(10) + 
+				CHAR(9) + CHAR(9) + CHAR(9) + 'delete from ' + @oTableName + ' where ' + @colname + ' = @GUID' + CHAR(13) + CHAR(10) + 
+				CHAR(9) + CHAR(9) + CHAR(13) + CHAR(10) + 
+				CHAR(9) + CHAR(9) + 'if dbo.fn_checkObject(''dbo'','''+@tablename+'_delete_after'')=1 exec dbo.'+@tablename+'_delete_after @GUID, @hostGUID' + CHAR(13) + CHAR(10) + 
+				CHAR(9) + CHAR(9) + CHAR(13) + CHAR(10) + 
+				CHAR(9) + CHAR(9) + 'if exists(select * from oph.' + @tableName + CHAR(13) + CHAR(10) + 
+				CHAR(9) + CHAR(9) + CHAR(9) + 'where ' + @colname + ' = @GUID) begin' + CHAR(13) + CHAR(10) + 
+				CHAR(9) + CHAR(9) + CHAR(9) + 'set @msg=''This record cannot be deleted. You might don''''t have any authority to do this.''' + CHAR(13) + CHAR(10) + 
+				CHAR(9) + CHAR(9) + 'end' + CHAR(13) + CHAR(10) + 
+				CHAR(9) + CHAR(9) + 'else begin' + CHAR(13) + CHAR(10) + 
+				CHAR(9) + CHAR(9) + CHAR(9) + 'if dbo.fn_checkObject(''dbo'','''+@tablename+'_delete_after'')=1 exec dbo.'+@tablename+'_delete_after_success @GUID, @hostGUID' + CHAR(13) + CHAR(10) + 
+				CHAR(9) + CHAR(9) + 'end' +CHAR(13) + CHAR(10) + 
+				CHAR(9) + CHAR(9) + CHAR(13) + CHAR(10) + 
+				CHAR(9) + CHAR(9) + 'select @msg deleted'+
+				CHAR(9) + 'end else' + CHAR(13) + CHAR(10) + 
+				CHAR(9) + CHAR(9) + 'exec dbo.'+@tablename+'_delete_custom @GUID, @hostGUID' + CHAR(13) + CHAR(10) 
+
+		exec gen.addproc @sp, @parameter, @content, @isEnc=@isenc
+	
+
+	end
+	*/			
+

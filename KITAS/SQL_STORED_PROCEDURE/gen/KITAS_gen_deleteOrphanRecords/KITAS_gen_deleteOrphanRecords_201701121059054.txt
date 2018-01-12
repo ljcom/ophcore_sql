@@ -1,0 +1,104 @@
+
+
+
+
+
+
+CREATE procedure [gen].[deleteOrphanRecords] @deletenow bit=0
+as
+	select * from toPORDISKUBUDG
+	left join toPORDISKU
+		on toPORDISKUBUDG.purchaseorderDetailGUID = toPORDISKU.purchaseorderDetailGUID
+	where toPORDISKU.purchaseorderDetailGUID is null
+
+	if @deletenow=1 
+		delete from toPORDISKUBUDG
+		from toPORDISKUBUDG
+		left join toPORDISKU
+			on toPORDISKUBUDG.purchaseorderDetailGUID = toPORDISKU.purchaseorderDetailGUID
+		where toPORDISKU.purchaseorderDetailGUID is null
+
+	select * from toPORDISKUGALL
+	left join toPORDISKU
+		on toPORDISKUGALL.purchaseorderDetailGUID = toPORDISKU.purchaseorderDetailGUID
+	where toPORDISKU.purchaseorderDetailGUID is null
+
+	if @deletenow=1 
+		delete from toPORDISKUGALL
+		from toPORDISKUGALL
+		left join toPORDISKU
+			on toPORDISKUGALL.purchaseorderDetailGUID = toPORDISKU.purchaseorderDetailGUID
+		where toPORDISKU.purchaseorderDetailGUID is null
+
+	select * from toPORDISKU
+	left join toPORD
+		on toPORDISKU.purchaseorderGUID = toPORD.purchaseorderGUID
+	where toPORD.purchaseorderGUID is null
+
+	if @deletenow=1 
+		delete from toPORDISKU
+		from toPORDISKU
+		left join toPORD
+			on toPORDISKU.purchaseorderGUID = toPORD.purchaseorderGUID
+		where toPORD.purchaseorderGUID is null
+
+	select * from toPORDISKU
+	left join toPRQTISKU
+		on toPORDISKU.prequestDetailGUID = toPRQTISKU.prequestDetailGUID
+	where toPRQTISKU.prequestDetailGUID is null and toPORDISKU.prequestDetailGUID is not null
+
+	if @deletenow=1 
+		delete from toPORDISKU
+		from toPORDISKU
+		left join toPRQTISKU
+			on toPORDISKU.prequestDetailGUID = toPRQTISKU.prequestDetailGUID
+		where toPRQTISKU.prequestDetailGUID is null and toPORDISKU.prequestDetailGUID is not null
+
+	select * from toPRQTISKUBUDG
+	left join toPRQTISKU
+		on toPRQTISKUBUDG.prequestDetailGUID = toPRQTISKU.prequestDetailGUID
+	where toPRQTISKU.prequestDetailGUID is null
+
+	if @deletenow=1 
+		delete from toPRQTISKUBUDG
+		from toPRQTISKUBUDG
+		left join toPRQTISKU
+			on toPRQTISKUBUDG.prequestDetailGUID = toPRQTISKU.prequestDetailGUID
+		where toPRQTISKU.prequestDetailGUID is null
+
+	select * from toPRQTISKUGALL
+	left join toPRQTISKU
+		on toPRQTISKUGALL.prequestDetailGUID = toPRQTISKU.prequestDetailGUID
+	where toPRQTISKU.prequestDetailGUID is null
+
+	if @deletenow=1 
+		delete from toPRQTISKUGALL
+		from toPRQTISKUGALL
+		left join toPRQTISKU
+			on toPRQTISKUGALL.prequestDetailGUID = toPRQTISKU.prequestDetailGUID
+		where toPRQTISKU.prequestDetailGUID is null
+
+	select * from toPRQTISKU
+	left join toPRQT
+		on toPRQTISKU.prequestGUID = toPRQT.prequestGUID
+	where toPRQT.prequestGUID is null
+
+	if @deletenow=1 
+		delete from toPRQTISKU
+		from toPRQTISKU
+		left join toPRQT
+			on toPRQTISKU.prequestGUID = toPRQT.prequestGUID
+		where toPRQT.prequestGUID is null
+
+
+
+
+
+
+
+
+
+
+
+
+

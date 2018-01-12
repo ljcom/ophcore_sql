@@ -1,0 +1,437 @@
+CREATE procedure [api].[save_v4] 
+	@hostGUID uniqueidentifier, @code varchar(20), @GUID uniqueidentifier, @saveXML xml, @preview int=0, @isDebug bit=0,
+	@withOutput bit=0, @xmlResult xml = NULL OUTPUT
+--WITH ENCRYPTION
+as	
+--declare 
+--	@hostGUID uniqueidentifier = gen.gethost('els'), @code varchar(20) = 'kkeldnik', 
+--	@GUID uniqueidentifier, @saveXML xml = '<sqroot><field id="AgamaGUID"><value>61978F90-E1C7-4E90-9D36-EFEDB0809A26</value></field><field id="HubKeluargaGUID"><value>ADFD8ED2-E946-4C10-B253-52EBBD5F5D26</value></field><field id="JenisKelaminGUID"><value>56A877EB-0473-4152-B003-D45FD69BDF81</value></field><field id="NamaAyah"><value>IR.DARMONO SETYAWAN</value></field><field id="NamaIbu"><value>HONNY CHRISTINA</value></field><field id="NamaLengkap"><value>BELDA MARELLA SETYAWAN</value></field><field id="NomorKITAS"><value/></field><field id="NomorNIK"><value>3172025912940015</value></field><field id="NomorPaspor"><value/></field><field id="PekerjaanGUID"><value>8D97448B-F070-429A-B384-B2D39A0545A7</value></field><field id="PendidikanGUID"><value>8D6A1B6D-705C-42D7-A4BA-CC614B152974</value></field><field id="StatusPernikahanGUID"><value>91DECFB1-0C70-48E5-98B4-826A5CA9BB01</value></field><field id="TanggalLahir"><value>Dec 19 1994</value></field><field id="TempatLahir"><value>JAKARTA</value></field><field id="WargaNegaraGUID"><value>C79812E8-5B19-4BA8-B230-4396B2D5C4E1</value></field><field id="DocGUID"><value>91E72B2D-B9C2-4B1E-81E2-AB3213330AD3</value></field></sqroot>'
+--	, @preview int=0, @isDebug bit=1, @withOutput bit=0, @xmlResult xml = NULL 
+
+	SET NOCOUNT ON
+	declare @ver varchar(10), @db varchar(50), @typecode varchar(1), @accountid varchar(50), @coreDB varchar(50), @migrateDB varchar(50), @accountguid uniqueidentifier
+	declare @PrimaryKey nvarchar(50), @sqlstr nvarchar(max), @insertStr nvarchar(max), @insertField nvarchar(max), @updateStr nvarchar(max), 
+		@colKey nvarchar(max), @msg varchar(MAX), @cid uniqueidentifier, @parentKey nvarchar(50), @parentkey2 nvarchar(50), 
+		@OldPrimary nvarchar(50), @childkey nvarchar(50), @codex nvarchar(100)=gen.codex(@hostguid, @code, 1)		
+
+	--mandatory checking value
+	if exists(
+		select ColKey from modl a
+			inner join modlcolm c ON a.ModuleGUID = c.ModuleGUID
+			inner join modlcolminfo n ON c.ColumnGUID = n.ColumnGUID AND n.InfoKey = 'isNullable' AND n.InfoValue = '0'
+			inner join modlcolminfo e ON c.ColumnGUID = e.ColumnGUID AND e.InfoKey = 'isEditable' AND e.InfoValue = '1'
+			left join ( select sv.value('@id', 'varchar(MAX)') [fieldId], sv.value('value[1]', 'varchar(MAX)') [FieldValue]
+				from @saveXML.nodes('/sqroot/field') x(sv)
+			) f ON c.colKey = f.fieldId
+		where ModuleId = @code AND isNULL(FieldValue, '') = ''
+	) AND @preview = 0 begin
+		set @msg = 'You have to fill mandatory field (' + STUFF((
+			select ', ' + quotename(titleCaption) from modl a
+				inner join modlcolm c ON a.ModuleGUID = c.ModuleGUID
+				inner join modlcolminfo n ON c.ColumnGUID = n.ColumnGUID AND n.InfoKey = 'isNullable' AND n.InfoValue = '0'
+				inner join modlcolminfo e ON c.ColumnGUID = e.ColumnGUID AND e.InfoKey = 'isEditable' AND e.InfoValue = '1'
+				left join ( select sv.value('@id', 'varchar(MAX)') [fieldId], sv.value('value[1]', 'varchar(MAX)') [FieldValue]
+					from @saveXML.nodes('/sqroot/field') x(sv)
+				) f ON c.colKey = f.fieldId
+			where ModuleId = @code AND isNULL(FieldValue, '') = '' for xml path('')
+		), 1, 2, '') + ')'
+		goto ENDLINE
+	end
+
+	--combos autoSuggest checking value
+	/*
+	create table #cbr(xmlOut xml)
+	declare @cbColKey varchar(50), @cbVal varchar(50), @cbSql nvarchar(MAX), @cbMsg varchar(MAX)
+	declare cbcr cursor read_only for
+		select ColKey, cast(FieldValue as varchar(50)) from modl m
+			inner join modlcolm c ON m.ModuleGUID = c.ModuleGUID
+			inner join modlcolminfo i ON c.ColumnGUID = i.ColumnGUID AND i.InfoKey = 'comboTable' AND i.InfoValue != ''
+			inner join ( select sv.value('@id', 'varchar(MAX)') [fieldId], sv.value('value[1]', 'varchar(MAX)') [FieldValue]
+				from @saveXML.nodes('/sqroot/field') x(sv)
+			) f ON c.colKey = f.fieldId
+		where ModuleId = @code AND isNULL(FieldValue, '') != ''
+	open cbcr fetch next from cbcr into @cbColKey, @cbVal
+	while @@FETCH_STATUS = 0 begin
+		set @cbSql = 'exec api.autosuggest '''+cast(@hostGUID as varchar(50))+''', '''+@code+''', '''+@cbColKey+''', '''+@cbVal+''''
+		begin try
+			insert into #cbr exec(@cbsql)
+			if isNULL(@cbVal, '') != (select xmlOut.value('(/sqroot/option/value)[1]', 'varchar(50)') from #cbr)
+				set @cbMsg = isNULL(@cbMsg, '') + ', "' + @cbVal + '"'
+			truncate table #cbr
+		end try
+		begin catch
+			break
+		end catch
+	fetch next from cbcr into @cbColKey, @cbVal
+	end
+	close cbcr deallocate cbcr
+	drop table #cbr
+	if isNULL(@cbMsg, '') != '' begin
+		set @msg = 'Invalid value of ' + STUFF(@cbMsg, 1, 2, '') + ' or value does not exists in our system.'
+		goto ENDLINE
+	end 
+	*/
+
+	exec gen.getDBInfo @hostguid, @code, @ver output, @db output, @typecode output, 
+		@accountid=@accountid output, @coreDB=@coreDB output, @migrateDB=@migrateDB output, @accountguid=@accountguid output
+	
+	if @ver='2.0' or (@ver='3.0' and isnull(@migrateDB, '')<>'') or @ver='4.0' begin
+		set @ver='4.0'
+		set @db=db_name()
+	end
+	declare @userGUID uniqueidentifier
+	select @userGUID=userguid from USERHOST where hostGUID=@hostGUID		
+
+	--check parent
+	set @sqlstr='
+		select TOP 1 @parentKey=colkey 
+		from modl a
+			inner join modl b on a.parentmoduleguid=b.moduleguid
+			inner join modlcolm c on b.moduleguid=c.moduleguid 
+		where a.moduleid='''+@code+''' 
+		order by colorder
+		
+		select top 1 @OldPrimary = infovalue from modl a
+		inner join modlinfo b on b.moduleGUID = a.moduleGUID
+		where a.moduleid='''+@code+''' and b.infokey = ''oldprimary''
+
+		select top 1 @childkey = infovalue from modl a
+		inner join modlinfo b on b.moduleGUID = a.moduleGUID
+		where a.moduleid='''+@code+''' and b.infokey = ''childkey''
+		
+	'
+
+	exec sp_executesql @sqlstr, N'@parentKey nvarchar(50) OUTPUT, @OldPrimary nvarchar(50) OUTPUT, @childkey nvarchar(50) OUTPUT', @parentKey OUTPUT, @OldPrimary OUTPUT, @childkey OUTPUT
+
+	if isNULL(@parentKey, '') != '' begin
+		set @parentkey2 = 'parentDocGUID'
+		set @parentKey = 'parentDocGUID'	
+	end
+	
+	select @cid=typenode.value('value[1]', 'varchar(MAX)')
+	from @saveXML.nodes('/sqroot/field') AS XTbl(typenode)
+	where typenode.value('@id', 'varchar(50)')='cid'
+
+	if @cid is NULL
+		select @cid=typenode.value('value[1]', 'varchar(MAX)')
+		from @saveXML.nodes('/sqroot/field') AS XTbl(typenode)
+		where typenode.value('@id', 'varchar(50)')='DocGUID'
+
+	if @cid is NULL
+		select @cid=typenode.value('value[1]', 'varchar(MAX)')
+		from @saveXML.nodes('/sqroot/field') AS XTbl(typenode)
+		where typenode.value('@id', 'varchar(50)')=@parentKey
+
+	--
+	--set @PrimaryKey = api.fn_PrimaryKey (@code)
+	exec api.getPrimaryKey @hostguid, @code, @PrimaryKey OUTPUT
+
+	declare @schema varchar(5)
+	select @schema = b1.name from sys.views a1
+		inner join sys.schemas b1 ON a1.schema_id = b1.schema_id
+	where a1.name = @code
+
+	declare @isGUIDNew bit, @gsql nvarchar(MAX)
+	set @gsql = 'if exists(
+		select * from '+@codex+' where '+isNULL(@PrimaryKey, 'DocGUID')+'='''+CAST(@GUID as varchar(50))+''' 
+	) set @isGUIDNew = 0
+	else set @isGUIDNew = 1'
+	exec sp_executesql @gsql, N'@isGUIDNew bit OUTPUT', @isGUIDNew OUTPUT
+
+	declare @isNew bit = iif(ISNULL(@GUID, gen.ZeroGUID()) = gen.ZeroGUID() OR @isGUIDNew = 1, 1, 0)
+	set @GUID = IIF(@GUID = gen.zeroGUID(), NULL, @GUID)
+
+	set @colKey = STUFF((
+		select ','+ColKey 
+		--select *
+		from modlcolm a
+			inner join modlcolminfo b ON a.ColumnGUID = b.ColumnGUID
+			inner join modl c ON a.ModuleGUID = c.ModuleGUID
+		where c.ModuleId = @code 
+			and b.InfoKey = 'isEditable' and (b.infoValue = '1' or (@isNew=1 and b.infoValue = '2'))
+		order by colkey
+		for xml path('')), 1, 1, '')
+
+	
+	if @typecode='C' begin
+		print 'type: C'
+		set @insertField = STUFF((
+			select ', '+col+'' 
+			from (
+				select top 1000
+					typenode.value('@id', 'varchar(50)') col
+				from @saveXML.nodes('/sqroot/field') AS XTbl(typenode)
+				where charindex(typenode.value('@id', 'varchar(50)')+',', @colKey+',')>=1
+				order by typenode.value('@id', 'varchar(50)')
+			) x
+			for xml path('')), 1, 2, ''
+		)
+		set @updateStr = STUFF((
+			select ', '+col +' = '''+ iif(isnull(val, '') <> '', val, null) +''''
+			from (
+				select top 1000 typenode.value('@id', 'varchar(50)') col, replace(typenode.value('value[1]', 'varchar(MAX)'),'''','''''') val
+				from @saveXML.nodes('/sqroot/field') AS XTbl(typenode)
+				where @colKey+',' like '%' + typenode.value('@id', 'varchar(50)') + ',' + '%'
+				order by typenode.value('@id', 'varchar(50)')
+			) x
+			for xml path('')), 1, 2, ''
+		)
+	end
+	else begin
+		print 'Type: ' + @typecode
+		set @parentKey = iif(@parentkey is null, null, 'parentDocGUID')
+
+
+		set @insertField = STUFF((
+			select ', ['+replace(cast(colKey as nvarchar(50)), '-', '')+']' 
+			from (
+				select top 1000 
+					typenode.value('@id', 'varchar(50)') col
+				from @saveXML.nodes('/sqroot/field') AS XTbl(typenode)
+				where charindex(typenode.value('@id', 'varchar(50)'), @colKey)>=1
+				order by typenode.value('@id', 'varchar(50)')
+			) x
+				inner join modlcolm y on x.col=y.colkey
+				inner join modl z on y.ModuleGUID=z.moduleguid and z.moduleid=@code
+			for xml path('')), 1, 2, ''
+		)+ ', createdUser'
+
+		set @updateStr = STUFF((
+			select 
+			', ['+replace(cast(colKey as nvarchar(50)), '-', '') +'] = '''+ iif(isnull(val, '') <> '', val, null) +''''
+			from (
+				select top 1000 typenode.value('@id', 'varchar(50)') col, replace(typenode.value('value[1]', 'varchar(MAX)'),'''','''''') val
+				from @saveXML.nodes('/sqroot/field') AS XTbl(typenode)
+				where @colKey like '%' + typenode.value('@id', 'varchar(50)') + '%'
+				order by typenode.value('@id', 'varchar(50)')
+			) x	
+				inner join modlcolm y on x.col=y.colkey
+				inner join modl z on y.ModuleGUID=z.moduleguid and z.moduleid=@code
+			for xml path('')), 1, 2, ''
+		)
+
+		set @PrimaryKey = 'DocGUID'
+	end
+
+	set @insertStr = STUFF((
+		select
+			case 
+				when isnull(typenode.value('value[1]', 'varchar(MAX)'),'') <> '' 
+					then ', '''+ replace(typenode.value('value[1]', 'varchar(MAX)'),'''','''''') +''''
+				else ', NULL'
+			end
+		from @saveXML.nodes('/sqroot/field') AS XTbl(typenode)
+		where charindex(typenode.value('@id', 'varchar(50)')+',', @colKey+',')>=1
+		order by typenode.value('@id', 'varchar(50)')
+		for xml path('')), 1, 2, ''
+	) + iif(@typecode='C', '', +', '''+convert(varchar(50),@userGUID)+'''')
+		
+	--set @insertStr=replace(@insertStr, '''''', 'null')
+	
+	declare @savelist api.fieldlist, @isExists bit=0
+
+	insert into @saveList
+	exec api.convertXML2FieldList @code, @savexml, @db
+
+	if @isdebug=1 select * from @savelist
+
+	declare @fieldvalue nvarchar(max)=''
+	select @fieldvalue=@fieldvalue + '@'+fieldid+'='+
+		CASE WHEN FIELDVALUE ='null' OR FIELDVALUE='' or fieldvalue is null then 'null' ELSE ''''+fieldvalue+'''' END +',' 
+	from @savelist
+
+	if @preview > 0 Begin
+		print 'ispreview'
+		declare @preview_proc nvarchar(max)=@code+'_save_preview'
+		declare @parentdocguid nvarchar(max)
+
+		select @parentdocguid=typenode.value('value[1]', 'varchar(MAX)')
+		from @saveXML.nodes('/sqroot/field') AS XTbl(typenode)
+		where typenode.value('@id', 'varchar(50)')='DocGUID'
+		
+		set @isExists=0
+
+		exec gen.checkObject @preview_proc, 'doc', @db, @isExists OUTPUT
+		
+		if @isExists=1 begin
+			if @parentdocguid is null begin
+				set @sqlstr = 'exec '+@db+'.doc.'+ @preview_proc +' '+
+					'@GUID='+isnull(''''+convert(nvarchar(max),@GUID)+'''','NULL')+', 
+					@hostGUID='+isnull(''''+convert(nvarchar(max),@hostGUID)+'''','NULL')+','+ @fieldvalue+'@preview='+convert(nvarchar(max),@preview)
+			end
+			else begin
+				set @sqlstr = 'exec '+@db+'.doc.'+ @preview_proc +' '+
+					'@GUID='+isnull(''''+convert(nvarchar(max),@GUID)+'''','NULL')+', 
+					@hostGUID='+isnull(''''+convert(nvarchar(max),@hostGUID)+'''','NULL')+',
+					@parentdocGUID='+isnull(''''+convert(nvarchar(max),@parentdocguid)+'''','NULL')+ ','+ @fieldvalue+'@preview='+convert(nvarchar(max),@preview)
+			end			
+			if @isdebug = 1 print @sqlstr
+			
+			exec (@sqlstr)
+		end
+	 end
+	 else begin
+		--print 'saving process'
+		declare @custom_proc nvarchar(max)=@code+'_save_custom'
+		declare @custom_par nvarchar(max)='@GUID uniqueidentifier, @hostGUID uniqueidentifier, @saveXML xml'
+
+		exec gen.checkObject @custom_proc, 'doc', @db, @isExists OUTPUT
+		if @isExists=1 begin
+			print 'save_custom'			
+			set @custom_proc = '
+				use '+@db+'
+				exec doc.'+@custom_proc +' @guid, @hostGUID, @saveXML'
+			
+			if @isdebug=1 print @custom_proc
+			exec sp_executesql @custom_proc, @custom_par, @GUID, @hostGUID, @saveXML
+		end
+		else begin
+			print 'oph_save'			
+			
+			set @msg=''
+
+			if @isNew=1 begin
+				--insert
+				if @GUID is null set @GUID = newid()
+			
+				print 'save insert ==> ' + cast(@GUID as varchar(50)) 
+
+				begin try
+					declare @insertbefore_proc varchar(50)=@code+'_save_update_before'
+					
+					set @isExists=0
+					
+					exec gen.checkObject @insertbefore_proc, 'doc', @db, @isExists OUTPUT
+
+					if @isExists=1 begin
+						print 'insert before'
+						set @sqlstr = 'exec '+@db+'.doc.'+ @insertbefore_proc +' '+'@GUID='+isnull(''''+convert(nvarchar(max),@GUID)+'''','NULL')+',@hostGUID='+isnull(''''+convert(nvarchar(max),@hostGUID)+'''','NULL')+
+							iif(isnull(@parentKey,'')='','', ', @'+@parentkey2+' ='''+cast(@cid as varchar(50))+'''')+','+ @fieldvalue+'@msg = @msg output'
+
+						if @isdebug = 1 print 'before' + @sqlstr
+						
+						exec sp_executesql @sqlstr,N'@msg nvarchar(max) output',@msg output
+
+						if @msg <> '' set @GUID = null
+					end
+
+					if isnull(@msg,'') = '' begin
+						
+						declare @docno nvarchar(max)
+						set @sqlstr ='exec '+@db+'.api.getNumber '''+@code+''','''+convert(nvarchar(max),getdate())+''', 0, @docno output'
+						exec sp_executesql @sqlstr,N'@docno nvarchar(max) output',@docno output
+
+						declare @docNoName nvarchar(max)
+						exec [api].[getPrimaryCol] @hostGUID, @code, 3, @docNoName OUTPUT
+
+						if charindex(@docnoname, @insertField,1)>0 begin
+							set @docnoname=null
+							set @docno=null
+						end
+						else
+							set @docno = iif(isNULL(@docnoname, '') != '' and @docno is null, 'NULL', @docno)
+
+						set @sqlstr = 'insert into ' + @codex + ' ('+iif(isnull(@parentKey,'')='' or @typecode<>'C', 'accountguid, ', '')+@PrimaryKey + iif(isnull(@OldPrimary,'')='','', ', '+isnull(@OldPrimary,'')) + iif(isnull(@parentKey,'')='' or isnull(@parentkey, '')='moduleGUID','', ', '+isnull(@parentKey,'')) + iif(isnull(@childkey,'')='','', ', '+isnull(@childkey,'')) + iif(isnull(@docnoname,'') != '', ', '+@docnoname+',', ', ') + @insertField + ')' + char(10) +
+						'values('++iif(isnull(@parentKey,'')='' or @typecode<>'C', ''''+cast(@accountGUID as nvarchar(50))+''', ', '')+'''' + cast(@GUID as varchar(50)) + '''' + iif(isnull(@OldPrimary,'') <> '', ', ''' + cast(@GUID as varchar(50)) + '''', '') + iif(isnull(@parentKey,'')='' or isnull(@parentkey, '')='moduleGUID','', ', '''+cast(@cid as varchar(50))+'''')+ iif(isnull(@childkey,'')='','', ', '''+cast(@cid as varchar(50))+'''') + iif(isnull(@docno,'') != '', ', '''+@docno+''',' , ', ') + @insertStr + ')'
+
+						exec (@sqlstr)
+						--exec api.save_insert @hostGUID, @code, @GUID, @saveList, @msg OUTPUT, @isDebug				
+						--print 'update after insert'
+					
+
+						declare @insertafter_proc varchar(50)=@code+'_save_update_after'
+					
+						set @isExists=0
+						exec gen.checkObject @insertafter_proc, 'doc', @db, @isExists OUTPUT
+
+						if @isExists=1 begin
+							print 'update after insert'
+							set @sqlstr = 'exec '+@db+'.doc.'+ @insertafter_proc +' '+'@GUID='+isnull(''''+convert(nvarchar(max),@GUID)+'''','NULL')+',@hostGUID='+isnull(''''+convert(nvarchar(max),@hostGUID)+'''','NULL')+',@isupdate=0'
+							if @isdebug = 1 print @sqlstr
+
+							exec (@sqlstr)	
+						end	
+					end	
+
+				end try
+				begin catch
+					set @msg=error_message()
+					set @guid=null
+					print @sqlstr
+				end catch
+			end
+			else begin
+				begin try
+					declare @updatebefore_proc varchar(50)=@code+'_save_update_before'
+
+					set @isExists=0
+					exec gen.checkObject @updatebefore_proc, 'doc', @db, @isExists OUTPUT
+
+					if @isExists=1 begin
+						print 'update before'
+						set @sqlstr = 'exec '+@db+'.doc.'+ @updatebefore_proc +' '+'@GUID='+isnull(''''+convert(nvarchar(max),@GUID)+'''','NULL')+',
+							@hostGUID='+isnull(''''+convert(nvarchar(max),@hostGUID)+'''','NULL')+
+							iif(isnull(@parentKey,'')='','', ', @'+@parentkey2+' ='''+cast(@cid as varchar(50))+'''')+', '+ 
+							@fieldvalue+'@msg = @msg output'
+						if @isdebug = 1 print @sqlstr
+						exec sp_executesql @sqlstr,N'@msg nvarchar(max) output', @msg output
+
+						if @msg <> '' set @GUID = null
+					end
+
+					if isnull(@msg,'') = '' begin
+						print 'save update' print @GUID
+						--exec api.save_update @hostGUID, @code, @GUID, @saveList, @msg OUTPUT, @isDebug				
+						set @sqlstr = 'update ' + @codex + ' set ' + @updateStr + ' where ' + @PrimaryKey + ' = ''' + CAST(@GUID as varchar(50)) + ''''
+						exec (@sqlstr)
+				
+						declare @updateafter_proc varchar(50)=@code+'_save_update_after'
+
+						set @isExists=0
+						exec gen.checkObject @updateafter_proc, 'doc', @db, @isExists OUTPUT
+
+						if @isExists=1 begin
+							print 'update after'
+							set @sqlstr = 'exec '+@db+'.doc.'+ @updateafter_proc +' '+'@GUID='+isnull(''''+convert(nvarchar(max),@GUID)+'''','NULL')+',@hostGUID='+isnull(''''+convert(nvarchar(max),@hostGUID)+'''','NULL')+',@isupdate=1'
+							if @isdebug = 1 print @sqlstr
+							exec (@sqlstr)	
+						end
+					end
+
+				
+				end try
+				begin catch
+					set @msg=error_message()
+					set @guid=null
+				end catch
+			end
+		end
+		
+	end
+
+	--run the scripts
+	--if @preview=0 begin
+	--	begin try
+	--		print @parentKey
+	--		print @insertField
+	--		print @insertstr
+	--		print @codex
+	--		print @cid
+	--		print @sqlstr
+	--		exec(@sqlstr)
+	--	end try
+	--	begin catch
+	--		set @msg = ERROR_MESSAGE()
+	--		set @guid = null
+	--	end catch
+	--end
+
+	ENDLINE:
+	print @withOutput
+	if @withOutput = 1 
+		set @xmlResult= (
+			select @msg 'message', @GUID 'guid' for xml path('sqroot')
+		)
+	else
+		select @msg [message], @GUID [guid] for xml path('sqroot')
+

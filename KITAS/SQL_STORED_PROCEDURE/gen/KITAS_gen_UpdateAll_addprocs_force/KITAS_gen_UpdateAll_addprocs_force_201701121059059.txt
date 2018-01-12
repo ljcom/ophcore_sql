@@ -1,0 +1,29 @@
+
+
+create procedure [gen].[UpdateAll_addprocs_force] 
+as
+declare @otablename nvarchar(10), @atablename nvarchar(10), @sqlstr nvarchar(500), @fieldkey varchar(30)
+
+DECLARE csr cursor FOR
+select a.tablename from gen.cotabl a
+where substring(tablename,1,2) ='to' and len(tablename)=6
+OPEN csr
+FETCH next from csr into @otablename
+WHILE @@fetch_status =0
+BEGIN
+	set @atablename=left(@otablename,1)+ 'a' +right(@otablename,len(@otablename)-2 )
+	
+	select @fieldkey=colname from gen.cotabl a
+	inner join gen.cotablfiel b
+	on a.TableGUID=b.tableGUID
+	where a.tablename=@atablename and colorder=10
+
+	set @sqlstr='exec [gen].[addprocs_force] '''+@atablename+''', '''+@otablename+''' , '''+@fieldkey+''', ''status'''
+	exec(@sqlstr)
+FETCH next from csr into @otablename
+END
+CLOSE csr
+DEALLOCATE csr 
+
+
+

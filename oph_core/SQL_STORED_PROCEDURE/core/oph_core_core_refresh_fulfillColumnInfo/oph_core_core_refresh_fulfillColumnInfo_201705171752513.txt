@@ -1,0 +1,89 @@
+
+
+CREATE procedure [core].[refresh_fulfillColumnInfo] @db varchar(50), @isdebug bit=0
+--WITH ENCRYPTION
+as
+	declare @sqlstr nvarchar(max)
+	set @sqlstr='
+
+		insert into '+@db+'.dbo.modlcolminfo (ColumnInfoGUID, ColumnGUID, InfoKey, InfoValue)
+		select newid(), b.ColumnGUID, ''PageNo'', 1 
+		--select *
+		from '+@db+'.dbo.modl a
+			inner join '+@db+'.dbo.modlcolm b on a.moduleguid=b.moduleguid --and a.moduleid=''acct''
+			inner join '+@db+'.dbo.modlcolminfo c on b.columnguid=c.columnguid and c.InfoKey=''isviewable'' and c.InfoValue=''1''
+			left join '+@db+'.dbo.modlcolminfo d1 on b.columnguid=d1.columnguid and d1.InfoKey=''PageNo'' 
+		where d1.columnguid is null 
+
+		insert into '+@db+'.dbo.modlcolminfo (ColumnInfoGUID, ColumnGUID, InfoKey, InfoValue)
+		select newid(), b.ColumnGUID, ''SectionNo'', 1 
+		from '+@db+'.dbo.modl a
+			inner join '+@db+'.dbo.modlcolm b on a.moduleguid=b.moduleguid
+			inner join '+@db+'.dbo.modlcolminfo c on b.columnguid=c.columnguid and c.InfoKey=''isviewable'' and c.InfoValue=''1''
+			left join '+@db+'.dbo.modlcolminfo d1 on b.columnguid=d1.columnguid and d1.InfoKey=''SectionNo'' 
+		where d1.columnguid is null 
+
+		insert into '+@db+'.dbo.modlcolminfo (ColumnInfoGUID, ColumnGUID, InfoKey, InfoValue)
+		select newid(), b.ColumnGUID, ''ColNo'', 1 
+		from '+@db+'.dbo.modl a
+			inner join '+@db+'.dbo.modlcolm b on a.moduleguid=b.moduleguid
+			inner join '+@db+'.dbo.modlcolminfo c on b.columnguid=c.columnguid and c.InfoKey=''isviewable'' and c.InfoValue=''1''
+			left join '+@db+'.dbo.modlcolminfo d1 on b.columnguid=d1.columnguid and d1.InfoKey=''ColNo'' 
+		where d1.columnguid is null 
+
+		insert into '+@db+'.dbo.modlcolminfo (ColumnInfoGUID, ColumnGUID, InfoKey, InfoValue)
+		select newid(), b.ColumnGUID, ''RowNo'', 1 
+		from '+@db+'.dbo.modl a
+			inner join '+@db+'.dbo.modlcolm b on a.moduleguid=b.moduleguid
+			inner join '+@db+'.dbo.modlcolminfo c on b.columnguid=c.columnguid and c.InfoKey=''isviewable'' and c.InfoValue=''1''
+			left join '+@db+'.dbo.modlcolminfo d1 on b.columnguid=d1.columnguid and d1.InfoKey=''RowNo'' 
+		where d1.columnguid is null 
+
+		insert into '+@db+'.dbo.modlcolminfo (ColumnInfoGUID, ColumnGUID, InfoKey, InfoValue)
+		select newid(), b.ColumnGUID, ''fieldNo'', b.colOrder 
+		from '+@db+'.dbo.modl a
+			inner join '+@db+'.dbo.modlcolm b on a.moduleguid=b.moduleguid
+			inner join '+@db+'.dbo.modlcolminfo c on b.columnguid=c.columnguid and c.InfoKey=''isviewable'' and c.InfoValue=''1''
+			left join '+@db+'.dbo.modlcolminfo d1 on b.columnguid=d1.columnguid and d1.InfoKey=''fieldNo'' 
+		where d1.columnguid is null
+
+		insert into '+@db+'.dbo.modlcolminfo (ColumnInfoGUID, ColumnGUID, InfoKey, InfoValue)
+		select newid(), b.ColumnGUID, ''colType'', 11
+		from '+@db+'.dbo.modl a
+			inner join '+@db+'.dbo.modlcolm b on a.moduleguid=b.moduleguid
+			inner join '+@db+'.dbo.modlcolminfo c on b.columnguid=c.columnguid and c.InfoKey=''isviewable'' and c.InfoValue=''1''
+			left join '+@db+'.dbo.modlcolminfo d1 on b.columnguid=d1.columnguid and d1.InfoKey=''colType'' 
+		where d1.columnguid is null
+
+		insert into '+@db+'.dbo.modlcolminfo (ColumnInfoGUID, ColumnGUID, InfoKey, InfoValue)
+		select newid(), b.ColumnGUID, ''isPreview'', 0
+		from '+@db+'.dbo.modl a
+			inner join '+@db+'.dbo.modlcolm b on a.moduleguid=b.moduleguid
+			inner join '+@db+'.dbo.modlcolminfo c on b.columnguid=c.columnguid and c.InfoKey=''isviewable'' and c.InfoValue=''1''
+			left join '+@db+'.dbo.modlcolminfo d1 on b.columnguid=d1.columnguid and d1.InfoKey=''isPreview'' 
+		where d1.columnguid is null
+
+		insert into '+@db+'.dbo.modlcolminfo (ColumnInfoGUID, ColumnGUID, InfoKey, InfoValue)
+		select newid(), b.ColumnGUID, ''isEditable'', 0
+		from '+@db+'.dbo.modl a
+			inner join '+@db+'.dbo.modlcolm b on a.moduleguid=b.moduleguid
+			inner join '+@db+'.dbo.modlcolminfo c on b.columnguid=c.columnguid and c.InfoKey=''isviewable'' and c.InfoValue=''1''
+			left join '+@db+'.dbo.modlcolminfo d1 on b.columnguid=d1.columnguid and d1.InfoKey=''isEditable'' 
+		where d1.columnguid is null
+
+		update b2
+		set infovalue=''0''
+		--select * 
+		from '+@db+'.dbo.modlcolm a	
+			inner join '+@db+'.dbo.modlcolminfo b1 on a.columnGUID=b1.columnGUID and b1.infokey=''coltype'' and b1.infovalue=''33''
+			inner join '+@db+'.dbo.modlcolminfo b2 on a.columnGUID=b2.columnGUID and b2.infokey=''isbrowsable'' and b2.infovalue=''1''
+
+		'
+
+	if @isdebug=1 print @sqlstr
+	exec sp_executesql @sqlstr
+
+
+
+
+

@@ -1,0 +1,26 @@
+create TRIGGER [dbo].[tg_ugrpmodl_updatedDate] 
+   ON  dbo.ugrpmodl
+   AFTER UPDATE
+AS 
+BEGIN
+	set nocount on 
+
+	declare @guid nvarchar(max)=(
+		select cast(accessGUID as nvarchar(50))+'*'
+		from inserted
+		for xml path(''))
+
+	update x
+	set updatedDate=getdate()
+	--select * 
+	from inserted i inner join deleted d on i.accessGUID=d.accessGUID
+		inner join ugrpmodl x on x.accessGUID=i.accessGUID
+	where isnull(i.updatedDate, '1/1/2000') = isnull(d.updatedDate, '1/1/2000')
+
+	declare @c nvarchar(max)='update: ugrpmodl, '+@GUID
+
+	INSERT INTO evnt (EventGUID, AccountGUID, moduleGUID, DocGUID, timeRecord, Comment, CreatedDate, CreatedUser)
+	select newid(), null, null, null, 0, @c, getdate(), null
+
+END
+

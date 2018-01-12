@@ -1,0 +1,85 @@
+CREATE PROCEDURE [dbo].[YoPCSO_SAP_online] @PCSOGUID uniqueidentifier, @isdebug bit = 0
+as	--CreatedBy eLs ON Feb, 2017
+
+--declare @PCSOGUID uniqueidentifier = 'F8CEC551-ADAE-45F8-B2EE-3695D9CCE565', @isdebug bit = 1
+	
+	set NOCOUNT on
+	declare @OutPath varchar(250), @delimeter varchar(5) = '^'
+	declare @bcp varchar(255), @fileName varchar(50), @sql varchar(255)
+
+	if OBJECT_ID('tempdb..##sapon') is NOT NULL drop table ##sapon
+	create table ##sapon(code varchar(5), evnt varchar(5), SAP varchar(MAX))
+
+	insert into ##sapon
+	select b.ID, evnt,
+		'H'+ @delimeter + isNULL(a.DocRefNo, '') + '-' + cast(b.ID as varchar(10)) + @delimeter + 
+		convert(varchar(50), DocDate, 112) + @delimeter + 'I001' + @delimeter + 'YOR' + @delimeter + b.SalesID + 
+		@delimeter + '02' + @delimeter + cast(b.ID as varchar(10)) + @delimeter + 
+		'ID' + CONVERT(varchar(20), TRY_CONVERT(numeric, c.CustomerId)) + @delimeter + 
+		convert(varchar(50), DocDate, 112) + @delimeter + @delimeter + @delimeter + @delimeter + @delimeter + 
+		isNULL(CarolGUIDcbNm, 'unknown') + SPACE(1) + 'DBS Bank Tower, Ciputra World 1 level 29' 
+		[SAP_text]
+	from oph.TcPCSO a
+		inner join (
+			select PCSOGUID, evnt, c1.ID, c1.SalesID from (
+				select PCSOGUID, PRODGUID,
+					case EVENGUID 
+						when '9573DD6B-DB6F-4153-8A07-9B7CC8C0ADE7' then NULL
+						when '6A293D44-E76E-4979-BAD6-A598988FB61B' then 'OF'
+					else 'BF' end [evnt]
+				from ToPCSODETA 
+			) a1
+				inner join MoPROD b1 ON a1.PRODGUID = b1.PRODGUID
+				inner join MoDIVN c1 ON b1.DIVNGUID = c1.DIVNGUID
+			where PCSOGUID = @PCSOGUID AND evnt is not NULL
+			group by PCSOGUID, evnt, c1.ID, c1.SalesID
+		) b ON a.PCSOGUID = b.PCSOGUID
+		inner join MoCUS1 c ON a.CarolGUID = c.UserGUID
+	where a.PCSOGUID = @PCSOGUID 
+
+	insert into ##sapon
+	select d.ID, case EVENGUID when '9573DD6B-DB6F-4153-8A07-9B7CC8C0ADE7' then NULL 
+		when '6A293D44-E76E-4979-BAD6-A598988FB61B' then 'OF' else 'BF' end [evnt],
+		'L'+ @delimeter + isNULL(a.DocNo, '')+'-'+d.ID+ @delimeter + d.ID + @delimeter +
+		cast(c.code as varchar(10)) + @delimeter + @delimeter + cast(Qty as varchar(5)) + 
+		@delimeter + @delimeter + @delimeter + @delimeter + @delimeter
+		[SAP_text]
+	from ToPCSO a
+		inner join oph.TaPCSODETA b ON a.PCSOGUID = b.PCSOGUID
+		inner join MoPROD c ON b.PRODGUID = c.PRODGUID
+		inner join MoDIVN d ON c.DIVNGUID = d.DIVNGUID
+	where a.PCSOGUID = @PCSOGUID and a.Status = 500
+
+	if not exists(select * from ##sapon where LEFT(SAP, 1) = 'H')
+		and not exists(select * from ##sapon where LEFT(SAP, 1) = 'L')
+			return
+
+	select @fileName = DocRefNo from ToPCSO where PCSOGUID = @PCSOGUID
+
+	if exists(select * from ##sapon where evnt = 'BF') begin
+		update ##sapon set SAP = REPLACE(SAP, 'WF', 'BF') where evnt = 'BF'
+		set @fileName = REPLACE(@fileName, 'WF', 'BF')
+		set @OutPath = 'C:\SAP\Bazar\' + @fileName + '.txt'
+		set @sql = '"select SAP from master..##sapon where evnt = ''BF'' order by code"'
+		set @bcp = 'bcp ' + @sql + ' queryout ' + @OutPath + ' -T -c'
+
+		if @isdebug = 1 print @bcp
+		else EXEC master..XP_CMDSHELL @bcp
+
+	end
+
+	if exists(select * from ##sapon where evnt = 'OF') begin
+		update ##sapon set SAP = REPLACE(SAP, 'WF', 'OF') where evnt = 'OF'
+		set @fileName = REPLACE(@fileName, 'WF', 'OF')
+		set @OutPath = 'C:\SAP\Online\' + @fileName + '.txt'
+		set @sql = '"select SAP from master..##sapon where evnt = ''OF'' order by code"'
+		set @bcp = 'bcp ' + @sql + ' queryout ' + @OutPath + ' -T -c'
+
+		if @isdebug = 1 print @bcp
+		else EXEC master..XP_CMDSHELL @bcp
+
+	end
+		
+	drop table ##sapon
+
+

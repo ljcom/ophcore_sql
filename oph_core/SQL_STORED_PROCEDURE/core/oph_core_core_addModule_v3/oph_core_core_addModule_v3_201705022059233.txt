@@ -1,0 +1,105 @@
+CREATE PROCEDURE [core].[addModule_v3] @accountid nvarchar(50), @db nvarchar(50), @masterDB varchar(50), @isdebug bit=0
+--WITH ENCRYPTION
+as	--ModifiedBy eLs ON Apr, 2017
+
+	--declare @accountid nvarchar(50) = 'eform', @db nvarchar(50) = 'ef_main', @masterDB varchar(50) = 'eform_data', @isdebug bit=1
+
+	declare @accountguid uniqueidentifier, @accountdbGUID uniqueidentifier, @curMaster bit 
+	select @accountguid=a.AccountGUID, @accountdbGUID=AccountDBGUID, @curMaster=isMaster from acct a
+		inner join acctdbse b on a.AccountGUID=b.AccountGUID
+	where accountid=@accountid and b.DatabaseName=@db
+	
+	declare @sqlstr nvarchar(max), @sqlpar nvarchar(max)
+	set @sqlstr='
+	insert into '+@masterDB+'.dbo.modl(ModuleGUID, AccountGUID, ModuleID, ModuleDescription, settingMode, AccountDBGUID, needLogin)
+	select a.ModuleGUID, '''+cast(@accountguid as varchar(50))+''', a.ModuleId, a.ModuleDescription, api.setSettingMode(a.moduleid), a.accountdbguid, 1
+	from '+@db+'.dbo.CoMODL a
+		left join '+@masterDB+'.dbo.modl b on a.ModuleID=b.ModuleID AND a.ModuleGUID = b.ModuleGUID
+	where b.ModuleGUID is null AND a.isdeleted = 0 --AND a.AccountDBGUID is Not NULL 
+
+	update '+@masterDB+'.dbo.modl 
+	set 
+		ThemePageGUID = IIF(settingMode <> 6, (select ThemePageGUID from '+@masterDB+'.dbo.thmepage where isDefault = 1), 
+			(select ThemePageGUID from '+@masterDB+'.dbo.thmepage where pageURL=moduleid)),
+		ModuleStatusGUID = case settingMode 
+			when 1 then (select ModuleStatusGUID from '+@masterDB+'.dbo.msta where ModuleStatusName = ''master'')
+			when 4 then (select ModuleStatusGUID from '+@masterDB+'.dbo.msta where ModuleStatusName = ''trx'') 
+			else NULL
+		end
+
+	update a 
+	set ParentModuleGUID = b.ParentGUID
+	from '+@masterDB+'.dbo.modl a
+		left join (
+			select 
+				SubModuleGUID [ModuleGUID], x.ModuleGUID as [ParentGUID], ROW_NUMBER() OVER(Partition by SubModuleGUID Order By SubModuleGUID ) [valid]
+			from '+@db+'.dbo.comodlsmod x
+		) b ON a.ModuleGUID = b.ModuleGUID AND valid = 1
+	where a.ParentModuleGUID is null and b.ParentGUID is not null
+	'
+
+	if @isdebug=1 print @sqlstr 
+	exec sp_executesql @sqlstr
+	 
+	set @sqlstr='
+	insert into '+@masterDB+'.dbo.modlcolm (ColumnGUID, ModuleGUID, colKey, colType, colOrder, titlecaption)
+	select newid(), c.ModuleGUID, b.colName, max(b.xType), max(b.colorder), max(b.TitleCaption )
+	from '+@db+'.dbo.CoATAB a
+		inner join '+@db+'.dbo.CoATABFIEL b ON a.TableGUID = b.TableGUID
+		inner join '+@masterDB+'.dbo.modl c ON a.TableName = c.ModuleID 
+			and LEFT(c.ModuleId, 1) in (''C'', ''M'', ''T'', ''S'') AND substring(c.ModuleId, 7, 4) != ''APRV'' AND c.AccountDBGUID is Not NULL
+		left join '+@masterDB+'.dbo.modlcolm z ON b.ColName = z.colKey and c.moduleguid=z.moduleguid
+	where z.ColumnGUID is NULL
+	group by c.ModuleGUID, b.colName
+
+	delete 
+	from '+@masterDB+'.dbo.modlcolm 
+	where ColumnGUID in (
+		select TableFieldGUID from '+@db+'.dbo.CoATABFIEL where RIGHT(ColName, 6) like ''%cb%''
+		union
+		select TableFieldGUID from '+@db+'.dbo.CoATABFIEL where colName in (
+			''isDeleted'',''DeletedDate'', ''CreatedDate'', ''UpdatedDate'', ''DeletedUser'', ''CreatedUser'', ''UpdatedUser'', 
+			''TriggerDate'', ''TriggerDate2'', ''ClosedDate''
+		)
+	)
+	'
+	
+	if @isdebug=1 print @sqlstr 
+	exec sp_executesql @sqlstr
+
+	set @sqlstr='
+		select a.name, a.name from '+@db+'.sys.columns a 
+			inner join '+@db+'.sys.objects b on a.object_id=b.object_id
+		where b.name=''CoATABFIEL'' and a.name not in (
+			''TableFieldGUID'', ''TableGUID'', ''ColName'', ''id'', ''ColOrder'', ''xType'', ''DeletedDate'', ''TitleCaption'',
+			''CreatedDate'', ''UpdatedDate'', ''DeletedUser'', ''CreatedUser'', ''UpdatedUser'', ''TriggerDate'', ''TriggerDate2''
+		)'
+	
+	declare @infoTable api.fieldList, @pvtKey varchar(MAX), @pvtCol varchar(MAX)
+
+	insert into @infoTable (fieldid, fieldvalue)	
+	exec sp_executesql @sqlstr
+
+	select
+		@pvtKey = (select ', ' + fieldId from @infoTable for xml path('')), 
+		@pvtCol = (select ', CAST('+fieldId+' as varchar(MAX)) '+ QUOTENAME(fieldValue) from @infoTable for xml path(''))
+
+	set @sqlstr = '
+	insert into '+@masterDB+'.dbo.modlcolminfo (ColumnInfoGUID, ColumnGUID, InfoKey, InfoValue)
+	select a.* from (
+		select NEWID() [ColumnInfoGUID], ColumnGUID, api.OPH4Tablename(InfoKey)	[InfoKey], InfoValue from (
+			select 
+				ColumnGUID'+@pvtCol+' 
+			from '+@db+'.dbo.CoATABFIEL a
+				inner join '+@masterDB+'.dbo.modlcolm b ON a.TableFieldGUID = b.ColumnGUID
+		) p
+		UNPIVOT (
+			InfoValue for InfoKey IN ('+STUFF(@pvtKey, 1, 2, '')+')
+		) unpv
+	) a left join '+@masterDB+'.dbo.modlcolminfo b ON a.ColumnGUID = b.ColumnGUID AND a.InfoKey = b.InfoKey 
+	where b.ColumnInfoGUID is NULL
+	'
+
+	if @isdebug = 1 print @sqlstr 
+	exec sp_executesql @sqlstr
+

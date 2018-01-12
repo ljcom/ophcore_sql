@@ -1,0 +1,142 @@
+CREATE procedure core.addModule_createTable @accountId nvarchar(50), @dataDB nvarchar(50), @isdebug bit=0
+as
+	declare @coreDB nvarchar(50)=db_name()
+	declare @sqlstr nvarchar(max)='
+		select * 
+		from (
+			select ''create table doc.''+replace(cast(m.moduleGUID as nvarchar(50)), ''-'', '''')+''([DocGUID] [uniqueidentifier] NOT NULL,
+				[AccountGUID] [uniqueidentifier] NULL, [ModuleGUID] [uniqueidentifier] NULL, [Status] [int] NOT NULL, 
+				[StatusComment] [nvarchar](500) NULL, [CreatedDate] [datetime] NOT NULL, [CreatedUser] [uniqueidentifier] NULL,
+				[updatedDate] [datetime] NULL, [updatedUser] [uniqueidentifier] NULL, [isClosed] [bit] NOT NULL, [isDeleted] [bit] NOT NULL,
+				[parentDocGUID] [uniqueidentifier] NULL, [oldId] [nvarchar](50) NULL, 
+				CONSTRAINT [PK_''+replace(cast(m.moduleGUID as nvarchar(50)), ''-'', '''')+''] PRIMARY KEY CLUSTERED 
+			(
+				[DocGUID] ASC
+			)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+			) ON [PRIMARY])'' script, replace(cast(m.moduleGUID as nvarchar(50)), ''-'', '''') objectName, ''objects'' tableName, 1 orderNo
+			from '+@datadb+'.dbo.modl m
+				inner join '+@coredb+'.dbo.acctdbse ad on m.AccountDBGUID=ad.AccountDBGUID
+				left join '+@datadb+'.sys.objects o on replace(cast(m.moduleGUID as nvarchar(50)), ''-'', '''')=o.name
+			where settingmode in (1,2,3,4) and ad.version=''2.0'' and o.name is null
+		'
+
+		set @sqlstr=@sqlstr+'
+
+			union
+			select ''alter table [''+b.name+''] add [''+a.name+''] ''+d.name+ 
+				case when d.max_length=16 or d.precision>0 or a.user_type_id in (241) then ''''
+					when a.max_length=-1 then ''(max)'' 
+					when a.user_type_id in (231) then ''(''+cast(a.max_length/2 as varchar(5))+'')'' 
+					when a.user_type_id in (167) then ''(''+cast(a.max_length as varchar(5))+'')'' 
+					 else ''(''+cast(d.max_length as varchar(5))+'')'' end+'' ''+case when a.is_nullable=0 then ''not '' else '''' end+''null ''+
+					 case when e.definition is null then '''' else ''CONSTRAINT ''+e.name+'' DEFAULT ''+e.definition end, 
+				a.name+'''''' and oname=''''''+b.name, ''columns a inner join (select name oname, object_id from '+@dataDB+'.sys.objects) b on a.object_id=b.object_id'', 13
+			--select *  
+			from '+@datadb+'.sys.columns a
+				inner join '+@datadb+'.sys.types d on a.user_type_id=d.user_type_id
+				inner join '+@datadb+'.sys.objects b on a.object_id=b.object_id
+				inner join '+@datadb+'.sys.schemas c on b.schema_id=c.schema_id
+				left join '+@datadb+'.sys.default_constraints e
+					on b.object_id=e.parent_object_id and a.column_id=e.parent_column_id 
+			where b.type=''U'' and c.name=''doc''
+		'
+
+	set @sqlstr=@sqlstr+'
+
+			union
+
+			select ''ALTER TABLE [dbo].[''+a.name+''] ADD CONSTRAINT [''+c.name+''] PRIMARY KEY CLUSTERED ([''+e.name+''])'', c.name, ''key_constraints'', 14
+			from '+@datadb+'.sys.objects a
+				inner join '+@datadb+'.sys.schemas s on a.schema_id=s.schema_id
+				inner join '+@datadb+'.sys.indexes b
+					on a.object_id=b.object_id and b.type=1 
+				inner join '+@datadb+'.sys.key_constraints c
+					on b.object_id=c.parent_object_id
+				inner join '+@datadb+'.sys.index_columns d
+					on d.index_id=b.index_id
+						and d.object_id=b.object_id
+				inner join '+@datadb+'.sys.columns e
+					on e.column_id=d.column_id
+					and e.object_id=a.object_id
+			where a.type=''U'' and s.name=''doc''
+		'
+
+	set @sqlstr=@sqlstr+'
+
+			union
+
+			select ''ALTER TABLE [dbo].[''+a.name+''] ADD CONSTRAINT [''+c.name+'']  DEFAULT ''+c.definition+'' FOR [''+e.name+'']'', c.name, ''default_constraints'', 15
+			--select * 
+			from '+@datadb+'.sys.objects a
+				inner join '+@datadb+'.sys.schemas s on a.schema_id=s.schema_id
+				inner join '+@datadb+'.sys.default_constraints c
+					on a.object_id=c.parent_object_id --and a.name=''docmaprv'' 
+				inner join '+@datadb+'.sys.columns e
+					on e.column_id=c.parent_column_id
+					and e.object_id=a.object_id
+			where a.type=''U'' and s.name=''doc''
+		'
+
+	set @sqlstr=@sqlstr+'
+
+			union
+
+			select ''CREATE ''+CASE WHEN B.is_unique=1 then ''UNIQUE '' else'''' end +''NONCLUSTERED INDEX [''+b.name+''] ON [dbo].[''+a.name+''](''+
+				stuff((
+					select '', ''+e.name+'' ASC'' 
+					--SELECT * 
+					from '+@datadb+'.sys.index_columns c
+						inner join '+@datadb+'.sys.columns e
+							on e.column_id=c.column_id
+							and e.object_id=a.object_id
+					where b.index_id=c.index_id and b.object_id=c.object_id
+					for xml path('''')), 1, 2, '''')+'')'', b.name, ''indexes'', 16
+			--select * 
+			from '+@datadb+'.sys.objects a
+				inner join '+@datadb+'.sys.schemas s on a.schema_id=s.schema_id
+				inner join '+@datadb+'.sys.indexes b
+					on a.object_id=b.object_id and b.type<>1 
+			where a.type=''U'' and s.name=''doc''	
+		'
+
+	set @sqlstr=@sqlstr+'
+
+			union
+
+			select ''ALTER TABLE [dbo].[''+a.name+'']  WITH CHECK ADD CONSTRAINT [''+b.name+''] FOREIGN KEY([''+e.name+''])
+			REFERENCES [dbo].[''+c.name+''] ([''+f.name+'']) ON UPDATE CASCADE ON DELETE CASCADE'', b.name, ''foreign_keys'', 17
+			--select * 
+			from '+@datadb+'.sys.objects a
+				inner join '+@datadb+'.sys.schemas s on a.schema_id=s.schema_id
+				inner join '+@datadb+'.sys.foreign_keys b
+					on a.object_id=b.parent_object_id --and a.name=''modl''
+				inner join '+@datadb+'.sys.objects c
+					on b.referenced_object_id=c.object_id and c.name not in (''sysdiagrams'', ''acct'', ''acctdbse'', ''acctinfo'')	
+				inner join '+@datadb+'.sys.foreign_key_columns d
+					on d.parent_object_id=a.object_id and c.object_id=d.referenced_object_id
+				inner join '+@datadb+'.sys.columns e
+					on a.object_id=e.object_id and d.parent_column_id=e.column_id
+				inner join '+@datadb+'.sys.columns f
+					on c.object_id=f.object_id and d.referenced_column_id=f.column_id
+			where a.type=''U'' and s.name=''doc''
+		'
+
+	set @sqlstr=@sqlstr+'
+
+			union 
+			select ''ALTER TABLE [dbo].[''+a.name+''] CHECK CONSTRAINT [''+b.name+'']'', b.name, ''foreign_keys'', 18
+			--select * 
+			from '+@datadb+'.sys.objects a
+				inner join '+@datadb+'.sys.schemas s on a.schema_id=s.schema_id
+				inner join '+@datadb+'.sys.foreign_keys b
+					on a.object_id=b.parent_object_id --and a.name=''modl''
+				inner join '+@datadb+'.sys.objects c
+					on b.referenced_object_id=c.object_id and c.name not in (''sysdiagrams'', ''acct'', ''acctdbse'', ''acctinfo'')	
+			where a.type=''U'' and s.name=''doc''
+		) x		
+			'
+
+		if @isdebug=1 print @sqlstr
+		exec sp_executesql @sqlstr
+
+

@@ -1,0 +1,13 @@
+
+create TRIGGER dbo.tg_userinfo_updatedDate 
+   ON  userinfo
+   AFTER INSERT, UPDATE
+AS 
+BEGIN
+	update userinfo
+	set updatedDate=getdate()
+	from userinfo a
+		inner join inserted b on a.UserInfoGUID=b.UserInfoGUID
+
+END
+

@@ -1,0 +1,11 @@
+
+CREATE VIEW [dbo].[CoUDEL]
+as	--ModifiedBy eLs ON June, 2015
+
+	select 
+		userGUID, UserID, UserName, DelegationFlag, isDelegate, isNotDelegate, CreatedDate, CreatedUser, UpdatedDate, UpdatedUser 
+	from CoUSER
+	where isDeleted = 0
+
+
+

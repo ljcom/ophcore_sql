@@ -1,0 +1,18 @@
+
+CREATE VIEW [dbo].[CoUGRPUSER1]
+as	--CreatedBy eLs ON Aug, 2016
+
+	select 
+		UserUGroupGUID, UGroupGUID, MemberUserGUID, CreatedDate, CreatedUser, UpdatedDate, UpdatedUser
+	from CoUGRPUSER
+	where MemberFlag = 'isUser'
+	union
+	select 
+		LEFT(a.UserUGroupGUID, 18) + RIGHT(b.UserUGroupGUID, 18), 
+		a.UGroupGUID, b.MemberUserGUID, a.CreatedDate, a.CreatedUser, a.UpdatedDate, a.UpdatedUser
+	from CoUGRPUSER a
+		inner join CoUGRPUSER b ON a.MemberGroupGUID = b.UGroupGUID
+	where a.MemberFlag = 'isGroup'
+
+
+

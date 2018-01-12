@@ -1,0 +1,241 @@
+
+CREATE procedure [api].[save_v3]
+
+	@hostGUID uniqueidentifier, 
+	@code varchar(20),
+	@GUID uniqueidentifier,
+	@saveXML xml,
+	@preview int=0,
+	@isDebug bit=0
+as
+
+--declare 
+--	@hostGUID uniqueidentifier, 
+--	@code varchar(20)='pcso',
+--	@GUID uniqueidentifier='D0CDD68E-9759-4889-8386-07E7D8644FC8',
+--	@saveXML xml ='<sqroot><field id="CArolGUID"><value>83559D68-630B-4AAA-8B31-009EE419C0DE</value></field><field id="Address"><value></value></field><field id="PAYMGUID"><value>5FE39332-DAB1-4BAA-B9BD-2A664BF22D84</value></field><field id="isPickedUp"><value>0</value></field><field id="isReceived"><value>0</value></field></sqroot>',
+--	@preview int=1,
+--	@isDebug bit=1
+--	drop table #temp
+
+	declare @db varchar(50)=api.fn_checkDB(@code)
+	declare @msg nvarchar(max)
+	declare @isExists bit=0
+	--declare @isChild bit=0
+	--declare parentField
+	--select @isChild=case when parentmoduleguid is null then 0 else 1 end from modl where moduleid=@code
+
+	--insert into temp
+	--SELECT 
+	--	fieldid = typenode.value('@id', 'varchar(50)'),
+	--	fieldValue = replace(typenode.value('value[1]', 'varchar(50)'),'''','''''')
+	--INTO #temp
+	--FROM
+	--	@saveXML.nodes('/sqroot/field') AS XTbl(typenode)
+	
+
+	if @guid = dbo.ZeroGUID()
+	set @guid = NULL
+
+
+	declare @oCode varchar(50) = left(@code,1)+'o'+substring(@code,3,len(@code)-2)
+
+	declare @savelist api.fieldlist
+
+	insert into @saveList
+	exec api.convertXML2FieldList @code, @savexml, @db
+
+	if @isdebug=1 select * from @savelist
+	if @isDebug = 1 select @saveXML
+	
+	declare @fieldvalue nvarchar(max)=''
+	select @fieldvalue=@fieldvalue + '@'+fieldid+'='+
+		CASE WHEN FIELDVALUE ='null' OR FIELDVALUE='' or fieldvalue is null then 'null' ELSE ''''+fieldvalue+'''' END +',' 
+	from @savelist
+
+
+	if @isdebug = 1 print @fieldvalue
+	
+	if @isDebug=1 select * from @saveList
+
+
+	--insert into @savelist(fieldid,fieldvalue) values('cid',@guid)
+
+	declare @tablename nvarchar(max)
+
+		select 
+			@tablename= left(@code,1)+'a'+substring(@code,3,len(@code)-2)
+			--select * 
+			from modl a
+				inner join acctdbse	b 
+					on a.accountdbguid=b.accountdbguid
+			where moduleid=@code
+
+	declare @sqlpar nvarchar(max)
+	declare @sqlstr nvarchar(max)
+
+	 if @preview > 0 Begin
+		print 'ispreview'
+		declare @preview_proc nvarchar(max)=@tablename+'_save_preview'
+		
+		
+		set @isExists=0
+
+		exec api.checkObject @preview_proc, 'dbo', @db, @isExists OUTPUT
+
+		if @isExists=1 begin
+			set @sqlstr = 'exec '+@db+'.dbo.'+ @preview_proc +' '+
+				'@GUID='+isnull(''''+convert(nvarchar(max),@GUID)+'''','NULL')+', 
+				@hostGUID='+isnull(''''+convert(nvarchar(max),@hostGUID)+'''','NULL')+','+ @fieldvalue+'@preview='+convert(nvarchar(max),@preview)
+			if @isdebug = 1 print @sqlstr
+				
+			exec (@sqlstr)
+		end
+
+	 end
+	 else begin
+		--check customized
+
+
+		--------------------------------------------------update nanti nya--------------------------------------
+		--declare @custom_proc nvarchar(50)=@tablename+'_save_custom'
+		--declare @custom_par nvarchar(max)='@GUID uniqueidentifier, @hostGUID uniqueidentifier, @saveList api.fieldList READONLY'
+
+		--exec api.checkObject @custom_proc, 'dbo', @db, @isExists OUTPUT
+		
+		--if @isExists=1 begin
+			
+		--	set @sqlstr = 'exec '+@db+'.dbo.'+ @custom_proc +' '+'@GUID='+isnull(''''+convert(nvarchar(max),@GUID)+'''','NULL')+',@hostGUID='+isnull(''''+convert(nvarchar(max),@hostGUID)+'''','NULL')+','+ @fieldvalue+'@msg = @msg = @msg output'
+		--	exec sp_executesql @sqlstr,N'@msg nvarchar(max) output',@msg output
+		--end
+
+		--------------------------------------------------update nanti nya--------------------------------------
+		
+		declare @custom_proc nvarchar(max)=@code+'_save_custom'
+		declare @custom_par nvarchar(max)='@GUID uniqueidentifier, @hostGUID uniqueidentifier, @saveXML xml'
+
+		exec api.checkObject @custom_proc, 'dbo', @db, @isExists OUTPUT
+		if @isExists=1 begin
+			
+			set @custom_proc = '
+				use '+@db+'
+
+				exec dbo.'+@custom_proc +' @guid, @hostGUID, @saveXML'
+			
+			if @isdebug=1 print @custom_proc
+			exec sp_executesql @custom_proc, @custom_par, @GUID, @hostGUID, @saveXML
+
+		end
+		else begin
+			declare @userGUID uniqueidentifier 
+		
+			select @userGUID=userguid
+			from USERHOST
+			where hostGUID=@hostGUID
+		
+			set @msg=''
+
+			declare @r int
+			exec [api].[checkRecordExist] @code, @GUID, @r OUTPUT
+
+			if @r>0 begin
+				--update
+				begin try
+					declare @updatebefore_proc varchar(50)=@tablename+'_save_update_before'
+
+					set @isExists=0
+					exec api.checkObject @updatebefore_proc, 'dbo', @db, @isExists OUTPUT
+
+					if @isExists=1 begin
+						print 'update before'
+						set @sqlstr = 'exec '+@db+'.dbo.'+ @updatebefore_proc +' '+'@GUID='+isnull(''''+convert(nvarchar(max),@GUID)+'''','NULL')+',
+							@hostGUID='+isnull(''''+convert(nvarchar(max),@hostGUID)+'''','NULL')+',
+							'+ @fieldvalue+'@msg = @msg output'
+						if @isdebug = 1 print @sqlstr
+						exec sp_executesql @sqlstr,N'@msg nvarchar(max) output',@msg output
+					end
+
+					if isnull(@msg,'') = '' begin
+						exec api.save_update @hostGUID, @code, @GUID, @saveList, @msg OUTPUT, @isDebug				
+						print 'save update' print @GUID
+
+
+						declare @updateafter_proc varchar(50)=@tablename+'_save_update_after'
+
+						set @isExists=0
+						exec api.checkObject @updateafter_proc, 'dbo', @db, @isExists OUTPUT
+
+						if @isExists=1 begin
+							print 'update after'
+							set @sqlstr = 'exec '+@db+'.dbo.'+ @updateafter_proc +' '+'@GUID='+isnull(''''+convert(nvarchar(max),@GUID)+'''','NULL')+',@hostGUID='+isnull(''''+convert(nvarchar(max),@hostGUID)+'''','NULL')+',@isupdate=1'
+							if @isdebug = 1 print @sqlstr
+							exec (@sqlstr)	
+						end
+					end
+
+
+				end try
+				begin catch
+					set @msg=error_message()
+				end catch
+			end
+			else begin
+				--insert
+				if @GUID is null set @GUID = newid()
+			
+				print 'save insert'
+
+				begin try
+					declare @insertbefore_proc varchar(50)=@tablename+'_save_update_before'
+					
+					
+					set @isExists=0
+					
+					exec api.checkObject @insertbefore_proc, 'dbo', @db, @isExists OUTPUT
+					if @isExists=1 begin
+						print 'insert before'
+						set @sqlstr = 'exec '+@db+'.dbo.'+ @insertbefore_proc +' '+'@GUID='+isnull(''''+convert(nvarchar(max),@GUID)+'''','NULL')+',@hostGUID='+isnull(''''+convert(nvarchar(max),@hostGUID)+'''','NULL')+','+ @fieldvalue+'@msg = @msg output'
+
+						if @isdebug = 1 print @sqlstr
+
+						exec sp_executesql @sqlstr,N'@msg nvarchar(max) output',@msg output
+					end
+
+					if isnull(@msg,'') = '' begin
+						set @guid = newid()
+
+						exec api.save_insert @hostGUID, @code, @GUID, @saveList, @msg OUTPUT, @isDebug				
+						print 'update after insert'
+					
+
+						declare @insertafter_proc varchar(50)=@tablename+'_save_update_after'
+					
+						set @isExists=0
+						exec api.checkObject @insertafter_proc, 'dbo', @db, @isExists OUTPUT
+
+						if @isExists=1 begin
+							print 'update after insert'
+							set @sqlstr = 'exec '+@db+'.dbo.'+ @insertafter_proc +' '+'@GUID='+isnull(''''+convert(nvarchar(max),@GUID)+'''','NULL')+',@hostGUID='+isnull(''''+convert(nvarchar(max),@hostGUID)+'''','NULL')+',@isupdate=0'
+							if @isdebug = 1 print @sqlstr
+
+							exec (@sqlstr)	
+						end	
+					end	
+
+				end try
+				begin catch
+					set @msg=error_message()
+				end catch
+		
+			end
+		
+			select @msg saved
+		end
+
+	  
+
+	 end
+
+
+
+

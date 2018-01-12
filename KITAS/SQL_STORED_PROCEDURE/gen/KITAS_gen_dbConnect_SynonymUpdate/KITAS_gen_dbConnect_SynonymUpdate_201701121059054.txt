@@ -1,0 +1,64 @@
+
+
+CREATE PROCEDURE [gen].[dbConnect_SynonymUpdate]
+	@DbMain nvarchar(256),
+   @Database nvarchar(256), -- such as 'linkedserver.database' or just 'database'
+   @Schema sysname -- such as 'dbo'
+AS
+CREATE TABLE #Tables (
+   TableID int identity(1,1) NOT NULL PRIMARY KEY CLUSTERED,
+   Table_Name sysname
+)
+DECLARE
+   @SQL nvarchar(4000),
+   @ID int
+
+--SET @SQL = N'
+--select t.name
+--    from '+@Database+'.sys.tables t
+--        inner join '+@Database+'.sys.schemas s
+--            on t.schema_id = s.schema_id 
+--   where t.name in (''CoQURY'',''CoPRMT'',''CoEVNT'',''CoDOCN'',''CoUSER'',''CoUSERHOST'',''CoUGRP'',''CoUGRPUSER'')
+--'
+
+SET @SQL = N'
+select t.name
+    from sys.tables t        
+    where t.name in(''CoQURY'',''CoPRMT'',''coQURYDOCM'',''coQURYPARA'',''coQURYUGRP'',''CoPRMTVALU'',''CoEVNT'',''CoDOCN'',''CoUSER'',''CoUSERHOST'',''CoUGRP'',''CoUGRPUSER'')
+   '
+
+--SET @SQL = N'select t.name
+--			from sys.tables t    
+--			inner join sys.synonyms s
+--				on t.schema_id = s.schema_id
+--		   where substring(t.name,1,2)=''Co''
+--		   and s.schema_id =1
+--		   group by t.name'
+
+print @SQL
+INSERT #Tables EXEC sp_executesql @SQL, N'@TableSchema sysname', @Schema
+SELECT @ID = MAX(TableID) FROM #Tables
+WHILE @ID &gt; 0 BEGIN
+   SELECT @SQL = ' USE ' + @Database + ' CREATE SYNONYM syn_' + Table_Name + ' FOR ' + @DbMain + '.' + @Schema + '.' + Table_Name FROM #Tables WHERE TableID = @ID
+   PRINT @SQL
+	   IF EXISTS(  SELECT  *
+				  FROM  sys.synonyms s          
+					INNER JOIN #Tables t
+					ON s.name = 'syn_'+t.Table_Name
+				  WHERE s.name = 'syn_' + Table_Name)
+		BEGIN
+			print 'synonym Does exist'
+		END
+		ELSE
+		BEGIN
+		print 'Does not exist'
+			 EXEC sp_executesql @SQL
+			
+	   END
+  
+   SET @ID = @ID - 1
+END
+
+
+
+

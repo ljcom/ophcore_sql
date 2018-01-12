@@ -1,0 +1,47 @@
+
+
+
+CREATE procedure [api].[getPrimaryCol] @code varchar(50), @primaryNo int, @primaryCol varchar(50) OUTPUT
+AS
+BEGIN
+	declare @db varchar(50)=api.fn_checkDB(@code)
+	declare @ver varchar(10), @settingMode int, @typecode varchar(1)
+
+	select @ver=[version], @settingMode=settingMode
+	--select * 
+	from modl a
+		inner join acctdbse	b 
+			on a.accountdbguid=b.accountdbguid
+	where moduleid=@code
+
+	if @ver='3.0' begin
+	--	select @typecode = api.settingmode(@settingmode)
+	--	if @settingmode=1 --co
+	--		set @code=@typecode+'o'+@code
+	--	else if @settingmode=2 --mo
+	--		set @code='co'+@code
+	--	else if @settingmode=2 --so
+	--		set @code='so'+@code
+	--	else if @settingmode=0 --to
+	--		set @code='to'+@code
+	--end
+
+		declare @colname varchar(50)
+		declare @sqlpar nvarchar(max)='@colname varchar(50) OUTPUT'
+		declare @sqlstr nvarchar(max)='
+			select @colname=colname
+			from '+@db+'.gen.cotabl a 
+				inner join '+@db+'.gen.cotablfiel b
+					on a.tableguid=b.tableguid
+			where a.tablename like '''+@code+''' and primarycol='+cast(@primaryno as varchar(1))
+		exec sp_executesql @sqlstr, @sqlpar, @colname OUTPUT
+	end
+	
+	
+
+	set @primaryCol=isnull(@colname,'')
+END
+
+
+
+

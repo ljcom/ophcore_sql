@@ -1,0 +1,15 @@
+
+CREATE FUNCTION [gen].[getUser] (@HostGUID uniqueidentifier)
+returns uniqueidentifier
+as
+begin
+	declare @UserGUID uniqueidentifier
+
+	select @UserGUID = a.UserGUID from CoUSER a
+		inner join CoUSERHOST b
+			on a.UserGUID = b.UserGUID
+	where HostGUID = @HostGUID
+	
+	return @UserGUID
+end
+

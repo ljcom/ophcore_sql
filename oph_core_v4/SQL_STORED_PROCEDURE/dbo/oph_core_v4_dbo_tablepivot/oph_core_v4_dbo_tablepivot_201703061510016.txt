@@ -1,0 +1,6 @@
+
+CREATE proc [dbo].[tablepivot] @tbl as api.type readonly,@sqlstr nvarchar(max)
+as
+
+	EXECUTE sp_executesql @sqlstr ,N'@tbl api.[type] readonly' ,@tbl
+

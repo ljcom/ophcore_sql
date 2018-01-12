@@ -1,0 +1,20 @@
+
+
+
+CREATE procedure [gen].[VerifyHost] @hostGUID uniqueidentifier
+--WITH ENCRPYTION
+as
+	if exists(
+		select * 
+		from userhost a
+			inner join [user] c
+				on c.userguid=a.userguid
+		where hostguid=@hostguid) 
+
+		select @hostguid
+	else
+		select null
+
+
+
+

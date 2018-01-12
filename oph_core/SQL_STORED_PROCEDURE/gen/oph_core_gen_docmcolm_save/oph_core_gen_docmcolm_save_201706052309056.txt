@@ -1,0 +1,34 @@
+
+
+
+
+CREATE procedure [gen].[docmcolm_save] @accountid nvarchar(50), @coreDB nvarchar(50), @hostGUID uniqueidentifier, @code nvarchar(50), 
+	@docGUID uniqueidentifier, @parentGUID uniqueidentifier, @key nvarchar(50), @value nvarchar(max)
+as
+	declare @ver varchar(10), @db varchar(50), @typecode varchar(1), @accountGUID uniqueidentifier
+	exec gen.getDBInfo @hostguid, @code, @ver output, @db output, @typecode output, @accountGUID=@accountGUID output
+
+	declare @moduleGUID uniqueidentifier
+	select @moduleguid=moduleguid from modl where moduleid=@code
+
+	if exists(select * from docmcolm where docGUID=@docGUID and colkey=@key)
+	begin
+		--update
+		update docmcolm
+		set colvalue=@value
+		where docGUID=@docGUID and colkey=@key
+	end
+	else
+	begin
+		if not exists(select * from docm where docGUID=@docGUID) 
+			insert into docm(DocGUID, AccountGUID, ModuleGUID, parentDocGUID)--, DocNo, DocRefNo, DocDate, ID, [Description], DocSummary, [Status], StatusComment, CreatedDate, CreatedUser, updatedDate, updatedUser, isClosed, isDeleted, oldGUID)
+			values (@docGUID, @accountGUID, @moduleGUID, @parentGUID)
+		--insert
+		insert into docmcolm (docGUID, colkey, colvalue)
+		values (@docGUID, @key, @value)
+	end
+
+
+
+
+

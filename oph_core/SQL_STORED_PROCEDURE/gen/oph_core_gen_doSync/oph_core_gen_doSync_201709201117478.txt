@@ -1,0 +1,98 @@
+
+
+
+CREATE procedure [gen].[doSync] @p_uri nvarchar(500), @s_uri nvarchar(500), 
+	@paccountid nvarchar(50), @saccountid nvarchar(50), @code_preset nvarchar(50)=null, @isLAN bit=0, @isdebug bit=0
+as
+	--set nocount on
+
+	declare @paddress nvarchar(500)=@p_uri+'/ophcore/api/sync.aspx'
+	declare @laddress nvarchar(500)=@s_uri+'/ophcore/api/sync.aspx'
+
+	--declare @paccountid nvarchar(50)='eform'
+	--declare @saccountid nvarchar(50)='eform_sync'
+
+	declare @sqlstr nvarchar(max), @insstr nvarchar(max), @selstr nvarchar(max), @valstr nvarchar(max), @updstr nvarchar(max)
+
+	declare @url nvarchar(MAX), @g uniqueidentifier, @xx xml, @x nvarchar(max), @cx int, @c int
+
+	declare @token uniqueidentifier
+
+	set @url =@paddress+'?mode=reqtoken&userid=sam&pwd=3C1AACF3-9539-40CC-BB00-A7F3BDF0CCA8'
+
+	if @isLAN=0 begin
+		exec gen.gethttp @url, @g output
+
+		select @x=httptext 
+		from http where httpguid=@g
+
+		set @xx=replace(@x, '<?xml version="1.0" encoding="utf-8"?>', '')
+	end
+	else begin
+		exec api.sync_reqtoken @paccountid, 'sam', '3C1AACF3-9539-40CC-BB00-A7F3BDF0CCA8', @xx output		
+	end
+	declare @isPushCore bit=0
+	SELECT @isPushCore=Tbl.Col.value('isPushCore[1]', 'bit'), 
+		@token=Tbl.Col.value('sessionToken[1]', 'uniqueidentifier') 
+	FROM @xx.nodes('/sqroot/replicationToken') Tbl(Col)
+
+	set @token='85EEC9C8-D2CF-4481-BCF3-6693598080D2'
+
+	print iif(@ispushcore=0, 'pull', 'push')+' mode'
+
+	--checklatestevent lvl 0
+	set @url=@paddress+'?mode=checkLatestEvent&lvl=0&token='+cast(@token as nvarchar(50))
+	if @isLAN=0 begin
+		--print @url
+		exec gen.gethttp @url, @g output
+
+		select @x=httptext 
+		from http where httpguid=@g
+
+		set @xx=replace(@x, '<?xml version="1.0" encoding="utf-8"?>', '')
+		--select @xx
+	end
+	else begin
+		exec api.sync_checkLatestEvent @paccountid, @token, 0, @xx output, @issilent=1
+	end
+
+	declare @ud bigint, @md bigint
+	SELECT @ud=Tbl.Col.value('updatedDate[1]', 'bigint'), 
+		@md=Tbl.Col.value('modifiedDate[1]', 'bigint') 
+	FROM @xx.nodes('/sqroot/replicationCheck') Tbl(Col)
+
+
+	declare @xx2 xml
+	exec api.sync_checklatestevent @saccountid, @token, 0, @xx2 output, @issilent=1
+	--select @xx2
+
+	declare @ud2 bigint, @md2 bigint
+	SELECT @ud2=Tbl.Col.value('updatedDate[1]', 'bigint'), 
+		@md2=Tbl.Col.value('modifiedDate[1]', 'bigint') 
+	FROM @xx2.nodes('/sqroot/replicationCheck') Tbl(Col)
+
+	print 'lvl0 udp:'+cast(isnull(@ud,'') as nvarchar(50))+' mdp:'+cast(isnull(@md,'') as nvarchar(50))+' uds:'+cast(isnull(@ud2,'') as nvarchar(50))+' mds:'+cast(isnull(@md2,'') as nvarchar(50))
+
+	--if 1=0 begin
+	--if @md-@md2=0 begin -- check lvl 1 
+	if isnull(@md,0)-isnull(@md2,0)<>0 and isnull(@md,0)<>0 begin -- check lvl 1 
+	exec gen.dosync_lvl1 @paccountid, @saccountid, @code_preset, @paddress, @isPushCore, @token, @isLAN, @isdebug
+
+	end
+	else begin
+		select @md, @md2--, @md2
+		print 'lvl1 '+cast(@md as nvarchar(50))+' '+cast(@md2 as nvarchar(50))
+	end
+	
+	select @ud, @ud2
+	if isnull(@ud,0)-isnull(@ud2,0)<>0 begin -- check lvl 2 
+		exec gen.dosync_lvl2 @paccountid, @saccountid, @code_preset, @paddress, @laddress, @isPushCore, @token, @isLAN, @isdebug
+	end
+	else begin
+		select @ud, @ud2--, @md2
+		print 'lvl2 '+cast(@ud as nvarchar(50))+' '+cast(@ud2 as nvarchar(50))
+	end
+
+
+
+

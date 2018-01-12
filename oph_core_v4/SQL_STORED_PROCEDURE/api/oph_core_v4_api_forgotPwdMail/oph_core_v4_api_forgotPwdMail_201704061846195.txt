@@ -1,0 +1,45 @@
+CREATE procedure [api].[forgotPwdMail] @steps nvarchar(20), @code nvarchar(20), @email nvarchar (200), @verifycode nvarchar(6) = ''
+as	
+	declare @db varchar(50)= 'kitas_v4', @userid nvarchar(50), @userGUID uniqueidentifier
+	, @randomcode nvarchar(6) = LEFT(NEWID(),6)
+	declare @sqlstr nvarchar(max)
+	select @userGUID = userGUID from [user] where email = @email and isdeleted = 0
+	if @steps = 'sendemail' begin
+	--declare @email nvarchar(200) = 'andre@libertyjaya.com'
+
+		if @userGUID is not null begin
+			set @sqlstr = 'declare @isExist bit = 0
+			
+						  select @isExist = 1 from userinfo where userGUID = '''+convert(varchar(50), @userGUID)+'''  and InfoKey = ''verifycode''
+						  if isnull(@isExist, 0) = 1 begin
+							delete from userinfo where userGUID = '''+convert(varchar(50), @userGUID)+'''  and InfoKey = ''verifycode''
+						  end
+						  insert into userinfo (userinfoGUID, userGUID, infokey, infovalue)
+						  select newid(), '''+convert(varchar(50), @userGUID)+''', ''verifycode'', '''+@randomcode+'''
+						  '	
+			set @sqlstr = @sqlstr + 'use '+@db+' '+char(13)
+			set @sqlstr = @sqlstr + 'exec [ChangePassword_mail_send] null, null, '''+@email+''','''+@randomcode+'''' 
+			print @sqlstr
+			exec (@sqlstr)
+		end
+		else begin
+		select 'Your email is not registered' 
+
+
+		end
+
+	end
+	else begin
+		declare @isVerified bit = 0
+		select @isVerified = 1 from userinfo where InfoKey = 'verifycode' and UserGUID = @userGUID and InfoValue = @verifycode
+		
+		if isnull(@isVerified,0) = 1 begin 
+			delete from userinfo where userGUID = @userGUID  and InfoKey = 'verifycode'	
+			select @userGUID userGUID 
+			for xml path('sqroot')	
+		end
+		else begin
+			select 'Your code is wrong' [message]
+			for xml path('sqroot')	
+		end
+	end

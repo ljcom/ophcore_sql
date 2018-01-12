@@ -1,0 +1,117 @@
+
+
+
+
+CREATE procedure [gen].[addprocs_force] @tablename nvarchar(50), @oTableName nvarchar(50), @colName nvarchar(50), 
+	@status varchar(10), @isEnc bit=1, @isdebug bit=0	
+as
+	declare @executeFlag int
+	declare @primaryDate nvarchar(50), @autonumbercol nvarchar(50), @refno nvarchar(50)
+	declare @primaryDateEdit int
+	declare @content nvarchar(4000)
+	declare @sp nvarchar(4000)
+	declare @parameter nvarchar(4000)	
+
+	declare @eTableName nvarchar(50)
+	set @eTableName = left(@tableName,1)+'e'+substring(@tableName,3,len(@tablename)-2) 
+	
+	set @content=''
+	set @sp=''+@tableName+'_force'
+	set @parameter = char(9)+'@GUID uniqueidentifier, @hostGUID uniqueidentifier, @comment nvarchar(max)'
+	set @content = 
+			char(9)+'if dbo.fn_checkObject(''dbo'','''+@tablename+'_force_custom'')=1 begin'+char(13)+char(10)+
+			char(9)+CHAR(9)+'exec dbo.'+@tablename+'_force_custom @GUID, @hostGUID, @comment '+char(13)+char(10)+
+			char(9)+'end'+char(13)+char(10)+
+			char(9)+'else begin'+char(13)+char(10)
+	set @content = @content+
+		case when dbo.fn_checkObject('dbo',@tablename+'_force_custom')=1 then '' 
+		else
+			char(9)+char(9)+'declare @userGUID uniqueidentifier, @userName nvarchar(100), @isCancel bit=0, @msg varchar(max)='''''+char(13)+char(10)+
+			char(9)+char(9)+'select @userGUID=userguid from coUSERHOST where hostGUID=@hostGUID'+char(13)+char(10)+
+			char(13)+char(10)+
+			char(9)+char(9)+'select @username=username'+char(13)+char(10)+ 
+			char(9)+char(9)+'from coUSER'+char(13)+char(10)+
+			char(9)+char(9)+'where userguid=@userguid'+char(13)+char(10)+
+			char(13)+char(10)+	
+			char(9)+char(9)+'if dbo.fn_checkObject(''dbo'','''+@tablename+'_force_before'')=1 exec dbo.'+@tablename+'_force_before @GUID, @hostGUID, @comment, @isCancel OUTPUT, @msg OUTPUT' +char(13)+char(10)+
+			char(9)+char(9)+'if @iscancel=0 begin' +char(13)+char(10) +
+			char(13)+char(10)+	
+			char(9)+char(9)+char(9)+'update '+@oTableName+char(13)+char(10)+
+			char(9)+char(9)+char(9)+'set '+@status+' = case when isnull('+@otableName+'.Status,0)&lt;400 then 300 else 500 end, closedDate=getdate()' +char(13)+char(10)+
+			char(9)+char(9)+char(9)+'from '+@otablename+char(13)+char(10)+
+			char(9)+char(9)+char(9)+'where '+@otableName+'.'+@colname+'=@GUID'+char(13)+char(10)+
+			char(13)+char(10)+
+			char(9)+char(9)+char(9)+'update '+@otableName+char(13)+char(10)+
+			char(9)+char(9)+char(9)+'set statuscomment = case when isnull('+@otableName+'.'+@status+',0)=300 then @comment+'' Rejected by ''+@username'+char(13)+char(10)+ 
+			char(9)+char(9)+char(9)+char(9)+'	else ''Closed by ''+ @username end' +char(13)+char(10)+
+			char(9)+char(9)+char(9)+'from '+@otableName+char(13)+char(10)+
+			char(9)+char(9)+char(9)+'where '+@otableName+'.'+@colname+'= @GUID and status in (300, 500)'+char(13)+char(10)+
+			char(13)+char(10) +			
+			char(13)+char(10)+				
+			char(9)+char(9)+char(9)+'if exists(select * from '+@otableName+' where '+@colname+' = @GUID and status in (300)) '+char(13)+char(10) +
+			char(9)+char(9)+char(9)+char(9)+'update '+@otableName+'APRV'+char(13)+char(10)+				
+			char(9)+char(9)+char(9)+char(9)+'set '+@status+' = 300, UpdatedDate=getdate()'+char(13)+char(10)+				
+			char(9)+char(9)+char(9)+char(9)+'from '+@otableName+'APRV'+ char(13)+char(10)+				
+			char(9)+char(9)+char(9)+char(9)+'where '+@otableName+'APRV.approvaluserGUID = @userGUID and '+@otableName+'APRV.'+@colname+'=@GUID'+char(13)+char(10)+				
+			char(13)+char(10)+		
+			char(9)+char(9)+char(9)+'if exists(select * from '+@oTableName+' where '+@colname+' = @GUID and status in(300,500)) begin '+char(13)+char(10)+										
+			char(9)+char(9)+char(9)+char(9)+'if dbo.fn_checkObject(''dbo'', '''+@TableName+'_mail_send'')=1 exec dbo.'+@TableName+'_mail_send @GUID, @hostGUID'+char(13)+char(10)+		
+			char(9)+char(9)+char(9)+char(9)+'if dbo.fn_checkObject(''dbo'', '''+@TableName+'_force_after'')=1 exec dbo.'+@TableName+'_force_after @GUID, @hostGUID'+char(13)+char(10)+		
+			char(9)+char(9)+char(9)+'end'+char(13)+char(10)+		
+			char(13)+char(10)+		
+			char(9)+char(9)+'end'+char(13)+char(10)+
+			char(9)+char(9)+'select @msg forced'+char(13)+char(10)+ 
+			char(9)+'end'+char(13)+char(10)
+		end
+	exec gen.addproc @sp, @parameter, @content, @isEnc=@isenc
+
+	set @content=''
+	set @sp=''+@etableName+'_force'
+	set @parameter = char(9)+'@GUID uniqueidentifier, @hostGUID uniqueidentifier, @comment nvarchar(4000)'
+	set @content = char(9)+'declare @userGUID uniqueidentifier, @userName nvarchar(100)'+char(13)+char(10)+
+			char(9)+'if dbo.fn_checkObject(''dbo'','''+@etablename+'_force_custom'')=0 begin'+char(13)+char(10)+
+			char(9)+char(9)+'select @userGUID=userguid from coUSERHOST where hostGUID=@hostGUID'+char(13)+char(10)+
+			char(13)+char(10)+
+			char(9)+char(9)+'select @username=username'+char(13)+char(10)+ 
+			char(9)+char(9)+'from coUSER'+char(13)+char(10)+
+			char(9)+char(9)+'where userguid=@userguid'+char(13)+char(10)+
+			char(13)+char(10)+
+			char(9)+char(9)+'update '+@oTableName+char(13)+char(10)+
+			char(9)+char(9)+'set '+@status+' = case when isnull('+@oTableName+'.Status,0)&lt;3 then 300 else 500 end, closedDate=getdate()' +char(13)+char(10)+
+			char(9)+char(9)+'from '+@otablename+char(13)+char(10)+ 
+			char(9)+char(9)+'where '+@otableName+'.'+@colname+'=@GUID'+char(13)+char(10)+
+			char(13)+char(10)+
+			char(9)+char(9)+'update '+@oTableName+char(13)+char(10)+
+			char(9)+char(9)+'set statuscomment = case when isnull('+@oTableName+'.'+@status+',0)=300 then @comment+'' Rejected by ''+@username'+ char(13)+char(10)+
+			char(9)+char(9)+char(9)+'	else ''Closed by ''+ @username end' +char(13)+char(10)+
+			char(9)+char(9)+'from '+@oTableName+char(13)+char(10)+
+			char(9)+char(9)+'where '+@oTableName+'.'+@colname+'= @GUID and status in (300, 500)'+char(13)+char(10)+
+			char(13)+char(10)+				
+			char(13)+char(10)+				
+			char(9)+char(9)+'if exists(select * from oph.'+@oTableName+' where '+@colname+' = @GUID and status in(3)) '+char(13)+char(10)+				
+			char(9)+char(9)+char(9)+'update '+@oTableName+'APRV'+char(13)+char(10)+				
+			char(9)+char(9)+char(9)+'set '+@status+' = 3'+char(13)+char(10)+				
+			char(9)+char(9)+char(9)+'from '+@oTableName+'APRV'+ char(13)+char(10)+				
+			char(9)+char(9)+char(9)+'where '+@oTableName+'APRV.approvaluserGUID = @userGUID and '+@oTableName+'APRV.'+@colname+'=@GUID'+char(13)+char(10)+				
+			char(13)+char(10)+		
+			char(9)+char(9)+'if exists(select * from oph.'+@oTableName+' where '+@colname+' = @GUID and status in(300,500)) begin '+char(13)+char(10)+										
+			char(9)+char(9)+char(9)+'if dbo.fn_checkObject(''dbo'', '''+@TableName+'_mail_send'')=1 exec dbo.'+@TableName+'_mail_send @GUID, @hostGUID, @comment'+char(13)+char(10)+		
+			char(9)+char(9)+'end'+char(13)+char(10)+		
+			char(13)+char(10)+		
+			char(9)+char(9)+'select null forced'+char(13)+char(10)+
+			char(9)+'end else'+char(13)+char(10)+
+			char(9)+CHAR(9)+'exec dbo.'+@etablename+'_force_custom @GUID, @hostGUID, @comment'+char(13)+char(10) 
+
+---						
+	exec gen.addproc @sp, @parameter, @content, @isEnc=@isenc
+
+
+
+
+
+
+
+
+
+
+

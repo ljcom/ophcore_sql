@@ -1,0 +1,28 @@
+
+
+
+
+
+CREATE procedure [gen].[showViewDependentTable]
+as
+	select b.name viewName, CHARINDEX('FROM', replace(replace(replace(text, 'JOIN', 'FROM'), char(13), ' '), CHAR(10), ' ')) startPoint,
+		ltrim(substring(replace(replace(replace(text, 'JOIN', 'FROM'), char(13), ' '), CHAR(10), ' '), CHARINDEX('FROM', replace(replace(replace(text, 'JOIN', 'FROM'), char(13), ' '), CHAR(10), ' '))+4+1, 50)) firstGrab,
+		CHARINDEX(' ',ltrim(substring(replace(replace(replace(text, 'JOIN', 'FROM'), char(13), ' '), CHAR(10), ' '), CHARINDEX('FROM', replace(replace(replace(text, 'JOIN', 'FROM'), char(13), ' '), CHAR(10), ' '))+4+1, 50))) endPoint,
+		rtrim(SUBSTRING(ltrim(substring(replace(replace(replace(text, 'JOIN', 'FROM'), char(13), ' '), CHAR(10), ' '), CHARINDEX('FROM', replace(replace(replace(text, 'JOIN', 'FROM'), char(13), ' '), CHAR(10), ' '))+4+1, 50)), 1,
+			case	
+				when CHARINDEX(' ',ltrim(substring(replace(replace(replace(text, 'JOIN', 'FROM'), char(13), ' '), CHAR(10), ' '), CHARINDEX('FROM', replace(replace(replace(text, 'JOIN', 'FROM'), char(13), ' '), CHAR(10), ' '))+4+1, 50)))=0 then 50 
+				else CHARINDEX(' ',ltrim(substring(replace(replace(replace(text, 'JOIN', 'FROM'), char(13), ' '), CHAR(10), ' '), CHARINDEX('FROM', replace(replace(replace(text, 'JOIN', 'FROM'), char(13), ' '), CHAR(10), ' '))+4+1, 50)))
+			end)) parentTable
+	into #table1
+	from syscomments a
+		inner join sysobjects b
+			on a.id=b.id
+	where CHARINDEX('FROM', replace(replace(replace(text, 'JOIN', 'FROM'), char(13), ' '), CHAR(10), ' '))&gt;0
+
+	select * from #table1
+	
+
+
+
+
+

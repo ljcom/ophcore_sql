@@ -1,0 +1,25 @@
+
+
+CREATE FUNCTION [api].[settingmode] (@number nvarchar(max))
+RETURNS nvarchar(max)
+--WITH ENCRYPTION
+AS
+BEGIN
+
+	declare @code nvarchar(1)
+	--fieldNo
+	set @code =
+		case 
+			when @number = 0 then 'C'
+			when @number = 1 then 'M'
+			when @number = 2 then 'P'
+			when @number = 3 then 'S'
+			when @number = 4 then 'T'
+			when @number = 5 then 'Y'
+			when @number = 6 then 'B'
+		end
+
+	return @code
+
+END
+

@@ -1,0 +1,13 @@
+
+
+CREATE procedure [core].[createDB] @accountid nvarchar(50), @isDropScript bit=0, @isEnc bit=1, @isDelTable bit=0, @isDropTable bit=0, @isdebug bit=0
+--with encryption
+as
+	--declare @dataDB nvarchar(50), @svr nvarchar(50)
+	--select @dataDB=DatabaseName, @svr=isnull(b.servername, @@servername)
+	--from acct a 
+	--	inner join acctdbse b on a.AccountGUID=b.AccountGUID
+	--where isMaster=1 and b.version='4.0' and AccountId=@accountid 
+
+	exec core.createdb_insertdata @accountid, @isDropScript, @isEnc, @isDelTable, @isDropTable, @isdebug
+

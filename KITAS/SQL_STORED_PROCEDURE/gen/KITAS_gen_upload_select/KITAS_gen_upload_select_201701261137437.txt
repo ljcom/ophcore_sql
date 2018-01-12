@@ -1,0 +1,149 @@
+
+CREATE procedure [gen].[upload_select] @GUID uniqueidentifier, @hostGUID uniqueidentifier, @tablename varchar(20), @filename varchar(max), @path varchar(max)
+as
+	print ''
+
+	declare @sqlstr varchar(max), @f varchar(max), @typename varchar(10)
+	set @f=@path+@filename
+
+	set @typename=left(@tablename,1)+'t'+substring(@tablename, 3, len(@tablename)-2)
+	exec gen.createType @typename
+
+	declare @w xml
+	set @w= (
+		select 
+			case when xtype=36 and combotype in (10,12) then 'select @'+colname+'='+combofieldkey+' from oph.'+combotable+' where '+comboFieldId+'=@'+colname+'CbId'+char(10)
+				else '' end
+		--select *
+		from gen.cotabl a
+			inner join gen.cotablfiel b
+				on a.TableGUID=b.tableguid
+		where tablename=@tablename and ((isEditable in (1,2,4) and isviewable=1))-- or colorder=10 or isEditable=3)
+			and combotype in (10,12)
+		order by viewpageno, viewrowno, viewcolno, vieworderno,viewrowtype,viewrowtypeorder
+		for xml path(''), type)
+
+		declare @w1 varchar(max)
+		set @w1=cast(@w as varchar(max))
+		set @w1=left(@w1, len(@w1)-1)
+
+	declare @x xml
+	set @x= (
+		select 
+			case when xtype=36 and combotype in (10,12) then '@'+colname+' uniqueidentifier, @'+colname+'cbId varchar(max), @'+colname+'cbNm varchar(max), '
+				when xtype=36 and combotype in (11) then '@'+colname+' uniqueidentifier, @'+colname+'parId varchar(max), @'+colname+'parNm varchar(max), '
+				when xtype=60 then '@'+colname+' money, '
+				else '@'+colname+' varchar(max)'+', ' end
+		--select *
+		from gen.cotabl a
+			inner join gen.cotablfiel b
+				on a.TableGUID=b.tableguid
+		where tablename=@tablename and ((isEditable in (1,2,4) and isviewable=1))-- or colorder=10 or isEditable=3)
+		order by viewpageno, viewrowno, viewcolno, vieworderno,viewrowtype,viewrowtypeorder
+		for xml path(''), type)
+
+		declare @x1 varchar(max)
+		set @x1=cast(@x as varchar(max))
+		set @x1=left(@x1, len(@x1)-1)
+		--print @x1
+
+	declare @y xml
+	set @y= (
+		select 
+			case when xtype=36 and combotype in (10,12) then '@'+colname+'cbId, @'+colname+'cbNm, '
+				when xtype=36 and combotype in (11) then '@'+colname+'parId, @'+colname+'parNm, '
+				when xtype=60 then '@'+colname+', '
+				else '@'+colname+''+', ' end
+		--select *
+		from gen.cotabl a
+			inner join gen.cotablfiel b
+				on a.TableGUID=b.tableguid
+		where tablename=@tablename and ((isEditable in (1,2,4) and isviewable=1))-- or colorder=10 or isEditable=3)
+		order by viewpageno, viewrowno, viewcolno, vieworderno,viewrowtype,viewrowtypeorder
+		for xml path(''), type)
+
+		declare @y1 varchar(max)
+		set @y1=cast(@y as varchar(max))
+		set @y1=left(@y1, len(@y1)-1)
+		--set @y1='create type dbo.'+@typename+' as table ('+@y1+')'
+		--print @y1
+--select * from gen.cotablfiel where colname='PurchasePrice_IUF'
+	
+	declare @z xml
+	set @z= (
+		select 
+			case when xtype=36 and combotype in (10,12) then '@'+colname+', '
+				when xtype=36 and combotype in (11) then '@'+colname+', '
+				when xtype=60 then '@'+colname+', '
+				else '@'+colname+''+', ' end
+		--select *
+		from gen.cotabl a
+			inner join gen.cotablfiel b
+				on a.TableGUID=b.tableguid
+		where tablename=@tablename and ((isEditable in (1,2,4) and isviewable=1))-- or colorder=10 or isEditable=3)
+		order by viewpageno, viewrowno, viewcolno, vieworderno,viewrowtype,viewrowtypeorder
+		for xml path(''), type)
+
+		declare @z1 varchar(max)
+		set @z1=cast(@z as varchar(max))
+		set @z1=left(@z1, len(@z1)-1)
+
+	if dbo.fn_checkFile(@f)=1
+	begin
+		set @sqlstr=
+			'
+			declare @t '+@typename+'
+			declare @GUID uniqueidentifier='''+cast(@GUID as varchar(50))+'''	
+			declare @hostGUID uniqueidentifier='''+cast(@hostGUID as varchar(50))+'''	
+			insert into @t
+			select * 
+			FROM OPENROWSET(
+				''Microsoft.ace.OLEDB.12.0'',
+				''Excel 8.0;Database='+@f+';HDR=YES'',
+				''SELECT * FROM ['+@tablename+'$]'')
+				
+			--exec dbo.'+@tablename+'_upload_custom '''+cast(@GUID as varchar(50))+''', '''+cast(@hostGUID as varchar(50))+''', @t
+			
+
+			select * 
+			from @t
+
+			DECLARE #cur1 CURSOR
+			READ_ONLY
+			FOR		
+				select * 
+				from @t
+
+			declare '+@x1+' 
+
+			OPEN #cur1
+
+			FETCH NEXT FROM #cur1 INTO '+@y1+'
+
+			WHILE (@@fetch_status &lt;&gt; -1)
+			BEGIN
+				IF (@@fetch_status &lt;&gt; -2)
+				BEGIN
+					
+					'+@w1+'
+
+					exec oph.'+@tablename+'_save null, @hostGUID, @GUID, '+@z1+'
+
+				END
+				FETCH NEXT FROM #cur1 INTO '+@y1+'
+			END
+
+			CLOSE #cur1
+			DEALLOCATE #cur1
+			'
+
+		print @sqlstr	
+		exec(@sqlstr)
+
+	end
+	else
+		print 'file not found: '+@f
+
+
+
+

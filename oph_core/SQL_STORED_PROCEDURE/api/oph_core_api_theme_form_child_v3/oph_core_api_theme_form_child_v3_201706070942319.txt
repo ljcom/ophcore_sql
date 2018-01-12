@@ -1,0 +1,47 @@
+CREATE PROCEDURE [api].[theme_form_child_v3] 
+	@hostGUID uniqueidentifier, @code nvarchar(max), @GUID uniqueidentifier, @database nvarchar(max), @settingmode nvarchar(1), @childxml xml output, @isdebug bit=0
+--WITH ENCRYPTION
+as
+
+--declare @hostGUID uniqueidentifier = gen.getHost('admin'), @code nvarchar(max) = 'TaHRTA', 
+--	@database nvarchar(max) = 'ef_ehrd', @settingmode nvarchar(1) = 'T', @childxml xml, @isdebug bit=1
+
+	declare @userID nvarchar(50)
+	select @userID = UserID from [user] where UserGUID = gen.getUserHost(@hostGUID)
+
+	declare @cfs nvarchar(MAX), @cfModules nvarchar(MAX), @sqlstr nvarchar(MAX)
+	set @sqlstr = 'select @cf = ChildrenFilter from '+@database+'.dbo.CoMODL where ModuleID = '''+@code+''' AND isNULL(ChildrenFilter, '''') <> '''''
+
+	exec sp_executesql @sqlstr, N'@cf nvarchar(MAX) output', @cf=@cfs output
+
+	if @cfs is Not NULL begin
+		set @sqlstr = 'use ' + QUOTENAME(@database) + CHAR(10) + 
+			'declare @UserID nvarchar(50) = '''+@userID+'''' + CHAR(10) +
+			'declare @HostGUID uniqueidentifier = gen.getHost(@UserID, NULL)' + CHAR(10) +
+			'declare @GUID uniqueidentifier = '''+CAST(@GUID as nvarchar(50))+'''' + CHAR(10) +
+			'select @sm = (' + CHAR(10) + @cfs + CHAR(10) + ')'
+
+		exec sp_executesql @sqlstr, N'@sm nvarchar(MAX) OUTPUT', @sm = @cfModules OUTPUT
+	end
+
+	set @sqlstr = 'use ' + QUOTENAME(@database) + CHAR(10) + 
+	'select @xml = (
+		select lower(a.moduleid) as code, ModuleDescription as childTitle,d.colname as parentkey, (
+			select allowbrowse, allowadd, allowedit, allowhold, allowdelete, allowwipe, allowbatch 
+				from comodl where moduleguid = a.moduleguid for xml path(''permission''),type			
+			) as info
+		from comodl a 
+			join (
+				select submoduleguid from comodl a join comodlsmod b on a.moduleguid = b.moduleguid
+				where moduleid like '''+@code+''''+isNULL(SPACE(1) + 'AND submoduleguid in ('+@cfModules+')', '') +'
+				) b on a.ModuleGUID = b.submoduleguid
+			join gen.cotabl c 
+				on a.moduleid = c.tablename
+			join (select tableguid,colname from gen.cotablfiel where iseditable = 3) d 
+				on c.tableguid = d.tableguid
+		for xml path(''child''),type,root(''children'')
+	)'
+	
+	if @isdebug=1 print @sqlstr
+	EXECUTE sp_executesql @sqlstr,N'@xml xml output', @xml = @childxml output
+

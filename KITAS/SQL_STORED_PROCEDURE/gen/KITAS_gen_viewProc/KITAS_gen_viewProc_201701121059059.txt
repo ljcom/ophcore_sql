@@ -1,0 +1,56 @@
+
+
+
+
+
+
+
+
+
+
+CREATE procedure [gen].[viewProc]
+as
+	select *
+	from coPROC
+	where 	not (name like '%restore%' 
+		or name like '%browse%' 
+		or name like '%force%' 
+		or name like '%delete%' 
+		or name like '%wipe%' 	
+		or name like '%execute%'
+		or name like '%activate%'
+		or name like '%save%'
+		or name like '%StockRefresh%'
+		or name like '%select%')
+	and mode &gt;0 and (name like 'sp_Ta%' or name like 'sp_Ma%')
+	
+	select 	sum(case when name like '%restore%' then mode else 0 end) xrestore, 
+		sum(case when name like '%browse%' then mode else 0 end) xbrowse,
+		sum(case when name like '%force%' then mode else 0 end) xforce,
+		sum(case when name like '%delete%' then mode else 0 end) xdelete,
+		sum(case when name like '%wipe%' then mode else 0 end) xwipe,
+		sum(case when name like '%execute%' then mode else 0 end) xexecute,
+		sum(case when name like '%activate%' then mode else 0 end) xactivate,
+		sum(case when name like '%save%' then mode else 0 end) xsave,
+		sum(case when name like '%StockRefresh%' then mode else 0 end) xStockRefresh,
+		sum(case when name like '%select%' then mode else 0 end) xselect,
+		1
+	from coPROC
+	where mode &gt;0 and (name like '%Ta%' or name like '%Ma%')
+	
+--	select * from coPROC
+--	where mode = 1000 and name like '%delete%'
+--	order by name
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,5 @@
+CREATE PROCEDURE [dbo].[TaPCSO_save_update_before]	@GUID uniqueidentifier, @hostGUID uniqueidentifier, @CarolGUID uniqueidentifier OUTPUT, @PAYMGUID uniqueidentifier OUTPUT, @isReceived bit OUTPUT, @isCancel bit = 0 OUTPUT, @msg nvarchar(1000) = '' OUTPUT--Automatic Parameters by OPH. Do Not Modify This Parameters Intentionally.
+
+as	--CreatedBy eLs ON Feb, 2017
+
+

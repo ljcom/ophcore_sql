@@ -1,0 +1,17 @@
+
+
+
+
+CREATE VIEW [dbo].[CoMBOMODUL]
+as	--CreatedBy eLs ON August, 2015
+	
+	select 
+		ModuleGUID, ModuleId, ModuleDescription 
+	from CoMODL where isDeleted = 0 AND LEFT(ModuleId, 2) = 'Ta' AND (LEN(ModuleId) &lt;= 6)	
+	UNION
+	select dbo.ZeroGUID(), 'ALL', 'MODULES'
+
+
+
+
+

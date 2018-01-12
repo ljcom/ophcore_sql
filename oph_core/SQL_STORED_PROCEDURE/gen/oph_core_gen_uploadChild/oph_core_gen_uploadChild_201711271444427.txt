@@ -1,0 +1,202 @@
+
+CREATE procedure [gen].[uploadChild] @hostGUID uniqueidentifier, @code nvarchar(50), @GUID uniqueidentifier, @parentGUID uniqueidentifier, @filepath nvarchar(max), @isdebug bit=0
+as	--CreatedBy els on Nov, 2017
+
+	--declare @hostGUID uniqueidentifier = gen.gethost('ap\iman.satyagraha'), @code nvarchar(50) = 'taentrdetl', 
+	--	@GUID uniqueidentifier, @parentGUID uniqueidentifier = '68F3B213-9BC6-48C2-BCE9-54427B9BA99B', 
+	--	@filepath nvarchar(max) = 'D:\vsonline\OPERAHOUSE\documents\temp\EFORM\TaENTRDETL_6b6ec9ca-d650-40e7-ba01-ff2c51408fc2_7189845a-6fa7-4ad6-a5fb-5b7e4f22cd3e_TaENTRDETL.xls'
+	--	, @isdebug bit=0
+
+	set nocount on
+	if gen.fn_checkFile(@filepath)=1 begin
+		declare @rowTitle nvarchar(MAX) = STUFF((
+			select ', ' + quotename(b.colKey)  from modl a
+				inner join modlcolm b ON a.ModuleGUID = b.ModuleGUID
+				inner join modlcolminfo c ON b.ColumnGUID = c.ColumnGUID AND c.InfoKey = 'isEditable' AND c.InfoValue = '1'
+				inner join modlcolminfo d ON b.ColumnGUID = d.ColumnGUID AND d.InfoKey = 'isEditable' AND d.InfoValue = '1'
+			where ModuleId = @code
+			order by colOrder
+			for xml path('')
+		), 1, 2, '') --print @rowTitle
+
+		declare @tempTable nvarchar(100) = @code+'_'+replace(newid(), '-', '')
+		declare @sqlstr nvarchar(MAX) = '
+			if object_id(''tempdb..##'+@tempTable+''') is not null drop table ##'+@tempTable+'			
+			select DocGUID, '+@rowTitle+' into ##' + @tempTable + '
+			from OPENROWSET(
+				''Microsoft.ace.OLEDB.12.0'',
+				''Excel 8.0;Database='+@filepath+';HDR=YES'',
+				''SELECT * FROM ['+@code+'$]''
+			) where DocGUID is NULL OR DocGUID != gen.ZeroGUID()
+			update ##' + @tempTable + ' set DocGUID = NEWID() where DocGUID is NULL'
+
+		if @parentGUID is not NULL begin
+			set @sqlstr = @sqlstr + '
+			alter table ##' + @tempTable + '
+			add ParentDocGUID nvarchar(MAX) not null
+			constraint pd'+@tempTable+'
+			default '''+cast(@parentGUID as varchar(50))+''' with values'
+
+			set @rowTitle = @rowTitle + ', [ParentDocGUID]'
+		end
+
+		begin try
+			exec(@sqlstr)
+
+			if @parentGUID is not NULL begin 
+				declare @str nvarchar(MAX) = (
+					select 
+						'alter table ' + table_name + ' alter column ' + column_name + ' nvarchar(MAX)'+char(10)
+					from tempdb.information_schema.columns 
+					where TABLE_NAME like '%' + @tempTable + '%'
+					for xml path('')
+				) exec(@str)
+			end
+
+			--joining tempTable with comboTable
+			declare 
+				@cbColKey nvarchar(50), @cbTable nvarchar(50), @cbFieldKey nvarchar(50), @cbFieldId nvarchar(50), @cbFieldName nvarchar(50), 
+				@cbSchema nvarchar(5), @cbQuery nvarchar(MAX), @cbsql nvarchar(MAX), @cbUpdate nvarchar(MAX), @cbType nvarchar(5), @colorder int
+
+			declare curcb cursor read_only for
+				select b.colorder, b.colKey, e.InfoValue, f.InfoValue, g.InfoValue, h.InfoValue from modl a
+					inner join modlcolm b ON a.ModuleGUID = b.ModuleGUID
+					inner join modlcolminfo c ON b.ColumnGUID = c.ColumnGUID AND c.InfoKey = 'isEditable' AND c.InfoValue = '1'
+					inner join modlcolminfo d ON b.ColumnGUID = d.ColumnGUID AND d.InfoKey = 'isViewable' AND d.InfoValue = '1'
+					inner join modlcolminfo e ON b.ColumnGUID = e.ColumnGUID AND e.InfoKey = 'comboTable' AND e.InfoValue != ''
+					left join modlcolminfo f ON b.ColumnGUID = f.ColumnGUID AND f.InfoKey = 'comboFieldKey' AND f.InfoValue != ''
+					left join modlcolminfo g ON b.ColumnGUID = g.ColumnGUID AND g.InfoKey = 'comboFieldId' AND g.InfoValue != ''
+					left join modlcolminfo h ON b.ColumnGUID = h.ColumnGUID AND h.InfoKey = 'comboFieldName' AND h.InfoValue != ''
+				where ModuleId = @code order by colOrder
+			open curcb fetch next from curcb into @colorder, @cbColKey, @cbTable, @cbFieldKey, @cbFieldId, @cbFieldName
+			while @@FETCH_STATUS = 0 begin		
+				set @cbSchema = NULL
+				select @cbSchema = b.name from sys.views a
+					inner join sys.schemas b ON a.schema_id = b.schema_id
+				where a.name = @cbTable
+
+				if @cbTable like 'par(%' begin
+					select @cbType = 'par', @cbFieldKey = 'ParameterValueGUID', @cbTable = replace(replace(@cbTable, 'par(', ''), ')', '')
+					set @cbQuery = '(
+						select 
+							ParameterValueGUID, p2.ParameterValue, p2.ParameterDescription,
+							isNULL(p2.ParameterValue + isNULL('' - ''+ p2.ParameterDescription, ''''), isNULL(p2.ParameterDescription, '''')) [value]
+						from para p1
+							inner join paravalu p2 ON p1.ParameterGUID = p2.ParameterGUID
+						where ParameterId = '''+@cbTable+'''
+					) '+quotename(@cbTable+cast(@colorder as nvarchar(10)))
+				end
+				else if @cbTable like 'view(%' begin
+					select @cbType = 'view', @cbTable = replace(replace(@cbTable, 'view(', ''), ')', '')
+					set @cbQuery = '(
+						select '+@cbFieldKey+', '+isNULL(@cbFieldId+isNULL('+'' - ''+'+ @cbFieldName, ''), isNULL(@cbFieldName, '')) + 
+							' [value]'+isNULL(', '+quotename(@cbFieldId), '')+isNULL(', '+quotename(@cbFieldName), '') + 
+							' from doc.'+@code+'_'+@cbTable+'
+					) '+quotename(@cbTable+cast(@colorder as nvarchar(10)))
+				end
+				else begin 
+					set @cbType = 'table'
+					set @cbQuery = '(
+						select '+@cbFieldKey+', '+isNULL(@cbFieldId+isNULL('+'' - ''+'+ @cbFieldName, ''), isNULL(@cbFieldName, '')) + 
+							' [value]'+isNULL(', '+quotename(@cbFieldId), '')+isNULL(', '+quotename(@cbFieldName), '') + 
+							' from '+isNULL(@cbSchema, 'dbo')+'.'+quotename(@cbTable)+'
+					) '+quotename(@cbTable+cast(@colorder as nvarchar(10)))
+				end
+
+				if @cbType = 'par'
+					set @cbsql = isNULL(@cbsql, '')+'
+					left join '+@cbQuery+' 
+						ON '+quotename(@cbTable+cast(@colorder as nvarchar(10)))+'.value = a.'+@cbColKey+ '
+							OR '+quotename(@cbTable+cast(@colorder as nvarchar(10)))+'.ParameterValue = a.'+@cbColKey+ '
+							OR '+quotename(@cbTable+cast(@colorder as nvarchar(10)))+'.ParameterDescription = a.'+@cbColKey+ '
+							OR CAST('+quotename(@cbTable+cast(@colorder as nvarchar(10)))+'.ParameterValueGUID as varchar(50)) = a.'+@cbColKey
+				else
+					set @cbsql = isNULL(@cbsql, '')+'
+					left join '+@cbQuery+' 
+						ON '+quotename(@cbTable+cast(@colorder as nvarchar(10)))+'.value = a.'+@cbColKey+ ISNULL('
+							OR '+quotename(@cbTable+cast(@colorder as nvarchar(10)))+'.'+@cbFieldId+' = a.'+@cbColKey, '') + ISNULL('
+							OR '+quotename(@cbTable+cast(@colorder as nvarchar(10)))+'.'+@cbFieldName+' = a.'+@cbColKey, '') + '
+							OR CAST('+quotename(@cbTable+cast(@colorder as nvarchar(10)))+'.'+@cbFieldKey+' as varchar(50)) = a.'+@cbColKey
+
+				set @cbUpdate = ISNULL(@cbUpdate, '')+
+					', a.'+@cbColKey+' = isNULL(cast('+quotename(@cbTable+cast(@colorder as nvarchar(10)))+'.'+@cbFieldKey+' as varchar(50)), a.'+@cbColKey+')'
+
+				fetch next from curcb into @colorder, @cbColKey, @cbTable, @cbFieldKey, @cbFieldId, @cbFieldName
+			end
+			close curcb deallocate curcb
+
+			-- replacing all combos value with their guid
+			set @sqlstr = '
+				update a set 
+					' +STUFF(@cbUpdate, 1, 2, '')+ '
+				--select *
+				from ##'+@tempTable+' [a] '+@cbsql
+			begin try
+				exec(@sqlstr)
+
+				declare @schema varchar(50)
+				select @schema = b.name from sys.views a
+					inner join sys.schemas b ON a.schema_id = b.schema_id
+				where a.name = @code
+				set @schema = IIF(LEN(@schema) < 1, 'dbo', @schema)
+
+				--cursor for creating xml save list then do saving 
+				set @sqlstr='			
+				declare @hostGUID uniqueidentifier='''+cast(@hostGUID as varchar(50))+'''
+				declare @GUID uniqueidentifier, @saveList nvarchar(max)
+
+				DECLARE #cur1 CURSOR READ_ONLY FOR		
+					select DocGUID from ##' + @tempTable +'
+				OPEN #cur1 FETCH NEXT FROM #cur1 INTO @GUID
+				WHILE (@@fetch_status = 0) BEGIN
+					set @saveList=(
+						select ''<field id="''+IIF(infokey = ''ParentDocGUID'', ''DocGUID'', infokey )+''"><value>''+infovalue+''</value></field>'' from ##' + @tempTable +' 
+						unpivot (
+							infovalue for infokey in ('+@rowTitle+')
+						) x where DocGUID = @GUID 
+						for xml path('''')
+					) set @saveList=''<sqroot>''+replace(replace(@savelist, ''&lt;'', ''<''), ''&gt;'', ''>'')+''</sqroot>''
+
+					if Not exists(select * from '+@schema+'.'+QUOTENAME(@code)+' where DocGUID = @GUID) OR @GUID is NULL
+						set @GUID = gen.ZeroGUID()
+
+					--select cast(@saveList as xml)
+					begin try
+						print ''exec api.[save] ''''''+cast(@hostGUID as varchar(50))+'''''', '''''+@code+''''', '''''' +cast(@GUID as varchar(50))+ '''''', '''''' + @saveList + ''''''''
+						exec api.[save] @hostGUID, '''+@code+''', @GUID, @saveList
+						print ''-------------------------------------------------------------''
+					end try
+					begin catch
+						print ''Something wrong with save! GUID : '' + cast(@GUID as varchar(50))
+						print ''xmlSave: '' + @savelist
+						print ''message: '' + ERROR_MESSAGE() 
+						print ''----------------------------------------------------------------''
+					end catch
+				FETCH NEXT FROM #cur1 INTO @GUID
+				END
+				CLOSE #cur1 DEALLOCATE #cur1
+				
+				if object_id(''tempdb..##'+@tempTable+''') is not null drop table ##'+@tempTable
+
+				begin try
+					exec(@sqlstr)
+				end try
+				begin catch
+					print error_message()
+					print @sqlstr
+				end catch
+			end try
+			begin catch
+				print error_message()
+				print @sqlstr return
+			end catch
+		end try
+		begin catch
+			print error_message()
+			print @sqlstr return
+		end catch
+		--print 'select * from ##'+@tempTable
+	end
+	else print 'file not found: '+@filepath
+
+

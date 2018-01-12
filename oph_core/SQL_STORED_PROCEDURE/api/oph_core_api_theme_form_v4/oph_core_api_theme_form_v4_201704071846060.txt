@@ -1,0 +1,98 @@
+
+
+
+CREATE proc [api].[theme_form_v4] @moduleguid uniqueidentifier, @guid uniqueidentifier, @database nvarchar(50), @isdebug bit=0
+as
+
+	declare @fieldkey varchar(50)
+	select @fieldkey=colkey
+	from modl a
+		inner join modlcolm b on a.moduleguid=b.moduleguid
+	--where a.moduleid='menu'
+	where a.moduleguid=@moduleguid
+		and colorder=(
+			select min(colorder)
+			from modl a
+				inner join modlcolm b on a.moduleguid=b.moduleguid
+			where a.moduleguid=@moduleguid
+		)
+
+	declare @fieldList varchar(max), @fieldList2 varchar(max)
+	set @fieldList=stuff((
+		select ', '+colkey
+		from modl a
+			inner join modlcolm b on a.moduleguid=b.moduleguid
+		where a.moduleguid=@moduleguid and colKey not in (@fieldkey, 'accountguid')
+		for xml path('')),1,2, '')
+
+	set @fieldList2=stuff((
+		select ', cast('+colkey+' as varchar(max)) '+colkey --cast(menuid as varchar(max)) menuid
+		from modl a
+			inner join modlcolm b on a.moduleguid=b.moduleguid
+		where a.moduleguid=@moduleguid and colKey not in (@fieldkey, 'accountguid')
+		for xml path('')),1,2, '')
+
+	
+	declare @code varchar(50)
+	select @code=moduleid 
+	from modl 
+	where moduleguid=@moduleguid
+
+	declare @sqlstr nvarchar(max)
+
+	select @sqlstr =  '
+		use '+@database+'
+
+		select columnguid, moduleguid, infokey, infovalue, null,null 
+		From (
+			select convert(nvarchar(max),colkey) as colkey, --convert(nvarchar(max),coltype) as coltype, 
+				convert(nvarchar(max),colorder) as colorder, a.moduleguid, a.columnguid 
+			from modlcolm a
+				inner join modlcolminfo b on a.columnguid=b.columnguid and b.infokey=''isviewable'' and b.infovalue=''1''
+			) a 
+		unpivot (infovalue for infokey in(colkey, colorder)) as upvt 
+		where moduleguid ='''+cast(@moduleguid as varchar(50))+'''
+		
+		union
+		
+		select a.columnguid, b.moduleguid, a.infokey, a.infovalue, null, null 
+		from modlcolminfo a		
+			inner join modlcolm b on a.columnguid = b.columnguid 
+			inner join modlcolminfo c on b.columnguid=c.columnguid and c.infokey=''isviewable'' and c.infovalue=''1''
+		where moduleguid ='''+cast(@moduleguid as varchar(50))+'''
+		
+		union
+		-- settingmode&gt;0
+		select ColumnGUID,b.moduleguid,''colValue'',ColValue,colvaluedate,colvaluemoney 
+		From docmcolm a 
+			inner join docm b on a.docguid = b.docguid 
+			inner join modlcolm c on a.ColKey = c.colKey and b.ModuleGUID = c.ModuleGUID 
+		where a.docguid ='''+cast(@guid as varchar(50))+'''
+		
+		-- settingmode=0
+		union
+
+		select columnGUID, moduleguid, ''colValue'', fextstring, null colvaluedate, null colvaluemoney   
+		from (
+			SELECT y.columnGUID, z.moduleguid, fextkey, fextstring
+			FROM
+			(	select '+@fieldkey+', '+@fieldList2+' 
+				from ['+@code+']
+				where '+@fieldKey+'='''+cast(@guid as varchar(50))+''') t
+			UNPIVOT
+			(	fextstring FOR fextkey  IN ('+@fieldList+')
+			) x
+				inner join modlcolm y
+					on x.fextkey=y.colkey
+				inner join modl z on z.moduleguid=y.moduleguid
+			where z.moduleguid='''+cast(@moduleguid as varchar(50))+'''
+		) xx 
+			
+		order by columnguid, infokey'
+
+	if @isdebug=1 print @sqlstr
+	exec (@sqlstr)
+
+
+
+

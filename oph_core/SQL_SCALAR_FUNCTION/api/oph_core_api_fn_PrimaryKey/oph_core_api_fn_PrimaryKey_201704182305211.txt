@@ -1,0 +1,16 @@
+CREATE FUNCTION [api].[fn_PrimaryKey] (@tblName varchar(50))
+RETURNS varchar(100)
+--WITH ENCRYPTION
+as	--CreatedBy eLs ON Apr, 2017
+BEGIN
+	declare @result varchar(100)
+	select @result = COL_NAME(ic.OBJECT_ID,ic.column_id)
+		--i.name AS IndexName, OBJECT_NAME(ic.OBJECT_ID) AS TableName, COL_NAME(ic.OBJECT_ID,ic.column_id) AS ColumnName
+	from sys.indexes AS i 
+			inner join sys.index_columns AS ic ON  i.OBJECT_ID = ic.OBJECT_ID AND i.index_id = ic.index_id
+	where i.is_primary_key = 1 AND OBJECT_NAME(ic.OBJECT_ID) = @tblName
+
+	return @result
+END
+
+

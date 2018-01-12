@@ -1,0 +1,35 @@
+CREATE PROCEDURE MaBRAN_insert_values
+as	--CreatedBy eLs ON Feb, 2017
+	
+	delete MoBRAN
+
+	-- 1st Parent (Division)
+	insert into MoBRAN(BRANGUID, Name, PARNBRANGUID, isParent)
+	select DISTINCT
+		a.DIVNGUID, UPPER(a.Name), NULL, IIF(b.SIGNGUID is NULL, 0, 1)
+	from MoDIVN a
+		left join MoSIGN b ON a.DIVNGUID = b.DIVNGUID
+
+	-- 2nd Child-Parent (Signature)
+	insert into MoBRAN(BRANGUID, Name, PARNBRANGUID, isParent)
+	select DISTINCT
+		a.SIGNGUID, UPPER(a.Name), a.DIVNGUID, IIF(b.SIGNAXESGUID is NULL, 0, 1)
+	from MoSIGN a
+		left join MoSIGNAXES b ON a.SIGNGUID = b.SIGNGUID
+
+	-- 3rd Child-Parent (AXE)
+	insert into MoBRAN(BRANGUID, Name, PARNBRANGUID, isParent)
+	select DISTINCT
+		a.SIGNAXESGUID, UPPER(a.Name), a.SIGNGUID, IIF(c.SIGNAXESSUBAFUNCGUID is NULL, 0, 1)
+	from MoSIGNAXES a
+		inner join MoSIGNAXESSUBA b ON a.SIGNAXESGUID = b.SIGNAXESGUID
+		inner join MoSIGNAXESSUBAFUNC c ON b.SIGNAXESSUBAGUID = c.SIGNAXESSUBAGUID
+
+	-- 4th Child-Parent (Product Function)
+	insert into MoBRAN(BRANGUID, Name, PARNBRANGUID, isParent)
+	select DISTINCT
+		a.SIGNAXESSUBAFUNCGUID, UPPER(a.Name), c.SIGNAXESGUID, 0
+	from MoSIGNAXESSUBAFUNC a
+		inner join MoSIGNAXESSUBA b ON a.SIGNAXESSUBAGUID = b.SIGNAXESSUBAGUID
+		inner join MoSIGNAXES c ON b.SIGNAXESGUID = c.SIGNAXESGUID
+

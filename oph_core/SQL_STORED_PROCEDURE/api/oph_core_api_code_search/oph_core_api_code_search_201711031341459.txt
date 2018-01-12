@@ -1,0 +1,25 @@
+CREATE PROCEDURE
+	api.code_search @hostGUID uniqueidentifier, @searchCode varchar(20) 
+--WITH ENCRYPTION
+as	--CreatedBy eLs ON Nov, 2017
+
+	declare @code varchar(20) = REPLACE(REPLACE(@searchCode, '@', ''), '*', '')
+	if Not exists(
+		select * from modl a
+			left join modlinfo b ON a.ModuleGUID = b.ModuleGUID AND b.InfoKey = 'moduleShortName'
+		where a.ModuleId = @code OR b.InfoValue = @code
+	) begin
+		select @code [@value], REPLACE(@searchCode, @code, '') [@regex], 'unknown' [@type],
+			'Invalid search type mode!' [message]
+		for xml path ('search'), type, root('sqroot')
+	end
+	else begin
+		select TOP 1 
+			@code [@value], REPLACE(@searchCode, @code, '') [@regex], 
+			IIF(b.InfoValue is Not NULL or b.InfoValue != '', 'shortName', 'id') [@type], 
+			ModuleId [code] 
+		from modl a
+			left join modlinfo b ON a.ModuleGUID = b.ModuleGUID AND b.InfoKey = 'moduleShortName'
+		where a.ModuleId = @code OR b.InfoValue = @code
+		for xml path ('search'), type, root('sqroot')
+	end

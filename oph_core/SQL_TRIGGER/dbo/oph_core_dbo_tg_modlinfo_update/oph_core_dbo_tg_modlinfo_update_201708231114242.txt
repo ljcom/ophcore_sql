@@ -1,0 +1,162 @@
+CREATE TRIGGER [dbo].[tg_modlinfo_update]
+   ON  [dbo].[modlinfo]
+   AFTER INSERT, UPDATE
+AS
+BEGIN
+	SET NOCOUNT ON;
+
+	declare @code nvarchar(50), @ext nvarchar(50), @viewname nvarchar(200), @Procname nvarchar(200), @content nvarchar(max), @resultText nvarchar(max)
+	declare @v4db nvarchar(50)
+
+	select @v4db=isnull(migratedb, databasename) 
+	from inserted i
+		inner join modl m on i.ModuleGUID=m.ModuleGUID
+		inner join acctdbse d on d.AccountDBGUID=m.AccountDBGUID
+
+	if exists(select * from inserted where infokey like 'view_%' or infokey like 'script_%' or infokey like 'unique_%' or infokey like 'index_%') begin
+		DECLARE #cur_view CURSOR
+		READ_ONLY
+		FOR select m.moduleid, i.InfoKey, i.InfoValue 
+			from inserted i
+				inner join modl m on i.moduleguid=m.moduleguid
+			where infokey like 'view_%'
+
+		OPEN #cur_view
+
+		FETCH NEXT FROM #cur_view INTO @code, @ext, @content
+		WHILE (@@fetch_status <> -1)
+		BEGIN
+			IF (@@fetch_status <> -2)
+			BEGIN
+				print 'view'+@code+@ext
+
+				set @ext=replace(@ext, 'view_', '')
+				set @viewname=@code+'_'+@ext
+				
+				print @content
+
+				exec [gen].[createView]	@viewName, @content, 'doc', 0, @resultText output
+
+				if isnull(@resultText,'')<>'' begin
+					RAISERROR (@resultText, 16, 1)
+					--ROLLBACK TRANSACTION
+				end
+
+			END
+			FETCH NEXT FROM #cur_view INTO @code, @ext, @content
+		END
+
+		CLOSE #cur_view
+		DEALLOCATE #cur_view
+
+
+		DECLARE #cur_s CURSOR
+		READ_ONLY
+		FOR select m.moduleid, i.InfoKey, i.InfoValue 
+			from inserted i
+				inner join modl m on i.moduleguid=m.moduleguid
+			 where infokey like 'script_%'
+
+		OPEN #cur_s
+
+		FETCH NEXT FROM #cur_s INTO @code, @ext, @content
+		WHILE (@@fetch_status <> -1)
+		BEGIN
+			IF (@@fetch_status <> -2)
+			BEGIN
+				print 'script'
+	
+				if left(@ext,14)='script_report_' begin
+					set @ext=replace(@ext, 'script_report_', '')
+					set @Procname='rp_'+@ext
+				end
+				else begin
+					set @ext=replace(@ext, 'script_', '')
+					set @Procname=@code+'_'+@ext
+				end
+
+				exec [gen].[createProc]	@ProcName, @content, 'doc', 0, @resultText output
+
+				if isnull(@resultText,'')<>'' begin
+					RAISERROR (@resultText, 16, 1)
+					--ROLLBACK TRANSACTION
+				end
+			END
+			FETCH NEXT FROM #cur_s INTO @code, @ext, @content
+		END
+
+		CLOSE #cur_s
+		DEALLOCATE #cur_s
+
+		
+
+		DECLARE #cur_u CURSOR
+		READ_ONLY
+		FOR select m.moduleid, i.InfoKey, i.InfoValue 
+			from inserted i
+				inner join modl m on i.moduleguid=m.moduleguid
+			 where infokey like 'unique_%'
+
+		OPEN #cur_u
+
+		FETCH NEXT FROM #cur_u INTO @code, @ext, @content
+		WHILE (@@fetch_status <> -1)
+		BEGIN
+			IF (@@fetch_status <> -2)
+			BEGIN
+				print 'unique'
+
+				set @ext=replace(@ext, 'unique_', '')
+				set @Procname='IX_'+@code+'_'+@ext	
+
+				exec [gen].[createIndex] @ProcName, @code, @content, 'doc', 1, @v4db, @resultText output
+
+				if isnull(@resultText,'')<>'' begin
+					RAISERROR (@resultText, 16, 1)
+					--ROLLBACK TRANSACTION
+				end
+			END
+			FETCH NEXT FROM #cur_u INTO @code, @ext, @content
+		END
+
+		CLOSE #cur_u
+		DEALLOCATE #cur_u
+
+
+		DECLARE #cur_i CURSOR
+		READ_ONLY
+		FOR select m.moduleid, i.InfoKey, i.InfoValue 
+			from inserted i
+				inner join modl m on i.moduleguid=m.moduleguid
+			 where infokey like 'index_%'
+
+		OPEN #cur_i
+
+		FETCH NEXT FROM #cur_i INTO @code, @ext, @content
+		WHILE (@@fetch_status <> -1)
+		BEGIN
+			IF (@@fetch_status <> -2)
+			BEGIN
+				print 'index'
+
+				set @ext=replace(@ext, 'unique_', '')
+				set @Procname='IX_'+@code+'_'+@ext	
+
+				exec [gen].[createIndex] @ProcName, @code, @content, 'doc', 1, @v4db, @resultText output
+
+				if isnull(@resultText,'')<>'' begin
+					RAISERROR (@resultText, 16, 1)
+					--ROLLBACK TRANSACTION
+				end
+			END
+			FETCH NEXT FROM #cur_i INTO @code, @ext, @content
+		END
+
+		CLOSE #cur_i
+		DEALLOCATE #cur_i
+
+	
+	end
+
+END
+

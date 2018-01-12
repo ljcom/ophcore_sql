@@ -1,0 +1,7 @@
+create procedure [gen].[modlinfo_load] @moduleguid uniqueidentifier, @key nvarchar(50), @value nvarchar(max)=null output
+as
+	if exists(select * from modlinfo where moduleguid=@moduleguid and infokey=@key)
+	begin
+		select @value=infovalue from modlinfo where moduleguid=@moduleguid and InfoKey=@key
+	end
+

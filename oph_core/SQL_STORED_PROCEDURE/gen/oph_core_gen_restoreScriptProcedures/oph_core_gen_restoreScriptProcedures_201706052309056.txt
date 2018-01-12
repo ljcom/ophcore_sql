@@ -1,0 +1,160 @@
+
+
+
+
+CREATE procedure [gen].[restoreScriptProcedures] @db varchar(50), @isEnc bit=0, @filter varchar(100)='', @isdebug bit=0
+--WITH ENCRYPTION
+as
+	--taruh sp di folder tersebut, baru lakukan download data
+	--if @dbmove is null set @dbmove=@db
+
+	declare @sqlstr nvarchar(max), @sqlpar nvarchar(max)
+	
+	create table #dir (folder varchar(max), depth int, isFile int, oType varchar(50))
+
+	set @sqlstr='EXEC xp_dirtree ''D:\vsonline\OPERAHOUSE\scripts\'+@db+'\SQL_STORED_PROCEDURE'', 10, 1'
+
+	insert into #dir (folder, depth, isFile)
+	exec sp_executesql @sqlstr
+
+	update #dir set oType='SQL_STORED_PROCEDURE' where oType is null
+
+	set @sqlstr='EXEC xp_dirtree ''D:\vsonline\OPERAHOUSE\scripts\'+@db+'\SQL_SCALAR_FUNCTION'', 10, 1'
+
+	insert into #dir (folder, depth, isFile)
+	exec sp_executesql @sqlstr
+
+	update #dir set oType='SQL_SCALAR_FUNCTION' where oType is null
+
+	if @isdebug=1 select * from #dir
+
+	DECLARE #cur CURSOR
+	READ_ONLY
+	FOR 
+		select schemaname, spname, max(spdate) spdate, max(oType)--, max(d.text)		 
+		from (
+			select d.name schemaname, 
+				replace(replace(replace(replace(a.folder, @db+'_', ''), '.txt', ''), '_'+left(right(a.folder, 19),15), ''), d.name+'_', '') spname, 
+				left(right(a.folder, 19),15) spdate,
+				replace(convert(varchar(10), modify_date,102),'.','')+replace(convert(varchar(10), modify_date,114),':','') moddate,
+				replace(convert(varchar(10), create_date,102),'.','')+replace(convert(varchar(10), create_date,114),':','') credate, 
+				oType
+			--select *
+			from #dir a
+				inner join sys.schemas d 
+					on replace(replace(replace(a.folder, @db+'_', ''), '.txt', ''), '_'+left(right(a.folder, 19),15), '') like d.name+'%'
+				left join 
+					(	select b.name sp, c.name sc, b.modify_date, b.create_date
+						from sys.objects b 
+							inner join (select id from sys.syscomments b where encrypted=0 group by id) x
+								on x.id=b.object_id
+							inner join sys.schemas c on b.schema_id=c.schema_id) b
+					on replace(replace(replace(replace(a.folder, @db+'_', ''), '.txt', ''), '_'+left(right(a.folder, 19),15), ''), d.name+'_', '')=b.sp
+					and d.name=b.sc
+			where isFile=1 and folder like '%.txt'
+				and folder like '%'+@filter+'%'
+				--and b.type='P' 
+				and a.folder like @db+'%'
+			and ((charindex(b.sc+'_'+b.sp, a.folder)>0
+				and substring(a.folder, charindex(b.sc+'_'+b.sp, a.folder)+len(b.sc+'_'+b.sp)+1+15,4)='.txt'
+				and substring(a.folder, charindex(b.sc+'_'+b.sp, a.folder)+len(b.sc+'_'+b.sp)+1, 15) > replace(convert(varchar(10), modify_date,102),'.','')+replace(convert(varchar(10), modify_date,114),':',''))
+				or b.sc is null)
+				and d.name in ('gen', 'api', 'core')
+			) a
+		group by schemaname, spname
+
+
+	DECLARE @scname varchar(10), @spname varchar(100), @spdate varchar(15), @oType varchar(50)
+	declare @spfile nvarchar(max), @spcurrent nvarchar(max), @sqlstr1 nvarchar(max)
+	declare @spfile1 nvarchar(max), @spcurrent1 nvarchar(max), @ret bit=0
+
+	OPEN #cur
+
+	FETCH NEXT FROM #cur INTO @scname, @spname, @spdate, @oType
+	WHILE (@@fetch_status <> -1)
+	BEGIN
+		IF (@@fetch_status <> -2)
+		BEGIN
+			print @scname
+			print @spname
+
+			set @spcurrent=(
+				select text [text()] 
+				from sys.objects b
+					inner join sys.schemas c on b.schema_id=c.schema_id
+					inner join sys.syscomments d on d.id=b.object_id 
+				where b.name=@spname and c.name=@scname AND d.encrypted=0
+				for xml path(''))
+
+			set @spcurrent=replace(@spcurrent, char(38)+'lt;', '<')
+			set @spcurrent=replace(@spcurrent, char(38)+'gt;', '>')
+			set @spcurrent=replace(@spcurrent, char(38)+'amp;', char(38))
+
+			set @spcurrent1=replace(@spcurrent, char(38)+'#x0D;', '')
+			set @spcurrent1=replace(@spcurrent1, char(38)+'#x0A;', '')
+			set @spcurrent1=replace(@spcurrent1, char(10), '')
+			set @spcurrent1=replace(@spcurrent1, char(8), '')
+			set @spcurrent1=replace(@spcurrent1, ' ', '')
+
+			--if @isdebug=1 select @scname, @spname, @spcurrent
+
+			set @sqlstr='
+				set @spfile=(
+					SELECT * 
+					FROM OPENROWSET (
+					BULK ''D:\vsonline\OPERAHOUSE\scripts\'+@db+'\'+@oType+'\'+@scname+'\'+@db+'_'+@scname+'_'+@spname+'\'+@db+'_'+@scname+'_'+@spname+'_'+@spdate+'.txt'', SINGLE_CLOB) x)'
+			set @sqlpar = '@spfile varchar(max) OUTPUT'
+			exec sp_executesql @sqlstr, @sqlpar, @spfile OUTPUT
+
+			set @spfile=replace(@spfile, char(38)+'lt;', '<')
+			set @spfile=replace(@spfile, char(38)+'gt;', '>')
+			set @spfile=replace(@spfile, char(38)+'amp;', char(38))
+
+			set @spfile1=replace(@spfile, char(13), '')
+			set @spfile1=replace(@spfile1, char(10), '')
+			set @spfile1=replace(@spfile1, char(8), '')
+			set @spfile1=replace(@spfile1, ' ', '')
+
+			if @spcurrent1<>@spfile1 or @spcurrent is null --and @scname='api' and @spname='VerifyHost' 
+			begin
+				select @scname, @spname, @spdate, @spcurrent1, @spfile1, len(@spcurrent1), len(@spfile1)--, @spcurrent&lt;&gt;@spfile
+
+				--if @spcurrent is not null begin
+				set @sqlstr1='
+					if exists(
+						select * 
+						from sys.objects a
+							inner join sys.schemas b on a.schema_id=b.schema_id
+						where a.name='''+@spname+''' and b.name='''+@scname+''') 
+						
+						drop '+case when @oType='SQL_STORED_PROCEDURE' then 'procedure' else 'function' end+' ['+@scname+'].['+@spname+']'
+				
+				print @sqlstr1
+				set @sqlstr='
+					exec '+@db+'.dbo.sp_executesql @s'
+				print @spfile
+				exec sp_executesql @sqlstr, N'@s nvarchar(max)', @sqlstr1
+
+				if @isEnc=1 begin
+					--set @spfile=replace(@spfile, 'CREATE PROC', 'ALTER PROC')
+					set @spfile=replace(@spfile, '--WITH ENCRYPTION', 'WITH ENCRYPTION')
+					print @spfile
+				end
+			
+				print @sqlstr
+				set @sqlstr='
+					exec '+@db+'.dbo.sp_executesql @s'
+				print @spfile
+				exec sp_executesql @sqlstr, N'@s nvarchar(max)', @spfile
+			end
+
+		END
+		FETCH NEXT FROM #cur INTO @scname, @spname, @spdate, @oType
+	END
+
+	CLOSE #cur
+	DEALLOCATE #cur
+
+
+
+

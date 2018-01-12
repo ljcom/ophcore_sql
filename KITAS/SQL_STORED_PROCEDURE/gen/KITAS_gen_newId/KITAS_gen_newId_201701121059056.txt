@@ -1,0 +1,29 @@
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+CREATE procedure [gen].[newId] 
+AS
+	select newid() GUID
+
+
+
+
+
+
+
+
+
+
+
+

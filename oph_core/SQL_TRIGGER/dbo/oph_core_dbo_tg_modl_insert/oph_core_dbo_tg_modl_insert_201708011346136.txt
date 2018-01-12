@@ -1,0 +1,20 @@
+
+
+CREATE TRIGGER [dbo].[tg_modl_insert]
+   ON  [dbo].[modl]
+   AFTER insert
+AS 
+BEGIN
+	SET NOCOUNT ON;
+	declare @code nvarchar(50)
+	select @code=moduleid from inserted
+	
+	if exists(select * from inserted)
+
+		if len(@code)%4<>0 and CHARINDEX(' ', @code)>0 begin
+			RAISERROR ('Wrong Module Naming. Please read the instruction.', 16, 1)
+			ROLLBACK TRANSACTION
+		end
+
+END
+

@@ -1,0 +1,209 @@
+
+CREATE PROCEDURE [core].[addModule_v3] @accountid nvarchar(50), @v3DB nvarchar(50), @dataDB varchar(50), @isdebug bit=0
+--WITH ENCRYPTION
+as	--ModifiedBy eLs ON Apr, 2017
+
+	--declare @accountid nvarchar(50) = 'eform', @v3DB nvarchar(50) = 'ef_main', @dataDB varchar(50) = 'eform_data', @isdebug bit=1
+
+	declare @accountguid uniqueidentifier, @accountdbGUID uniqueidentifier, @curMaster bit 
+
+	select @accountguid=a.AccountGUID, @accountdbGUID=AccountDBGUID, @curMaster=isMaster 
+	from acct a
+		inner join acctdbse b on a.AccountGUID=b.AccountGUID
+	where accountid=@accountid and b.DatabaseName=@v3DB
+	
+	declare @sqlstr nvarchar(max), @sqlpar nvarchar(max)
+	set @sqlstr='
+	insert into '+@dataDB+'.dbo.modl (ModuleGUID, AccountGUID, ModuleID, ModuleDescription, settingMode, AccountDBGUID, needLogin)
+	select newid(), '''+cast(@accountguid as varchar(50))+''', a.ModuleId, max(a.ModuleDescription), api.setSettingMode(a.moduleid), max(d.accountdbguid), 1
+	from '+@v3DB+'.dbo.CoMODL a
+		inner join '+@v3DB+'.dbo.coACCTDBSE a1 on a.accountdbguid=a1.accountdbguid
+		inner join acctdbse d on d.DatabaseName=a1.DatabaseName
+		left join '+@dataDB+'.dbo.modl b on a.ModuleID=b.ModuleID --AND a.ModuleGUID = b.ModuleGUID
+	where b.ModuleGUID is null AND a.isdeleted = 0 --AND a.AccountDBGUID is Not NULL --and left(a.moduleid,1) not in (''P'')
+	group by a. moduleid
+
+	update '+@dataDB+'.dbo.modl 
+	set 
+		ThemePageGUID = 
+			case settingMode 
+				when 6 then (select ThemePageGUID from '+@dataDB+'.dbo.thmepage where pageURL=moduleid)
+				--when 5 then (select ThemePageGUID from '+@dataDB+'.dbo.thmepage where pageURL=''report'')
+				else (select max(ThemePageGUID) from '+@dataDB+'.dbo.thmepage where isDefault = 1)
+			end
+	where themePageGUID is null
+
+	update '+@dataDB+'.dbo.modl 
+	set 
+		ModuleStatusGUID = case settingMode 
+			when 1 then (select ModuleStatusGUID from '+@dataDB+'.dbo.msta where ModuleStatusName = ''master'')
+			when 4 then (select ModuleStatusGUID from '+@dataDB+'.dbo.msta where ModuleStatusName = ''trx'') 
+			else NULL
+		end
+	where moduleStatusGUID is null
+
+	update a 
+	set ParentModuleGUID = b.ParentGUID
+	from '+@dataDB+'.dbo.modl a
+		left join (
+			select 
+				SubModuleGUID [ModuleGUID], x.ModuleGUID as [ParentGUID], ROW_NUMBER() OVER(Partition by SubModuleGUID Order By SubModuleGUID ) [valid]
+			from '+@v3DB+'.dbo.comodlsmod x
+		) b ON a.ModuleGUID = b.ModuleGUID AND valid = 1
+	where a.ParentModuleGUID is null and b.ParentGUID is not null'
+
+	if @isdebug=1 print @sqlstr 
+	exec sp_executesql @sqlstr
+	 
+	set @sqlstr='
+
+	insert into '+@dataDB+'.dbo.modlinfo (ModuleInfoGUID, ModuleGUID, InfoKey, InfoValue)
+	select newid(), c.moduleguid, ''allowBrowse'', ''1''
+	from '+@v3DB+'.dbo.comodl a
+		inner join '+@dataDB+'.dbo.modl c on a.moduleid=c.ModuleID and AllowBrowse=1
+		left join '+@dataDB+'.dbo.modlinfo b on c.ModuleGUID=b.moduleguid and b.InfoKey=''allowBrowse''
+	where b.ModuleGUID is null
+
+	insert into '+@dataDB+'.dbo.modlinfo (ModuleInfoGUID, ModuleGUID, InfoKey, InfoValue)
+	select newid(), c.moduleguid, ''allowAdd'', ''1''
+	from '+@v3DB+'.dbo.comodl a
+		inner join '+@dataDB+'.dbo.modl c on a.moduleid=c.ModuleID and AllowAdd=1
+		left join '+@dataDB+'.dbo.modlinfo b on c.ModuleGUID=b.moduleguid and b.InfoKey=''allowAdd''
+	where b.ModuleGUID is null
+
+	insert into '+@dataDB+'.dbo.modlinfo (ModuleInfoGUID, ModuleGUID, InfoKey, InfoValue)
+	select newid(), c.moduleguid, ''allowEdit'', ''1''
+	from '+@v3DB+'.dbo.comodl a
+		inner join '+@dataDB+'.dbo.modl c on a.moduleid=c.ModuleID and AllowEdit=1
+		left join '+@dataDB+'.dbo.modlinfo b on c.ModuleGUID=b.moduleguid and b.InfoKey=''allowEdit''
+	where b.ModuleGUID is null
+
+	insert into '+@dataDB+'.dbo.modlinfo (ModuleInfoGUID, ModuleGUID, InfoKey, InfoValue)
+	select newid(), c.moduleguid, ''allowDelete'', ''1''
+	from '+@v3DB+'.dbo.comodl a
+		inner join '+@dataDB+'.dbo.modl c on a.moduleid=c.ModuleID and AllowDelete=1
+		left join '+@dataDB+'.dbo.modlinfo b on c.ModuleGUID=b.moduleguid and b.InfoKey=''allowDelete''
+	where b.ModuleGUID is null'
+
+	if @isdebug=1 print @sqlstr 
+	exec sp_executesql @sqlstr
+	 
+	set @sqlstr='
+	insert into '+@dataDB+'.dbo.modlcolm (ColumnGUID, ModuleGUID, colKey, colType, colOrder, titlecaption)
+	select newid(), c.ModuleGUID, b.colName, max(b.xType), max(b.colorder), max(b.TitleCaption )
+	from '+@v3DB+'.dbo.CoATAB a
+		inner join '+@v3DB+'.dbo.CoATABFIEL b ON a.TableGUID = b.TableGUID
+		inner join '+@dataDB+'.dbo.modl c ON a.TableName = c.ModuleID 
+			and LEFT(c.ModuleId, 1) in (''C'', ''M'', ''T'', ''S'') AND substring(c.ModuleId, 7, 4) != ''APRV'' AND c.AccountDBGUID is Not NULL
+		left join '+@dataDB+'.dbo.modlcolm z ON b.ColName = z.colKey and c.moduleguid=z.moduleguid
+	where z.ColumnGUID is NULL
+	group by c.ModuleGUID, b.colName
+
+	insert into '+@dataDB+'.dbo.modlcolm (ColumnGUID, ModuleGUID, colKey, colType, colOrder, titlecaption)
+	select newid(), c.ModuleGUID, b.colName, max(b.xType), max(b.colorder), max(b.TitleCaption )
+	from '+@v3DB+'.gen.coTABL a
+		inner join '+@v3DB+'.gen.coTABLFIEL b ON a.TableGUID = b.TableGUID
+		inner join '+@dataDB+'.dbo.modl c ON a.TableName = c.ModuleID 
+			and LEFT(c.ModuleId, 1) in (''C'', ''M'', ''T'', ''S'') AND substring(c.ModuleId, 7, 4) != ''APRV'' AND c.AccountDBGUID is Not NULL
+		left join '+@dataDB+'.dbo.modlcolm z ON b.ColName = z.colKey and c.moduleguid=z.moduleguid
+	where z.ColumnGUID is NULL
+	group by c.ModuleGUID, b.colName
+
+	delete 
+	from '+@dataDB+'.dbo.modlcolm 
+	where ColumnGUID in (
+		select TableFieldGUID from '+@v3DB+'.dbo.CoATABFIEL where RIGHT(ColName, 6) like ''%cb%''
+		union
+		select TableFieldGUID from '+@v3DB+'.dbo.CoATABFIEL where colName in (
+			''isDeleted'',''DeletedDate'', ''CreatedDate'', ''UpdatedDate'', ''DeletedUser'', ''CreatedUser'', ''UpdatedUser'', 
+			''TriggerDate'', ''TriggerDate2'', ''ClosedDate''
+		)
+	)
+	'
+	
+	if @isdebug=1 print @sqlstr 
+	exec sp_executesql @sqlstr
+
+	set @sqlstr='
+		select a.name, a.name from '+@v3DB+'.sys.columns a 
+			inner join '+@v3DB+'.sys.objects b on a.object_id=b.object_id
+		where b.name=''CoATABFIEL'' and a.name not in (
+			''TableFieldGUID'', ''TableGUID'', ''ColName'', ''id'', ''ColOrder'', ''xType'', ''DeletedDate'', ''TitleCaption'',
+			''CreatedDate'', ''UpdatedDate'', ''DeletedUser'', ''CreatedUser'', ''UpdatedUser'', ''TriggerDate'', ''TriggerDate2''
+		)'
+	
+	declare @infoTable api.fieldList, @pvtKey varchar(MAX), @pvtCol varchar(MAX)
+
+	insert into @infoTable (fieldid, fieldvalue)	
+	exec sp_executesql @sqlstr
+
+	select
+		@pvtKey = (select ', ' + fieldId from @infoTable for xml path('')), 
+		@pvtCol = (select ', max(CAST('+fieldId+' as varchar(MAX))) '+ QUOTENAME(fieldValue) from @infoTable for xml path(''))
+
+	set @sqlstr = '
+	insert into '+@dataDB+'.dbo.modlcolminfo (ColumnInfoGUID, ColumnGUID, InfoKey, InfoValue)
+	select a.*--NEWID() [ColumnInfoGUID], a.columnGUID, a.infoKey, max(a.infoValue)
+	from (
+		select NEWID() [ColumnInfoGUID], ColumnGUID, api.OPH4Tablename(InfoKey) [InfoKey], InfoValue 
+		from (
+			select * 
+			from (
+				select b.ColumnGUID'+@pvtCol+' 
+				from '+@v3DB+'.dbo.CoATABFIEL a
+					inner join '+@v3DB+'.dbo.CoATAB c on a.tableGUID=c.TableGUID
+					inner join '+@dataDB+'.dbo.modlcolm b ON a.colname = b.colkey
+					inner join '+@dataDB+'.dbo.modl d on b.ModuleGUID=d.ModuleGUID and c.TableName=d.ModuleID
+				group by b.ColumnGUID) x
+		) p
+		UNPIVOT (
+			InfoValue for InfoKey IN ('+STUFF(@pvtKey, 1, 2, '')+')
+		) unpv
+	) a 
+		left join '+@dataDB+'.dbo.modlcolminfo b ON a.ColumnGUID = b.ColumnGUID AND a.InfoKey = b.InfoKey 
+	where b.ColumnInfoGUID is NULL and a.infovalue is not null
+	--group by a.columnGUID, a.infoKey
+
+	update c
+	set infovalue=
+		case infovalue 
+			when ''10'' then ''11''	--textbox
+			when ''11'' then ''31''	--checkbox
+			when ''12'' then ''32''	--combo
+			when ''13'' then ''33'' --token
+	--		when ''30'' then ''30''	-- textarea/html
+			when ''4'' then ''41''	--date
+			when ''40'' then ''41''
+			when ''41'' then ''41''
+	--		when ''43'' then ''43''
+	--		when ''44'' then ''44''
+			when ''5'' then ''51''	--attachment
+			when ''51'' then ''51''
+	--		when ''6'' then ''61''	--password
+			else infokey end			
+	from '+@dataDB+'.dbo.modlcolminfo c
+		inner join '+@dataDB+'.dbo.modlcolm b on c.ColumnGUID=b.ColumnGUID
+		inner join '+@dataDB+'.dbo.modl a on b.ModuleGUID=a.ModuleGUID
+		inner join acctdbse x on a.AccountDBGUID=x.AccountDBGUID
+	where x.version=''3.0'' and c.InfoKey=''coltype''
+
+	insert into '+@dataDB+'.dbo.para (ParameterGUID, AccountGUID, ParameterId, ParamterDescription, parentParameterGUID)
+	select newid(), '''+cast(@accountguid as varchar(50))+''', b.ParameterCode, b.ParameterDescription, null
+	from (select distinct combotable from '+@v3DB+'.dbo.coatabfiel where ComboTable like ''pa%'') a
+		inner join '+@v3DB+'.oph.caprmt b on b.parametercode=substring(a.combotable,3,len(a.combotable)-2)
+		left join '+@dataDB+'.dbo.para c on c.ParameterId=b.ParameterCode
+	where c.Parameterguid is null
+
+	insert into eform_data.dbo.paravalu (ParameterValueGUID, ParameterGUID, ParameterValue, ParameterDescription, ParentValueGUID)
+	select newid(), a.ParameterGUID, ParValueId, ParValueDesc, null
+	from '+@dataDB+'.dbo.para a
+		inner join '+@v3DB+'.oph.caprmt b on b.parametercode=a.parameterid
+		inner join '+@v3DB+'.oph.caprmtvalu c on c.parameterguid=b.parameterguid
+		left join '+@dataDB+'.dbo.paravalu d on d.ParameterValue=c.ParValueId and a.ParameterGUID=d.ParameterGUID
+	where d.ParameterValueGUID is null
+	'
+
+	if @isdebug = 1 print @sqlstr 
+	exec sp_executesql @sqlstr
+
+

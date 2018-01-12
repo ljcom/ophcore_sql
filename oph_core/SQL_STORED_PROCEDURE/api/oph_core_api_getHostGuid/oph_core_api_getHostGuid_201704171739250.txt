@@ -1,0 +1,13 @@
+
+
+CREATE PROCEDURE [api].[getHostGuid] @accountid varchar(50), @userID as nvarchar(100)
+--WITH ENCRYPTION
+as
+	select hostGUID 
+	from userhost a
+		inner join [user] b on b.UserGUID = a.UserGUID
+		inner join acct c on b.AccountGUID=c.AccountGUID
+	where userID=@userID and accountid=@accountid
+
+
+

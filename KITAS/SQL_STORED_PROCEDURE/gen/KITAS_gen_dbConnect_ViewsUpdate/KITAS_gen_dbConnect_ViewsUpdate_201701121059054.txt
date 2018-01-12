@@ -1,0 +1,71 @@
+
+
+
+CREATE procedure [gen].[dbConnect_ViewsUpdate] @Database nvarchar(20)=null,@Schema nvarchar(20)=null
+as	
+	--views Update
+	
+CREATE TABLE #Views (
+   TableID int identity(1,1) NOT NULL PRIMARY KEY CLUSTERED,
+   View_Name sysname
+)
+DECLARE
+   @SQL nvarchar(4000),
+   @ID int
+SET @SQL = N'select t.name
+    from sys.tables t       
+   where t.name in(''CoQURY'',''CoPRMT'',''coQURYDOCM'',''coQURYPARA'',''coQURYUGRP'',''CoPRMTVALU'',''CoEVNT'',''CoDOCN'',''CoUSER'',''CoUSERHOST'',''CoUGRP'',''CoUGRPUSER'')
+   '
+--SET @SQL = N'select t.name
+--			from sys.tables t    
+--			inner join sys.synonyms s
+--				on t.schema_id = s.schema_id
+--		   where substring(t.name,1,2)=''Co''
+--		   and s.schema_id =1
+--		   group by t.name
+
+
+INSERT #Views EXEC sp_executesql @SQL, N'@TableSchema sysname', @Schema
+SELECT @ID = MAX(TableID) FROM #Views
+WHILE @ID &gt; 0 BEGIN
+  -- SELECT @SQL = 'CREATE SYNONYM ' + View_Name + ' FOR ' + @Database + '.' + @Schema + '.' + View_Name FROM #Views WHERE TableID = @ID
+  DECLARE @dynamicsql nvarchar(4000)
+   SELECT @dynamicsql = N'CREATE VIEW dbo.' + View_Name + ' AS
+					SELECT *
+					FROM  ' + View_Name + ''
+					FROM #Views WHERE TableID = @ID
+   PRINT @dynamicsql
+  -- SELECT @SQL = 'EXEC '+ @Database+'.dbo.'+ 'sp_executesql ''' + @dynamicsql +''''
+   SELECT @SQL = N'EXEC ' + @Database + '.sys.sp_executesql '''
+				+ @dynamicsql +'''';
+
+ SELECT @SQL = N'EXEC ' + @Database + '.sys.sp_executesql '
+				+ 'N''CREATE VIEW  dbo.' + View_Name + ' AS
+				  SELECT *
+					FROM   syn_' + View_Name + ''''
+				FROM #Views WHERE TableID = @ID
+
+	
+
+   PRINT @SQL
+  
+	   IF EXISTS(  SELECT  *
+				  FROM  sys.views s          
+					INNER JOIN #Views t
+					ON s.name = t.View_Name
+				  WHERE TableID = @ID and s.name = View_Name)
+		BEGIN
+			print 'view Does exist'
+		END
+		ELSE
+		BEGIN
+			  EXEC sp_executesql @SQL
+			print ' view Does not exist'
+	   END
+  
+   SET @ID = @ID - 1
+END
+
+
+
+

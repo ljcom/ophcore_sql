@@ -1,0 +1,22 @@
+
+
+
+CREATE procedure [core].[migrateData_addTalk] @accountid nvarchar(50), @coreDB nvarchar(50), @dataDB nvarchar(50), @v3db nvarchar(50), -- @tablename nvarchar(50)
+	@isdebug bit=0
+as
+
+	declare @fieldKey nvarchar(50)
+	declare @sqlstr nvarchar(max)='
+		insert into '+@dataDB+'.dbo.chat
+			(chatGUID, DocGUID, Comment, Attachment, talkUser, createdDate, updatedDate)
+		select a.doctalkguid, a.documentguid, a.doccomment, null, talkUser, a.createdDate, a.updateddate 
+		from '+@v3db+'.dbo.cotalk a
+			--inner join '+@dataDB+'.dbo.docm b on a.documentguid=b.docguid
+			left join '+@dataDB+'.dbo.chat c on c.chatguid=a.doctalkguid
+		where c.chatguid is null'
+	
+	if @isdebug=1 print @sqlstr
+	exec sp_executesql @sqlstr
+
+
+

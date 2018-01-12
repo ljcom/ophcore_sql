@@ -1,0 +1,16 @@
+
+
+
+
+
+CREATE procedure [dbo].[checkNeedLogin] @hostGUID uniqueidentifier, @code nvarchar(20)
+as
+declare @needlogin int
+select @needlogin = needlogin from modl where moduleid = @code
+
+select @needlogin needlogin
+
+
+
+
+

@@ -1,0 +1,24 @@
+
+
+
+CREATE procedure [gen].[execsql] @sqlstr nvarchar(4000), 
+	@svr nvarchar(100)='', @dbn nvarchar(100)='', @schema nvarchar(100)='', @uid nvarchar(100)='', @pwd nvarchar(100)='', 
+	@filename nvarchar(1000)=''
+as
+	declare @cmdstr nvarchar(4000)
+
+	if @svr='' set @svr=@@SERVERNAME
+	if @schema='' set @schema=USER_NAME()
+
+	if @dbn=''
+		exec(@sqlstr)
+	else
+		SELECT @cmdstr = 'sqlcmd -S '+@svr+' -E -d '+@dbn+' -y0 -Q "'+@sqlstr+'" -b -u -o '+@filename
+		EXEC master.dbo.xp_cmdshell @cmdstr, no_output 
+
+
+
+
+
+
+

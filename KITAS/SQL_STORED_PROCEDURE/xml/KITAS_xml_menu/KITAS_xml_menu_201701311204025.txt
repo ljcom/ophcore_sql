@@ -1,0 +1,267 @@
+
+CREATE PROCEDURE [xml].[menu] 
+	@hostGUID uniqueidentifier, @menuCode nvarchar(10), @moduleGroupGUID uniqueidentifier, @tblName nvarchar(10), @debug bit=0
+as
+--declare 
+--	@hostGUID uniqueidentifier, @menuCode nvarchar(10) = 'user', 
+--	@moduleGroupGUID uniqueidentifier = '24E727CF-29ED-4968-A7C4-8DF5BEE2ED8A', 
+--	@tblName nvarchar(10) = 'undefined', @debug bit=1
+--	select @hostguid = HostGUID from CoUSERHOST a inner join CoUSER b ON a.Userguid = b.UserGUID
+--	where UserId = 'LIBERTYJAYAONE\linggar'
+
+	declare @lvl int, @query varchar(500), @sqlquery varchar(500)
+	declare @x2 varchar(max), @xinfo varchar(max), @xsubmenu varchar(max)
+	declare @UserGUID uniqueidentifier,@UGroupGUID uniqueidentifier
+	declare	@allowadd int, @allowBrowse int, @allowEdit int, @allowDelete int, @allowWipe int, @allowForce int, @allowShowAttach int
+	declare @oriUserGUID uniqueidentifier, @autoLogin bit
+
+	select @UserGUID = UserGUID, @oriUserGUID=DelegateUserGUID from coUSERHOST where HostGUID = @hostGUID
+	select @autoLogin = AutoLogin from CoUSER where UserGUID = @UserGUID
+
+	if @oriUserGUID is not null and @menucode='selprofile' set @UserGUID=@oriUserGUID
+
+	exec gen.verifyAuth '', @hostGUID, '', @allowadd  OUTPUT, @allowBrowse  OUTPUT, @allowEdit  OUTPUT, @allowDelete  OUTPUT, @allowWipe  OUTPUT, @allowforce, @allowshowattach, @UGroupGUID  OUTPUT
+		
+	if (exists(select modulegrouplvl from CoMENU where menuCode=@menuCode)) or @menuCode='formgroup' begin 		
+		select @lvl=modulegrouplvl from CoMENU where menuCode=@menuCode
+
+		set @xinfo=
+			'select menuName ''name'',
+				MenuDescription ''description''
+			from coMENU where menuCode='''+@menuCode+'''
+			for xml path(''''), type'
+
+		if @lvl=0 --from coMENUSMNU
+			set @xsubmenu='
+				select menudetailguid as ''submenu/@GUID'',
+					menudetailguid as ''submenu/MenuGUID'', 
+					null as ''submenu/TableName'',
+					b.SubMenuDescription as ''submenu/Caption'',
+					'''+convert(nvarchar(50),@lvl)+''' as''submenu/lvl'',
+					b.menuTag as ''submenu/QueryCode'',
+					IIF(b.menuPath like ''%signoff%'', b.menuPath'+IIF(@autologin = 1, '+''?xTab=1''', '+ ''?xTab=0''')+', b.menuPath) as ''submenu/PageURL''
+				from coMENU a
+					inner join coMENUSMNU b
+						on a.MenuGUID=b.MenuGUID
+				where menuCode='''+@menuCode+'''
+				order by orderNo
+				for xml path(''''), type'
+
+	--*ModifiedBy eLs ON May, 2015 
+		--** Set New Delegation
+		if @lvl=5	--select profile 
+			set @xsubmenu=N'			
+				select DISTINCT
+					a.userGUID as ''submenu/@GUID'', 
+					a.userGUID as ''submenu/MenuGUID'', 
+					a.userId as ''submenu/TableName'',
+					a.userName as ''submenu/Caption'',
+					'''+convert(nvarchar(50),@lvl)+''' as''submenu/lvl'',
+					''mode=switch&amp;GUID=''+convert(nvarchar(max), a.userGUID) as ''submenu/PageURL''
+				from CoUSER a left join CoUDELMODL b ON a.UserGUID = b.UserGUID --AND (DelegationFlag = ''isDelegate'' OR isDelegate = 1)
+				where a.DelegateUserGUID = '''+convert(nvarchar(50), @userGUID)+'''
+					or a.userguid='''+convert(nvarchar(50), @userGUID)+'''
+					or (isnull(supervisorguid,''904827C0-D0B7-4B0F-82F3-BE11686BAC3C'')='''+convert(nvarchar(50), @userGUID)+''' and a.delegateUserGUID is not null)
+					or b.DelegateToUserGUID = '''+convert(nvarchar(50), @userGUID)+'''
+				for xml path(''''), type'
+	--**eLsEnd
+
+		if @lvl=10	 --from coMODG
+			set @xsubmenu='
+				select a.moduleGroupGUID as ''submenu/@GUID'', 
+					a.moduleGroupGUID as ''submenu/MenuGUID'', 
+					ModuleGroupId as ''submenu/TableName'',
+					ModuleGroupName as ''submenu/Caption'',
+					ImagePath as ''submenu/PageURL'',
+					nbNew as ''submenu/nbNew'',
+					'''+convert(nvarchar(50),@lvl)+''' as''submenu/lvl''
+				from coMODG a
+					left join (
+						select b.modulegroupguid, sum(nbNewApproval+nbNewReject+nbNewRelease) nbNew
+						from cousermodl a
+							inner join comodgmodl b
+								on a.moduleguid=b.moduleguid
+						where a.userguid='''+convert(nvarchar(50),@UserGUID)+'''
+						group by b.modulegroupguid) b
+						on a.modulegroupguid=b.modulegroupguid
+				order by sortOrder
+				for xml path(''''), type'
+
+		if @lvl=20	 --from coMODGMODL
+			set @xsubmenu='
+				select a.ModuleGUID ''submenu/@GUID'', 
+				'''+convert(nvarchar(50),@UserGUID)+''' ''submenu/userGUID'',
+				b.ModuleId as ''submenu/TableName'',
+					b.ModuleDescription as ''submenu/Caption'',
+					'''+convert(nvarchar(50),@lvl)+''' as''submenu/lvl'',
+					a.PageURL as ''submenu/PageURL'',
+					nbNew as ''submenu/nbNew''
+				--select *
+				from coMODGMODL a
+					inner join coMODL b
+						on a.ModuleGUID=b.ModuleGUID
+					inner join coUGRPMODL c
+						on a.ModuleGUID=c.ModuleGUID
+					inner join coUGRPUSER1 d
+						on c.ugroupGUID=d.uGROUPGUID
+					left join (
+						select a.moduleguid, nbNewApproval+nbNewReject+nbNewRelease nbNew
+						from cousermodl a
+						where a.userguid='''+convert(nvarchar(50),@UserGUID)+'''
+						) b1
+						on a.moduleguid=b1.moduleguid
+				where a.ModuleGroupGUID='''+convert(nvarchar(50),@moduleGroupGUID)+''' 
+					and d.MemberUserGUID='''+convert(nvarchar(50), @UserGUID)+''' --modif by Samuel
+					and b.Moduleid like ''t%''  
+				group by a.moduleguid, b.moduleid, b.ModuleDescription, a.PageURL, a.OrderNumber, nbNew
+				order by a.OrderNumber
+				for xml path(''''), type'
+
+		if @lvl=30	 --from coMODGMODL
+		--syawal modif for master table 2013-06-10
+			set @xsubmenu='
+				select a.ModuleGUID ''submenu/@GUID'', 
+				'''+convert(nvarchar(50),@UserGUID)+''' ''submenu/userGUID'',
+				b.ModuleId as ''submenu/TableName'',
+					b.ModuleDescription as ''submenu/Caption'',
+					'''+convert(nvarchar(50),@lvl)+''' as''submenu/lvl'',
+					a.PageURL as ''submenu/PageURL''
+				from coMODGMODL a
+					inner join coMODL b
+						on a.ModuleGUID=b.ModuleGUID
+					inner join coUGRPMODL c
+						on a.ModuleGUID=c.ModuleGUID
+					inner join coUGRPUSER1 d
+						on c.ugroupGUID=d.uGROUPGUID
+				where a.ModuleGroupGUID='''+convert(nvarchar(50),@moduleGroupGUID)+''' 
+					and d.MemberUserGUID='''+convert(nvarchar(50), @UserGUID)+''' --modif by Samuel
+					and (b.Moduleid like ''m%'' or b.Moduleid like ''s%'')
+				group by a.moduleguid, b.moduleid, b.ModuleDescription, a.PageURL, a.OrderNumber
+				order by a.OrderNumber
+				for xml path(''''), type'
+
+		if @lvl=35 --uploader
+			set @xsubmenu='
+				select QueryGUID as ''submenu/@GUID'', 				
+					QueryName as ''submenu/Caption'',
+					'''+convert(nvarchar(50),@lvl)+''' as''submenu/lvl'',
+					QueryCode as ''submenu/QueryCode'',
+					case when queryTypeFlag in (''isReport'', ''isSelect'') then ''mode=report&amp;tablename=coQURY&amp;QueryCode=''+QueryCode 
+					else ''mode=uploader&amp;tablename=coQURY&amp;QueryCode=''+QueryCode   end
+					as ''submenu/PageURL''
+				from coQURY
+				where queryTypeFlag=''isUpload''
+				order by CreatedDate
+				for xml path(''''), type'
+
+		if @lvl=40	 --from coQURY
+			set @xsubmenu='
+				select QueryGUID as ''submenu/@GUID'', 				
+					QueryName as ''submenu/Caption'',
+					'''+convert(nvarchar(50),@lvl)+''' as''submenu/lvl'',
+					QueryCode as ''submenu/QueryCode'',
+					case when queryTypeFlag in (''isReport'', ''isSelect'', ''isMap'') then ''mode=report&amp;tablename=coQURY&amp;QueryCode=''+QueryCode 
+					--case when queryTypeFlag = ''isMap'' then ''mode=report&amp;tablename=coQURY&amp;QueryCode=''+QueryCode
+					else ''mode=uploader&amp;tablename=coQURY&amp;QueryCode=''+QueryCode   end
+					as ''submenu/PageURL''
+				from coQURY
+				where queryTypeFlag in (''isReport'', ''isSelect'', ''isMap'') and ModuleGroupGUID='''+convert(nvarchar(50),@moduleGroupGUID)+''' 
+					and substring(QueryCode,1,1)&lt;&gt;''t'' and substring(QueryCode,2,1)&lt;&gt;''t'' 
+				order by queryTypeFlag, CreatedDate
+				for xml path(''''), type'
+
+	--modify syawal 2013-11-20 
+		if @lvl=45	 --from coQURY
+			set @xsubmenu='
+				select QueryGUID as ''submenu/@GUID'', 				
+					QueryName as ''submenu/Caption'',
+					'''+convert(nvarchar(50),@lvl)+''' as''submenu/lvl'',
+					QueryCode as ''submenu/QueryCode'', 
+					case when queryTypeFlag = ''isDownload'' then ''mode=report&amp;tablename=coQURY&amp;QueryCode=''+QueryCode
+					else ''mode=uploader&amp;tablename=coQURY&amp;QueryCode=''+QueryCode   end
+					as ''submenu/PageURL''
+				from coQURY
+				where queryTypeFlag=''isDownload'' and ModuleGroupGUID='''+convert(nvarchar(50),@moduleGroupGUID)+'''
+				order by CreatedDate
+				for xml path(''''), type'
+
+	end 
+	else begin
+		
+		set @xinfo=
+		'select ''status'' ''name'',
+			'''+@menuCode+''' ''description''
+		for xml path(''''), type'
+		 
+		if exists(
+			select a.* 
+			from comodlstat a
+				inner join comodl b
+					on b.moduleguid = a.ModuleGUID 
+			where b.moduleid=left(@tblname,1)+'a'+substring(@tblname,3,len(@tblname)-2)) 
+		begin
+		set @query=
+			case @menuCode 
+				when '0' then 'and modulestatusID between  0 and 399'
+				when '100' then 'and modulestatusID between  0 and 399'
+				when '400' then 'and modulestatusID between  400 and 499'
+				when '500' then 'and modulestatusID between  500 and 599' 
+				when 'deleted' then '' 
+			end
+
+		set @xsubmenu='
+			select ModuleStatusGUID as ''submenu/@GUID'', 				
+				ModuleStatusName as ''submenu/Caption'',
+				ModuleStatusId as ''submenu/id'',
+				'''+@menuCode+''' as ''submenu/code'',
+				ModuleStatusCode as''submenu/lvl''
+			from coMODLSTAT a
+				inner join comodl b
+					on a.moduleguid = b.moduleguid
+			where 1=1 '+@query+' and b.moduleid='''+left(@tblname,1)+'a'+substring(@tblname,3,len(@tblname)-2)+'''
+			order by ModuleStatusID
+			for xml path(''''), type'
+		end else begin 
+			set @query=case @menuCode 
+		when '0' then 'and ParValueNumber between  0 and 399'
+		when '100' then 'and ParValueNumber between  0 and 399'
+		when '400' then 'and ParValueNumber between  400 and 499'
+		when '500' then 'and ParValueNumber between  500 and 599' 
+		when 'pending' then 'and ParValueNumber between  0 and 399'
+		when 'approved' then 'and ParValueNumber between  400 and 499'
+		when 'archieved' then 'and ParValueNumber between  500 and 599' 
+		when 'deleted' then '' 
+		end
+
+			set @xsubmenu='
+			select ParameterValueGUID as ''submenu/@GUID'', 				
+			ParValuedesc as ''submenu/Caption'',
+			ParValueId as ''submenu/id'',
+			'''+@menuCode+''' as ''submenu/code'',
+			ParValueNumber as''submenu/lvl''
+			from podsta
+			where 1=1 '+@query+' 
+			order by ParValueNumber
+			for xml path(''''), type'
+		end
+			--select @xsubmenu
+	end
+
+	set @x2='
+	select (
+		select ('+@xinfo+')
+		for xml path(''''), type
+	) ''info'', (
+		select ('+@xsubmenu+')
+		for xml path(''''), type
+	) ''submenus''
+	for xml path(''menu''), root'
+
+	if @debug=1 begin
+		print @xsubmenu
+		select @x2
+	end
+
+	exec(@x2)
+
+

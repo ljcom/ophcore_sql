@@ -1,0 +1,18 @@
+
+CREATE FUNCTION [api].[fn_checkDB] (@code nvarchar(50))
+RETURNS varchar(50)
+AS
+BEGIN
+	declare @db varchar(50)
+	select @db=databasename
+	--select * 
+	from modl a
+		inner join acctdbse	b 
+			on a.accountdbguid=b.accountdbguid
+	where moduleid=@code
+
+	return @db
+END
+
+
+

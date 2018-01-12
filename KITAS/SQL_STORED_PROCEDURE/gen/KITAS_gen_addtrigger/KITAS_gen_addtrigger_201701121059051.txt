@@ -1,0 +1,71 @@
+
+
+
+
+
+CREATE procedure [gen].[addtrigger]	@triggerName nvarchar(50), @tableName varchar(20), 
+	@content varchar(8000), @content1 varchar(8000)='', @content2 varchar(8000)=''
+as
+
+--ver 20120323
+
+	declare @sqlstr varchar(8000)
+	declare @moduleGUID uniqueidentifier
+	select @moduleGUID = moduleGUID from coMODL where moduleId like '%' + moduleId + '%'
+print @triggerNAME
+--print @parameter
+--print @content
+--print @content1
+
+	if not exists (
+		select * 
+		from sysObjects
+		where name = @triggerName) 
+	begin --not exists
+		set @sqlstr = 'create'+' '+'trigger ' + @triggerName + char(13) + char(10) + 
+			'ON '+ @tableName + char(13) + char(10) +
+			'FOR DELETE, INSERT, UPDATE' + char(13) + char(10) +
+			'as --automatic creation by system, you have to remove this comment to customize this procedure' + char(13) + char(10) + ' ' 
+print '12'
+print @triggername
+print '1'
+print @sqlstr
+--print len(@content)
+--print '---'
+print @sqlstr+@content+@content1+@content2
+--print '---'
+		exec (@sqlstr+@content+@content1+@content2)
+--		exec sp_CaMODLSCRP_save null, null, @moduleGUID, @parameter, @triggerName, @sqlstr, 1
+
+	end
+	else
+	begin	--automatic
+		if exists (
+			select text from syscomments 
+			inner join sysObjects on sysComments.id = sysObjects.id
+			where sysObjects.name = @triggerName and text like '%as --automatic creation by system, you have to remove this comment to customize this procedure%')
+		begin
+			set @sqlstr = 'alter'+' '+'trigger dbo.' + @triggerName + char(13) + char(10) + 
+				'ON dbo.'+ @tableName + char(13) + char(10) +
+				'FOR DELETE, INSERT, UPDATE' + char(13) + char(10) +
+				'as --automatic creation by system, you have to remove this comment to customize this procedure' + char(13) + char(10) + ' ' 
+--			'-- ' + convert(nvarchar(30), getdate(), 109) + char(13) + char(10) + ' ' +
+print @sqlstr+@content+@content1+@content2
+--print len(@content)
+
+			exec (@sqlstr+@content+@content1+@content2)
+		end
+
+	end
+
+
+
+
+
+
+
+
+
+
+
+

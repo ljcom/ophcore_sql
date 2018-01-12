@@ -1,0 +1,40 @@
+
+
+
+
+
+
+CREATE procedure [api].[menus] @hostGUID uniqueidentifier, @caption nvarchar(50), @formNow uniqueidentifier, @code nvarchar(50) 
+as
+--declare @hostGUID uniqueidentifier, @caption nvarchar(50), @formNow uniqueidentifier, @code nvarchar(max) = 'primaryfront'
+
+		select (
+			select 
+				--menus
+				(select menucode '@code', 
+					--submenus
+					(select 'guid' '@GUID', type '@mode'
+						, tag 'type', caption, url pageURL, icon_fa fa
+
+						, (select 'guid' '@GUID', type '@mode'
+								, tag 'type', caption, url pageURL, icon_fa fa
+							from menusmnu c
+							where c.upperSubmenuGUID=b.MenuDetailGUID
+							order by orderno asc
+							for xml path('submenu'), elements, type) submenus
+					from menusmnu b
+					where b.menuGUID=a.MenuGUID
+					order by orderno asc
+					for xml path('submenu'), elements, type) submenus
+				from menu a
+				where MenuCode =@code
+				for xml path('menu'), elements, type) menus
+			for xml path(''), elements, type
+			) header
+		for xml path('sqroot')
+
+
+
+
+
+

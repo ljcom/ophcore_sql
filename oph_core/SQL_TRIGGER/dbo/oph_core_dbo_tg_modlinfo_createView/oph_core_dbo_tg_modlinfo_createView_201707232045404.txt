@@ -1,0 +1,40 @@
+CREATE TRIGGER [dbo].[tg_modlinfo_createView]
+   ON  [dbo].[modlinfo]
+   AFTER INSERT,UPDATE
+AS 
+BEGIN
+	SET NOCOUNT ON;
+
+	declare @code nvarchar(50), @ext nvarchar(50), @viewname nvarchar(200), @content nvarchar(max), @resultText nvarchar(max)
+
+	if update(infovalue) and exists(select * from inserted where infokey like 'view') begin
+		select @viewname=m.moduleid, @content=i.InfoValue
+		from inserted i
+			inner join modl m on i.moduleguid=m.moduleguid
+
+		exec [gen].[createView]	@viewName, @content, 'doc', 0, @resultText output
+
+		if isnull(@resultText,'')<>'' begin
+			RAISERROR (@resultText, 16, 1)
+			--ROLLBACK TRANSACTION
+		end
+	end
+	else if update(infovalue) and exists(select * from inserted where infokey like 'view_%') begin
+	--if update(infovalue) begin
+		select @code=m.moduleid, @ext=i.InfoKey, @content=i.InfoValue
+		from inserted i 
+			inner join modl m on i.moduleguid=m.moduleguid
+
+		set @ext=replace(@ext, 'view_', '')
+		set @viewname=@code+'_'+@ext
+
+		exec [gen].[createView]	@viewName, @content, 'doc', 0, @resultText output
+
+		if isnull(@resultText,'')<>'' begin
+			RAISERROR (@resultText, 16, 1)
+			--ROLLBACK TRANSACTION
+		end
+	end
+END
+
+

@@ -1,0 +1,19 @@
+CREATE VIEW [dbo].[MoBRANCIPA]
+as	--CreatedBy eLs ON Mar, 2017
+
+	select 
+		a.BRANGUID [BRANCIPAGUID],
+		QUOTENAME(cast(a.ID as varchar(5)))+' '+ a.Name [Child],
+		isNULL(QUOTENAME(cast(b.ID as varchar(5)))+' '+b.Name, 
+			isNULL(QUOTENAME(cast(c.ID as varchar(5)))+' '+c.Name, 
+				isNULL(QUOTENAME(cast(d.ID as varchar(5)))+' '+d.Name, 
+					isNULL(QUOTENAME(cast(e.ID as varchar(5)))+' '+e.Name, '')))) [Parent],
+		a.CreatedDate, a.CreatedUser, a.UpdatedDate, a.UpdatedUser
+	from MoBRAN a
+		left join MoBRAN_1 b ON a.PARNBRANGUID = b.BRANGUID
+		left join MoBRAN_2 c ON a.PARNBRANGUID = c.BRANGUID
+		left join MoBRAN_3 d ON a.PARNBRANGUID = d.BRANGUID
+		left join MoBRAN_4 e ON a.PARNBRANGUID = e.BRANGUID
+	where a.isDeleted = 0
+
+

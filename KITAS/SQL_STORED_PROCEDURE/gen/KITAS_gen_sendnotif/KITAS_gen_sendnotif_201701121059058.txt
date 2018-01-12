@@ -1,0 +1,32 @@
+
+
+
+CREATE procedure [gen].[sendnotif] @GUID uniqueidentifier, @hostGUID uniqueidentifier, @ModuleGUID uniqueidentifier,@function nvarchar(100)
+as 	
+	declare @Subject nvarchar(max),@Body nvarchar(max),@m2 nvarchar(max),@m1 nvarchar(max),@m nvarchar(max),@SqlStr nvarchar(max),@ProfileName nvarchar(50)
+	declare @sqlstr1  nvarchar(max), @Recipients nvarchar(max)
+	declare @columnVal TABLE (columnVal nvarchar(max))
+
+	select @Subject = [Subject], @SqlStr = SqlStr, @Body = Body,@ProfileName = ProfileName
+			,@Recipients = Recipients from CaMODLNOTI a
+		inner join canoti b
+			on a.NotificationMailGUID = b.NotificationMailGUID		
+		where ModuleGUID=@ModuleGUID	--'A3591800-A95F-459A-B490-B06252069591'
+		and FunctionCode=@function		--'6034805E-4D39-41AE-82FA-58454B70F39B'
+
+	set @sqlstr1 = @sqlstr + ''''+convert(nvarchar(50),@GUID)+''''
+	select @sqlstr1 =''''+SUBSTRING (@sqlstr1,CHARINDEX('from', @sqlstr1, 0),len(@sqlstr1)-CHARINDEX('from', @sqlstr1)+1)
+
+	select @m2='select ''' + REPLACE(REPLACE(REPLACE(@Body,'[','''+ ['),']','] +'''),'#','&lt;br/&gt;') + @sqlstr1
+	
+	insert @columnVal exec (@m2)
+	select @m=columnVal From @columnVal
+
+	print @m
+	--print @sqlstr1		
+	
+	 exec gen.sendMail @GUID, @hostGUID, @ProfileName, @Recipients, @m, @Subject,''
+
+
+
+

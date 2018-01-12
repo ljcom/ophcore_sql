@@ -1,0 +1,89 @@
+
+CREATE procedure [gen].[download_select] @atablename nvarchar(15), @ParentGUID uniqueidentifier, @hostGUID uniqueidentifier, @debug bit=0
+as
+	--gen.createType @tablename
+
+	declare @colname varchar(100), @combotype int, @sqlstr nvarchar(max)='', @fieldkeyParent varchar(100), @fieldkey varchar(100), @parenttable varchar(6), @sqlstr1 varchar(max)=''
+	declare @titleCaption varchar(50)
+
+	set @parenttable= SUBSTRING(@atablename,1,6) 
+
+	select @fieldkey=colname
+	from gen.cotablfiel a
+		inner join gen.cotabl b
+			on a.tableGUID=b.tableGUID
+	where b.tablename = @atablename and colorder=10
+
+	select @fieldkeyParent=colname
+	from gen.cotablfiel a
+		inner join gen.cotabl b
+			on a.tableGUID=b.tableGUID
+	where b.tablename = @parenttable and colorder=10
+
+	DECLARE csr cursor FOR
+	select colname, combotype, titlecaption
+	from gen.cotablfiel a
+		inner join gen.cotabl b
+			on a.tableGUID=b.tableGUID
+	where b.tablename = @atablename and isViewable=1 and viewpageno&lt;&gt;9 and iseditable in (1,2,4)
+	order by viewpageno, viewrowno, viewcolno, vieworderno,viewrowtype,viewrowtypeorder
+
+	OPEN csr
+	FETCH next from csr into @colname, @combotype, @titleCaption
+	WHILE @@fetch_status =0
+	BEGIN
+		--if @sqlstr= '' 
+		--	set @sqlstr='select '+ '''''' +' as '+ @colname
+		--else set @sqlstr=@sqlstr + ', '+ '''''' +' as '+ @colname
+		--if @combotype=12 set @colname=@colname+'cbid'
+
+		if @sqlstr= '' begin
+			set @sqlstr='select '--+@fieldkey+', '''+cast(@ParentGUID as varchar(36))+''' as '+@fieldkeyParent+', '
+					+ case 
+						when @combotype=12 then @colname+'cbid '''+@titleCaption+''', '+@colname+'cbNm '''+isnull(@titleCaption,@colName)+''''
+						else @colname+' '''+@titleCaption+'''' end
+			--if @debug=1 select @sqlstr
+		end
+		else begin
+			set @sqlstr=isnull(@sqlstr,'') +', '
+					+ case 
+						when @combotype=12 then @colname+'cbid'+' '''+@titleCaption+''', '+@colname+'cbNm '''+isnull(@titleCaption, @colName)+''''
+						else @colname+' '''+@titleCaption+'''' end
+
+			--if @debug=1 select @sqlstr
+		end
+
+		if @sqlstr1= '' 
+			set @sqlstr1='select '+--'''' as '+@fieldkey+', '''+cast(@ParentGUID as varchar(36))+''' as '+@fieldkeyParent+', '
+					+ case 
+						when @combotype=12 then ''''' as '+@colname+'cbid'+', '''' as '+@colname+'cbNm'
+						else ''''' as '+@colname end
+		else 
+			set @sqlstr1=@sqlstr1 +', '
+					+ case 
+						when @combotype=12 then ''''' as '+@colname+'cbid'+', '''' as '+@colname+'cbNm'
+						else ''''' as '+@colname end
+			
+			--+ ''''' as '+@colname+''
+	
+		FETCH next from csr into @colname, @combotype, @titleCaption
+	END
+	CLOSE csr
+	DEALLOCATE csr 
+	print @sqlstr
+	print @sqlstr1
+	set @sqlstr='if exists ('+ @sqlstr + ' from oph.'+@atablename+' where '+@fieldkeyParent+'='''+convert(nvarchar(50),@ParentGUID)+''')
+	begin
+		'+ @sqlstr + ' from oph.'+@atablename+' where '+@fieldkeyParent+'='''+convert(nvarchar(50),@ParentGUID)+'''
+	end else begin
+		'+@sqlstr1 + ' 
+	end' 
+	if @debug=1 select @sqlstr, @parenttable, @fieldkey, @fieldkeyParent, @sqlstr1, @atablename, @ParentGUID
+	exec (@sqlstr)
+
+
+
+
+
+
+

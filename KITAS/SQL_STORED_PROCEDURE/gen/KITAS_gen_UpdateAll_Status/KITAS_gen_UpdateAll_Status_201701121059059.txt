@@ -1,0 +1,61 @@
+
+
+create procedure [gen].[UpdateAll_Status] 
+as
+declare @otablename nvarchar(10), @atablename nvarchar(10), @sqlstr nvarchar(500), @fieldkey varchar(30), @tableGUID uniqueidentifier
+
+DECLARE csr cursor FOR
+select a.tableguid, a.tablename from gen.cotabl a
+where substring(tablename,1,2) ='ta' and len(tablename)=6
+OPEN csr
+FETCH next from csr into @tableGUID, @otablename
+WHILE @@fetch_status =0
+BEGIN
+	update gen.coTABLFIEL
+	set isViewable=1, isEditable=99, ViewPageNo=9, ViewRowNo=1, ViewColNo=1, ViewOrderNo=1, ViewColWidth=1
+	where tableGUID=@tableGUID and colname='status'
+
+	update gen.coTABLFIEL
+	set isViewable=1, isEditable=99, ViewPageNo=9, ViewRowNo=1, ViewColNo=1, ViewOrderNo=2, ViewColWidth=1
+	where tableGUID=@tableGUID and colname='statuscomment'
+
+	update gen.coTABLFIEL
+	set isViewable=1, isEditable=99, ViewPageNo=9, ViewRowNo=1, ViewColNo=1, ViewOrderNo=3, ViewColWidth=1
+	where tableGUID=@tableGUID and colname='createddate'
+
+	update gen.coTABLFIEL
+	set isViewable=1, isEditable=99, ViewPageNo=9, ViewRowNo=1, ViewColNo=1, ViewOrderNo=4, ViewColWidth=1
+	where tableGUID=@tableGUID and colname='createduser'
+
+	update gen.coTABLFIEL
+	set isViewable=1, isEditable=99, ViewPageNo=9, ViewRowNo=1, ViewColNo=1, ViewOrderNo=5, ViewColWidth=1
+	where tableGUID=@tableGUID and colname='updateddate'
+
+
+	update gen.coTABLFIEL
+	set isViewable=1, isEditable=99, ViewPageNo=9, ViewRowNo=1, ViewColNo=1, ViewOrderNo=6, ViewColWidth=1
+	where tableGUID=@tableGUID and colname='updateduser'
+
+	update gen.coTABLFIEL
+	set isViewable=1, isEditable=99, ViewPageNo=9, ViewRowNo=1, ViewColNo=1, ViewOrderNo=7, ViewColWidth=1
+	where tableGUID=@tableGUID and colname='isdeleted'
+
+	update gen.coTABLFIEL
+	set isViewable=1, isEditable=99, ViewPageNo=9, ViewRowNo=1, ViewColNo=1, ViewOrderNo=8, ViewColWidth=1
+	where tableGUID=@tableGUID and colname='deleteddate'
+
+	update gen.coTABLFIEL
+	set isViewable=1, isEditable=99, ViewPageNo=9, ViewRowNo=1, ViewColNo=1, ViewOrderNo=9, ViewColWidth=1
+	where tableGUID=@tableGUID and colname='deletedUser'
+
+	
+
+FETCH next from csr into @tableGUID, @otablename
+END
+CLOSE csr
+DEALLOCATE csr 
+
+
+
+
+

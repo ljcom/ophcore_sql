@@ -1,0 +1,22 @@
+
+create procedure [gen].[newApprovalMark] @GUID uniqueidentifier	
+as
+	update c
+	set nbNewApproval=nbNewApproval+1
+	--select * 
+	from (
+		select * 
+		from toalltaprv a
+		where a.status is null
+			and a.docguid=@GUID
+			) a
+		inner join toallt b
+			on a.docguid=b.docguid
+		inner join comodl d
+			on d.moduleid=b.doctype
+		inner join cousermodl c
+			on c.userguid=a.approvaluserguid
+			and d.moduleguid=c.moduleguid
+
+
+

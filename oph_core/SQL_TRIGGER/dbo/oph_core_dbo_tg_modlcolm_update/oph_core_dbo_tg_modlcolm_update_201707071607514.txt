@@ -1,0 +1,15 @@
+
+CREATE TRIGGER [dbo].[tg_modlcolm_update]
+   ON  [dbo].[modlcolm]
+   AFTER update
+AS 
+BEGIN
+	SET NOCOUNT ON;
+
+	if UPDATE(colkey) or UPDATE(coltype) begin
+		RAISERROR ('You cannot change ColKey. Delete and create a new one, if necessary.', 16, 1)
+	ROLLBACK TRANSACTION
+	end
+
+END
+

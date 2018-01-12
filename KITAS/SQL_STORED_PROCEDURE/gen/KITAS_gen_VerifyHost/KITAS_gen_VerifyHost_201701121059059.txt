@@ -1,0 +1,12 @@
+
+
+
+CREATE procedure [gen].[VerifyHost] @hostGUID uniqueidentifier
+as
+	if exists(select * from couserhost where hostguid=@hostguid) 
+		select @hostguid
+	else
+		select null
+
+
+

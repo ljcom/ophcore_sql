@@ -1,0 +1,88 @@
+
+CREATE procedure [core].[storeScriptVersion_themes] @isdebug bit=0
+--WITH ENCRYPTION
+as
+	declare @rootPath nvarchar(255)='d:\vsonline\operahouse\themes'
+	declare @path nvarchar(max)='d:\vsonline\operahouse\version\themes\'
+	--file
+	declare @folderxml xml
+
+	--insert into @folderTable
+	exec gen.cmddir @rootPath, @folderxml output
+
+	--select @folderxml
+
+	insert into oph_package.dbo.vers(versionGUID, versionDate, createdDate)
+	select distinct newid(), versionDate, getdate()
+	from (
+		select cast(x.filedate as date) versionDate
+		from (
+			SELECT  
+				   Tbl.Col.value('folder[1]', 'nvarchar(255)') folder,  
+				   Tbl.Col.value('pathName[1]', 'nvarchar(255)') fileName,  
+				   Tbl.Col.value('fileDate[1]', 'datetime') fileDate
+
+			FROM   @folderxml.nodes('/files/file') Tbl(Col)) x
+			left join oph_package.dbo.vers y
+				on cast(x.filedate as date)=y.versionDate
+		where y.versionDate is null
+		group by cast(x.filedate as date)
+	) x
+	
+
+	insert into oph_package.dbo.versfile(versionFileGUID, versionGUID, productTypeID, productName, accountID, pathName)
+	select newid(), y.versionguid, 'themes', 
+		iif(replace(left(replace(folder, @rootpath+'\', ''), charindex('\', replace(folder, @rootpath+'\', ''))), '\', '')<>'', 
+			replace(left(replace(folder, @rootpath+'\', ''), charindex('\', replace(folder, @rootpath+'\', ''))), '\', ''), 'OPH'), 
+		'OPH', x.folder+x.pathName
+	from (
+		SELECT  
+			   Tbl.Col.value('folder[1]', 'nvarchar(255)') folder,  
+			   Tbl.Col.value('pathName[1]', 'nvarchar(255)') pathName,  
+			   Tbl.Col.value('fileDate[1]', 'datetime') fileDate
+
+		FROM   @folderxml.nodes('/files/file') Tbl(Col)) x
+		inner join oph_package.dbo.vers y
+			on cast(x.filedate as date)=y.versionDate
+		left join oph_package.dbo.versfile z
+			on z.versionGUID=y.versionGUID and z.productTypeID='themes' 
+			and z.productName=iif(replace(left(replace(folder, @rootpath+'\', ''), charindex('\', replace(folder, @rootpath+'\', ''))), '\', '')<>'', 
+			replace(left(replace(folder, @rootpath+'\', ''), charindex('\', replace(folder, @rootpath+'\', ''))), '\', ''), 'OPH') and z.accountID='OPH' and z.pathName=x.folder+x.pathName
+	where z.versionFileGUID is null
+
+
+	--copy file
+
+	
+	--declare @rootpath nvarchar(max)='d:\vsonline\operahouse'
+	declare @sqlstr nvarchar(max)=
+		replace((
+		select distinct '
+			exec gen.cmdCreateFolders '''+@path+cast(year(versiondate) as nvarchar(4))+'\'+right('00'+cast(month(versiondate) as nvarchar(2)),2)+'\'+right('00'+cast(day(versiondate) as nvarchar(2)),2)+'''
+			'
+		from oph_package.dbo.vers v
+			inner join oph_package.dbo.versfile f on v.versionGUID=f.versionGUID
+		where f.productTypeID='themes'
+		for xml path('')), '&#x0D;', '')
+
+	if @isdebug=1 print @sqlstr
+
+	exec sp_executesql @sqlstr
+
+
+	set @sqlstr=
+		replace((
+		select '
+			exec [gen].[cmdCopyFile] '''+f.pathname+''', '''+replace(f.pathname, @rootpath, @path+''+cast(year(versiondate) as nvarchar(4))+'\'+right('00'+cast(month(versiondate) as nvarchar(2)),2)+'\'+right('00'+cast(day(versiondate) as nvarchar(2)),2))+'''
+			'
+		from oph_package.dbo.vers v
+			inner join oph_package.dbo.versfile f on v.versionGUID=f.versionGUID
+		where f.productTypeID='themes'
+		for xml path('')), '&#x0D;', '')
+
+	if @isdebug=1 print @sqlstr
+
+	exec sp_executesql @sqlstr
+
+
+

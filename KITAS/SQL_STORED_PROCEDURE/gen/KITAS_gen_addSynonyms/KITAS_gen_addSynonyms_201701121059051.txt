@@ -1,0 +1,184 @@
+
+CREATE procedure [gen].[addSynonyms] @namePat varchar(20)='%', @debug bit=0
+as
+	--version 20140801
+
+	if exists(select * from CoACCTDBSE where ismaster=1 and DatabaseName=db_name())
+	begin
+		--declare @debug int=1
+		--filling child database
+		DECLARE #cur008 CURSOR
+		READ_ONLY
+		FOR select a.name, d.DatabaseName, d.isMaster, b.name 
+			from sys.objects a
+				inner join sys.schemas b
+					on a.schema_id=b.schema_id
+				cross join (select * from coacctdbse where databasename &lt;&gt;db_name()) d
+			where ((left(a.name,1) in ('c', 'm', 'p', 't', 's', 'f') and b.name in('dbo','oph')
+				and type in('U','V','TF')) 
+				--or (b.name='oph')
+				) and d.isMaster=0 
+				and a.name like @namePat 
+			order by a.name
+
+		DECLARE @dbname varchar(40), @tablename varchar(40), @sqlstr varchar(max), @schema varchar(10)
+		declare @script varchar(4000), @ismaster int
+		declare @tbl table (t bit)
+	
+		OPEN #cur008
+
+		FETCH NEXT FROM #cur008 INTO @tablename, @dbname, @isMaster, @schema
+		WHILE (@@fetch_status &lt;&gt; -1)
+		BEGIN
+			IF (@@fetch_status &lt;&gt; -2)
+			BEGIN
+				set @sqlstr=
+					'use '+@dbname+';
+					if exists(
+						select * from sys.objects a
+							inner join sys.schemas b
+								on a.schema_id=b.schema_id
+						where b.name='''+@schema+''' and a.name='''+@tablename+''' and type=''SN'') 
+						DROP SYNONYM ['+@schema+'].['+@tablename+'];
+
+					--if exists(
+					--	select * 
+					--	from sys.objects a 
+					--		inner join sys.schemas b 
+					--			on a.schema_id=b.schema_id 
+					--	where b.name='''+@schema+''' and  a.name='''+@tablename+''' and type=''U'') 
+					--		and '+cast(@isMaster as varchar(1))+'=0 
+					--	drop table '+@schema+'.'+@tablename+'
+
+					--if exists(
+					--	select * 
+					--	from sys.objects a 
+					--		inner join sys.schemas b 
+					--			on a.schema_id=b.schema_id 
+					--	where b.name='''+@schema+''' and  a.name='''+@tablename+''' and type=''V'') 
+					--		and '+cast(@isMaster as varchar(1))+'=0 
+					--	drop view '+@schema+'.'+@tablename+'
+
+					CREATE SYNONYM ['+@schema+'].['+@tablename+'] FOR '+DB_NAME()+'.['+@schema+'].'+@tablename+';'
+
+				if @debug=1 print @sqlstr
+				exec (@sqlstr)
+/*
+				set @sqlstr='declare @sqlstr varchar(max)
+						set @sqlstr=select * from oph.'+@tablename+'
+						exec '+@dbname+'.gen.addview '''+@tablename+''', '''', @sqlstr, ''oph'''
+				exec @sqlstr	
+*/							
+/*				insert into @tbl (t)
+				exec('if exists(
+						select * 
+						from '+@dbname+'.sys.objects 
+						where name='''+@tablename+''' and type=''V'') 
+						
+						select 1 else select 0')
+
+				if exists(select * from @tbl where t=0) begin
+					set @sqlstr='CREATE view oph.'+@tablename+' as select * from oph.'+@tablename+''
+					set @script='sqlcmd -E -d '+@dbname+' /Q "'+@sqlstr+'"'
+					if @debug=1 print @script
+					EXEC master.dbo.xp_cmdshell @script
+				end
+				else begin
+					set @sqlstr='alter'+' '+'view oph.'+@tablename+' as select * from oph.'+@tablename+''
+					set @script='sqlcmd -E -d '+@dbname+' /Q "'+@sqlstr+'"'
+					if @debug=1 print @script
+					EXEC master.dbo.xp_cmdshell @script
+				end
+*/
+			END
+			FETCH NEXT FROM #cur008 INTO @tablename, @dbname, @isMaster, @schema
+		END
+
+		CLOSE #cur008
+		DEALLOCATE #cur008
+		
+		--DECLARE @dbname varchar(40), @sqlstr varchar(max), @debug int=1
+
+		--master database
+		DECLARE #cur007 CURSOR
+		READ_ONLY
+		FOR select DatabaseName from CoACCTDBSE where isMaster=0
+	
+		OPEN #cur007
+
+		FETCH NEXT FROM #cur007 INTO @dbname
+		WHILE (@@fetch_status &lt;&gt; -1)
+		BEGIN
+			IF (@@fetch_status &lt;&gt; -2)
+			BEGIN
+				set @sqlstr='
+					DECLARE #cur006 CURSOR
+					READ_ONLY
+					FOR select a.name, b.name 
+						from '+@dbname+'.sys.objects a
+							inner join '+@dbname+'.sys.schemas b
+								on a.schema_id=b.schema_id
+						where ((left(a.name,2) in (''co'', ''mo'', ''po'', ''to'', ''so'') and b.name=''dbo'') 
+							--or (b.name=''oph'')
+							) and type in(''U'',''V'')
+							and a.name like '''+@namePat+''' 
+
+					DECLARE @tablename varchar(40), @sqlstr varchar(4000), @script varchar(4000), @schema varchar(10)
+					declare @tbl table (t bit)
+					OPEN #cur006
+
+					FETCH NEXT FROM #cur006 INTO @tablename, @schema
+					WHILE (@@fetch_status &lt;&gt; -1)
+					BEGIN
+						IF (@@fetch_status &lt;&gt; -2)
+						BEGIN
+							set @sqlstr=''
+								use '+db_name()+';
+								if exists(
+									select * from sys.objects a
+										inner join '+@dbname+'.sys.schemas b
+											on a.schema_id=b.schema_id
+									where b.name=''''''+@schema+'''''' and a.name=''''''+@tablename+'''''' and type=''''SN'''') 
+									DROP SYNONYM [''+@schema+''].[''+@tablename+''];
+
+								CREATE SYNONYM [''+@schema+''].[''+@tablename+''] FOR '+@dbname+'.[''+@schema+''].''+@tablename+'';''
+							
+							exec (@sqlstr)
+
+							--insert into @tbl (t)
+							--exec(''if exists(select * from '+db_name()+'.sys.objects where name=''''''+@tablename+'''''' and type=''''V'''') select 1 else select 0'')
+
+							--if exists(select * from @tbl where t=0) begin
+							--	set @sqlstr=''CREATE view oph.''+@tablename+'' as select * from ''+@tablename+''''
+							--	set @script=''sqlcmd -E -d '+db_name()+' /Q "''+@sqlstr+''"''
+							--	--print @script
+							--	EXEC master.dbo.xp_cmdshell @script
+							--end
+							--else
+							--begin
+							--	set @sqlstr=''alter''+'' ''+''view oph.''+@tablename+'' as select * from ''+@tablename+''''
+							--	set @script=''sqlcmd -E -d '+db_name()+' /Q "''+@sqlstr+''"''
+							--	--print @script
+							--	EXEC master.dbo.xp_cmdshell @script
+							--end
+
+						END
+						FETCH NEXT FROM #cur006 INTO @tablename, @schema
+					END
+
+					CLOSE #cur006
+					DEALLOCATE #cur006
+				'
+				if @debug=1 print @sqlstr
+				exec (@sqlstr)
+			END
+			FETCH NEXT FROM #cur007 INTO @dbname
+		END
+
+		CLOSE #cur007
+		DEALLOCATE #cur007
+	end
+
+
+
+

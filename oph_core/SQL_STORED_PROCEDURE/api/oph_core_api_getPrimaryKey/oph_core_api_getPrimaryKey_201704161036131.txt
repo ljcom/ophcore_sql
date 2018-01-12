@@ -1,0 +1,48 @@
+
+
+CREATE procedure [api].[getPrimaryKey] @account varchar(50), @code varchar(50), @primaryCol varchar(50) OUTPUT
+AS
+BEGIN
+	declare @db varchar(50)=api.fn_checkDB(@account, @code)
+	declare @ver varchar(10), @settingMode varchar(1)
+
+	select @ver=[version], @settingMode=api.settingmode(settingMode)
+	--select * 
+	from modl a
+		inner join acctdbse	b 
+			on a.accountdbguid=b.accountdbguid
+		inner join acct c
+			on a.AccountGUID=c.AccountGUID
+	where moduleid=@code and c.AccountId=@account
+
+	declare @colname varchar(50)
+	declare @sqlpar nvarchar(max)='@colname varchar(50) OUTPUT'
+	declare @sqlstr nvarchar(max)
+
+	if @ver='3.0' or (@ver='4.0' and @settingMode='C') begin
+		set @sqlstr ='
+			select @colname=b.name 
+			from '+@db+'.sys.objects a
+				inner join '+@db+'.sys.columns b
+					on a.object_id=b.object_id
+			where a.name='''+@code+''' and b.column_id=1'
+	end
+	--else if @ver='4.0' and @settingMode&lt;&gt;'C') 
+	--begin
+	--end
+
+	exec sp_executesql @sqlstr, @sqlpar, @colname OUTPUT
+
+	set @primaryCol=@colname
+END
+
+
+
+
+
+
+
+
+
+
+

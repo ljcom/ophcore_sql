@@ -1,0 +1,13 @@
+CREATE PROCEDURE [dbo].[YoPCSOSALE_sub1] @startDate date, @endDate date
+as	--CreatedBy eLs ON Feb, 2017
+
+	select DocDate, 
+		DATENAME(DW, DocDate) +', '+ CAST(DAY(DocDate) AS varchar(2)) +' '+ DATENAME(MM, DocDate) +' '+ CAST(YEAR(DocDate) AS varchar(4)) [group_date], 
+		dbo.currMode(sum(TotalDiscount), 1, 'Indonesia') [group_discount], sum(TotalQty) [group_qty], 
+		dbo.currMode(sum(TotalSales), 1, 'Indonesia') [group_pay]
+	from oph.TcPCSO
+	where DocDate between @startDate and @endDate
+	group by DocDate
+	order by DocDate asc
+
+

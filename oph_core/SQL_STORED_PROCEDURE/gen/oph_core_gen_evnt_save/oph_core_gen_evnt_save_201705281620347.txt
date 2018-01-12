@@ -1,0 +1,11 @@
+
+CREATE procedure [gen].[evnt_save] @accountid nvarchar(50), @dbcore nvarchar(50), @code nvarchar(50), @guid uniqueidentifier, @startRec datetime, @comment nvarchar(max)
+as
+	declare @accountGUID uniqueidentifier
+	exec gen.getDBInfo @accountid, @dbcore, @code, @accountGUID=@accountGUID output
+
+	declare @moduleGUID uniqueidentifier, @curRec int=datediff(ms, @startRec, current_timestamp)
+	select @moduleguid=moduleguid from modl where moduleid=@code
+
+	insert into evnt(accountGUID, moduleGUID, DocGUID, timeRecord, comment)
+	values (@accountGUID, @moduleguid, @guid, @curRec, @comment)

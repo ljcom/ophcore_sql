@@ -1,0 +1,7 @@
+create procedure [gen].[userinfo_load] @userguid uniqueidentifier, @key nvarchar(50), @value nvarchar(max)=null output
+as
+	if exists(select * from userinfo where userguid=@userguid and infokey=@key)
+	begin
+		select @value=infovalue from userinfo where userguid=@userguid and InfoKey=@key
+	end
+

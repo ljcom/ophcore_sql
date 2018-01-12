@@ -1,0 +1,36 @@
+
+
+CREATE view [dbo].[CoUSERLIMT]
+as
+select 
+	 a.userGUID,
+	 a.userid,
+	 a.username,  
+	(select 
+		(select Top 1 MaxSales from moeven where evenGUID = '6A293D44-E76E-4979-BAD6-A598988FB61B')-isnull(sum(TotalPrice),0) /*select maxSales from website online event*/ 
+     from ToPCSODETA a1
+	 inner join ToPCSO a2 
+		on a1.PCSOGUID = a2.PCSOGUID
+	 where EVENGUID in  ('9573DD6B-DB6F-4153-8A07-9B7CC8C0ADE7','6A293D44-E76E-4979-BAD6-A598988FB61B')
+		   and a2.carolGUID = a.userGUID and status &gt;= 100 and a2.isdeleted = 0 
+		   and convert(date, docdate) between
+			case when datepart(dd, getdate()) &lt; 15 
+				then dateadd(mm, -1, convert(date, convert(varchar, year(getdate()))+'-'+convert(varchar, month(getdate()))+'-'+'16'))
+			  else dateadd(mm, 0, convert(date, convert(varchar, year(getdate()))+'-'+convert(varchar, month(getdate()))+'-'+'16'))
+			  end
+			and
+		 	case when datepart(dd, getdate()) &lt; 15 
+				then dateadd(mm, 0, convert(date, convert(varchar, year(getdate()))+'-'+convert(varchar, month(getdate()))+'-'+'15'))
+			  else dateadd(mm, 1, convert(date, convert(varchar, year(getdate()))+'-'+convert(varchar, month(getdate()))+'-'+'15'))
+			  end   
+	) limit
+	, (select hostGUID from oph_core.dbo.userhost where userGUID = a.UserGUID) hostGUID
+	, 0 isdeleted, getdate() createddate
+from couser a
+
+
+
+
+
+
+

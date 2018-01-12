@@ -1,0 +1,23 @@
+
+create procedure [gen].[updateTokenUser]
+as
+	print 'run manual'
+/*
+	update a
+	set tokenuser=left(b.member, len(b.member)-1)
+	--select a.ugroupguid, left(b.member, len(b.member)-1), tokenuser, tokenuser
+	from cougrp a
+		inner join (
+		select ugroupguid, (
+			select cast(memberuserguid as varchar(max))+'*' 
+			from cougrpuser1
+			where ugroupguid=cougrp.ugroupguid
+			for xml path('')) member
+		from cougrp) b
+			on a.ugroupguid=b.ugroupguid
+	where left(b.member, len(b.member)-1) &lt;&gt; isnull(tokenuser,'')
+*/
+
+
+
+

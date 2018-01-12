@@ -1,0 +1,64 @@
+
+CREATE procedure [gen].[addprocs_reopen] @tablename nvarchar(50), @otablename nvarchar(50), 
+	@colname nvarchar(50), @isEnc bit=1, @isdebug bit=0 
+as
+	declare @sp nvarchar(max), @parameter nvarchar(max), @content nvarchar(max)
+
+		set @sp = ''+@TableName+'_reopen' 
+		set @parameter = char(9)+'@GUID uniqueidentifier, @hostGUID uniqueidentifier'
+		set @content = 	
+				char(9)+'if dbo.fn_checkObject(''dbo'','''+@tablename+'_reopen_custom'')=1 begin'+char(13)+char(10)+
+				char(9)+CHAR(9)+'exec dbo.'+@tablename+'_reopen_custom @GUID, @hostGUID'+char(13)+char(10)+ 
+				char(9)+'end'+char(13)+char(10)
+		set @content = @content +
+			case when dbo.fn_checkObject('dbo',@tablename+'_reopen_custom')=1 then '' 
+			else
+				char(9)+'else begin'+char(13)+char(10)+
+				char(13)+char(10)+
+				char(9)+char(9)+'declare @userGUID uniqueidentifier, @userName nvarchar(100)'+char(13)+char(10)+
+				char(9)+char(9)+'declare @isCancel bit=0, @msg nvarchar(max)='''''+char(13)+char(10)+
+				char(9)+char(9)+char(13)+char(10)+
+				char(9)+char(9)+'select @userGUID=userguid from coUSERHOST where hostGUID=@hostGUID'+char(13)+char(10)+
+				char(9)+char(9)+char(13)+char(10)+
+				char(9)+char(9)+'select @username=username'+char(13)+char(10)+ 
+				char(9)+char(9)+'from coUSER'+char(13)+char(10)+
+				char(9)+char(9)+'where userguid=@userguid'+char(13)+char(10)+
+				char(13)+char(10)+
+				char(9)+char(9)+'if dbo.fn_checkObject(''dbo'','''+@tablename+'_reopen_before'')=1 exec dbo.'+@tablename+'_reopen_before @GUID, @hostGUID, @isCancel OUTPUT, @msg OUTPUT' +char(13)+char(10)+
+				char(9)+char(9)+'if @iscancel=0 begin' +char(13)+char(10) +
+
+				char(9)+char(9)+char(9)+'update '+@oTableName+char(13)+char(10)+
+				char(9)+char(9)+char(9)+'set status = 400,statuscomment=''reopen by   ''+ @username'+char(13)+char(10)+
+				char(9)+char(9)+char(9)+'where status = 500 and '+@colname+' = @GUID'+char(13)+char(10)+
+				char(9)+char(9)+char(13)+char(10)+
+				char(9)+char(9)+char(13)+char(10)+
+				char(9)+char(9)+'end'+char(13)+char(10)+
+				char(13)+char(10)+
+				char(9)+char(9)+'select @msg reopen'+char(13)+char(10)+
+				char(9)+'end'+char(13)+char(10)
+			end
+				
+		exec gen.addproc @sp, @parameter, @content, @isEnc=@isenc
+		
+	
+			
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

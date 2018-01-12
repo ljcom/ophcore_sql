@@ -1,0 +1,74 @@
+
+
+CREATE procedure [api].[function_delete_v4]
+	@hostGUID uniqueidentifier, @code varchar(20), @GUID uniqueidentifier, @comment varchar(max), @isDebug bit=0
+--WITH ENCRYPTION
+as	
+	declare @msg nvarchar(200)
+
+	declare @ver varchar(10), @db varchar(50), @typecode varchar(1), @accountid varchar(50), @coreDB varchar(50), @migratedb nvarchar(50)
+
+	exec gen.getDBInfo @hostguid, @code, @ver output, @db output, @typecode output, 
+		@accountid=@accountid output, @coreDB=@coreDB output, @migratedb=@migratedb output
+
+
+	if @ver='2.0' or @ver='2.1' or (@ver='3.0' and isnull(@migratedb,'')<>'')
+		begin
+		--exec [api].[theme_browse_v2_transition] @hostGUID, @code, @sqlFilter, @searchText, @pgNo, @nbRows, @sortOrder, @stateid, @isdebug
+		set @ver='4.0'
+		set @db=db_name()
+	end
+
+	print '[api].[function_delete_v4]'
+	declare @isUpdateDelete bit, @PrimaryKey nvarchar(50), @sqlstr nvarchar(4000)
+
+	if @typecode<>'C'
+	begin
+		--set @code='doc.['+@code+']'
+		set @isupdateDelete=1
+		set @primaryKey='docGUID'
+	end
+	else begin
+		exec gen.[checkIsDeleted] @hostGUID, @code, @isUpdateDelete OUTPUT
+		--set @PrimaryKey = api.fn_PrimaryKey (@code)
+		exec api.getPrimaryKey @hostguid, @code, @PrimaryKey OUTPUT
+		set @code=QUOTENAME(@code) 
+	end
+
+	if @isUpdateDelete = 1 begin
+		set @sqlstr = 'update ' +'doc.'+@code + ' set isDeleted = 1 where ' + @PrimaryKey + ' = ''' + CAST(@GUID as varchar(50)) + ''''
+	end
+	else begin
+		set @sqlstr = 'delete from ' +'doc.'+@code + ' where ' + @PrimaryKey + ' = ''' + CAST(@GUID as varchar(50)) + ''''
+	end
+
+	if @isdebug=1 print @sqlstr
+
+	begin try
+		exec(@sqlstr)
+
+		declare @isExists bit = 0
+		--additional procedure after execution
+		declare @after_proc nvarchar(max)=@code+'_delete_after'
+		declare @after_par nvarchar(max)='@GUID uniqueidentifier, @hostGUID uniqueidentifier'
+
+		set @isExists=0
+		exec gen.checkObject @after_proc, 'doc', @db, @isExists OUTPUT
+		
+		if @isExists=1 begin
+			set @after_proc='exec '+@db+'.doc.'+@after_proc+' '''+CAST(@GUID AS VARCHAR(50))+''', '''+CAST(@hostGUID AS VARCHAR(50))+''''
+			--set @after_proc=@db+'.dbo.'+@after_proc
+			exec sp_executesql @after_proc, @after_par, @GUID, @hostGUID
+		end
+
+	end try
+	begin catch
+		if @isdebug=1 print @sqlstr
+		set @msg = ERROR_MESSAGE()
+	end catch
+
+	select @msg message
+
+
+
+

@@ -1,0 +1,517 @@
+
+CREATE procedure [gen].[addprocs_execute] @tablename varchar(50), @oTableName varchar(50), @colName varchar(50), @isEnc bit=1, @isdebug bit=0
+as
+--declare @tablename varchar(50) = 'TaEDSY', @oTableName varchar(50) = 'ToEDSY', @colName varchar(50) = 'EDSYGUID', @isEnc bit=1, @isdebug bit=0
+
+	declare @status varchar(10)
+	declare @executeFlag int
+	declare @primaryDate varchar(50), @autonumbercol varchar(50), @refno varchar(50)
+	declare @primaryDateEdit int
+	declare @content varchar(max)
+	declare @content2 varchar(max)
+	declare @sp varchar(max)
+	declare @parameter varchar(max)
+	declare @attachmentcol1 varchar(50)
+	declare @attachmentcol2 varchar(50)
+	declare @attachmentcol3 varchar(50)	
+	declare @sqlstr varchar(max)=''
+	declare @sqlstr2 varchar(max)=''
+	declare @sqlstr3 varchar(max)=''
+	declare @sqlstr4 varchar(max)=''
+	declare @tempstr varchar(max)=''	
+	set @executeflag = 1
+	select @primarydate = colname 
+	from gen.cotablfiel a
+		inner join gen.cotabl b
+			on a.tableguid=b.tableguid	
+	where b.tablename = @tablename and primarycol=2
+	
+	select @PrimaryDateEdit=iseditable 
+	from gen.cotablfiel a
+		inner join gen.cotabl b
+			on a.tableguid=b.tableguid	
+	where tablename = @tablename and primarycol=2
+
+	select @autonumbercol = colname 
+	from gen.cotablfiel a
+		inner join gen.cotabl b
+			on a.tableguid=b.tableguid	
+	where tablename = @tablename and primarycol=3
+	
+	select @refno = colname 
+	from gen.cotablfiel a
+		inner join gen.cotabl b
+			on a.tableguid=b.tableguid	
+	where tablename = @tablename and primarycol=4
+
+	if isnull(@refno,'')='' print 'REFNO MISSING: state '+@tablename
+	
+	if exists(select * from coappr b
+				inner join comodl c
+					on c.ModuleGUID=b.ModuleGUID
+				where c.ModuleId=@tablename) or @tablename = 'taALLT' 
+	begin
+		set @content=''
+		set @sp=''+@tableName+'_execute'
+		set @parameter = char(9)+'@GUID uniqueidentifier, @hostGUID uniqueidentifier'
+		set @content = 	
+			char(9)+'if dbo.fn_checkObject(''dbo'','''+@tablename+'_execute_custom'')=1 begin'+char(13)+char(10)+
+			char(9)+CHAR(9)+'exec dbo.'+@tablename+'_execute_custom @GUID, @hostGUID'+char(13)+char(10)+
+			char(9)+'end'+char(13)+char(10)
+		
+		if dbo.fn_checkObject('dbo',@tablename+'_execute_custom')=1 			
+			set @content = @content + '' 
+		else begin
+			set @content = @content +	
+					char(9)+'else begin'+char(13)+char(10)+
+					char(13)+char(10)+
+					char(9)+char(9)+'declare @accountid varchar(20), @statuscomment varchar(max), @userGUID uniqueidentifier,'+char(13)+char(10)+
+					char(9)+char(9)+'@delegateUserGUID uniqueidentifier, @createdUser uniqueidentifier,@msg varchar(max), @skipMail bit=0,'+char(13)+char(10) +
+					char(9)+char(9)+'@sqlfilter varchar(max), @username1 varchar(1000), @doc int, @onoff uniqueidentifier,'+char(13)+char(10) +
+					char(9)+char(9)+'@approve int, @lvl int, @statusErrorNo int, @iscancel bit=0'+char(13)+char(10) +
+					char(13)+char(10)+
+				--AddDelegate
+					char(9)+char(9)+'select @userGUID=userguid, @delegateUserGUID = delegateUserGUID  from coUSERHOST where hostGUID=@hostGUID'+char(13)+char(10)+
+					char(9)+char(9)+'select @accountid = accountid from coACCT'+char(13)+char(10)+
+					char(13)+char(10)+
+					char(9)+char(9)+'select @username1 = username from coUSER where UserGUID=@userGUID'+char(13)+char(10)+
+					char(9)+char(9)+'select @createdUser = CreatedUser from '+@oTableName+' where '+@colname+' = @GUID'+char(13)+char(10) +
+					char(13)+char(10)+
+					char(9)+char(9)+'if dbo.fn_checkObject(''dbo'','''+@tablename+'_execute_before'')=1 exec dbo.'+@tablename+'_execute_before @GUID, @hostGUID, @isCancel OUTPUT, @msg OUTPUT' +char(13)+char(10)+
+					char(9)+char(9)+'if @iscancel=0 begin' +char(13)+char(10) +
+					char(13)+char(10)+
+					char(9)+char(9)+char(9)+'begin tran'+char(13)+char(10)+
+					char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+'select @approve = status'+char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+'from '+@otablename+''+char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+'where '+@colname+' = @GUID'+char(13)+char(10)+
+					char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+'if @approve &lt;&gt; 500'+char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+'begin'+char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+char(9)+'set @approve = 400'+char(13)+char(10)
+			set @content = @content +	
+					char(9)+char(9)+char(9)+char(9)+char(9)+'if exists('+char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+'select * from '+@oTableName++char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+'where status=300 and '+@colname+'=@GUID and createduser=@userGUID) '+char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+'and exists(select * from '+@oTableName+'APRV where '+@colname+'=@GUID)'+char(13)+char(10)+
+					char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+char(9)+char(9) +'delete from '+@oTableName+'APRV where '+@colname+'=@GUID'+char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+char(9)+'else'+char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+char(9)+'if exists('+char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+'select * from '+@oTableName++char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+'where status=300 and '+@colname+'=@GUID and createduser&lt;&gt;@userGUID) '+char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+'and exists(select * from '+@oTableName+'APRV where '+@colname+'=@GUID) begin'+char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+char(9)+char(9) +'set @approve=300'+char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+char(9)+'end'+char(13)+char(10)+
+					char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+char(9) +'exec oph.'+@TableName+'APRV_setuser  @GUID, @hostGUID'+char(13)+char(10)+
+					char(13)+char(10)+
+			
+					char(9)+char(9)+char(9)+char(9)+char(9) +'declare @totApproval int'+char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+char(9) +'select @totApproval=COUNT(*) from '+@oTableName+'APRV where '+@colname+'=@GUID and Lvl&gt;0'+char(13)+char(10)+
+					char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+char(9) +'if @totApproval=0 set @approve=0'+char(13)+char(10)+
+					char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+char(9)+'declare @minlvl1 int,@sumLVL int'+char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+char(9)+'declare @username varchar(1000),@username2 varchar(1000)'+char(13)+char(10)+
+					char(13)+char(10)+			
+					char(9)+char(9)+char(9)+char(9)+char(9)+'if @approve=400 begin'+char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+'select @minlvl1=min(lvl)'+char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+'from oph.'+@tablename+'APRV'+
+					char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+'where '+@colname+' = @GUID and isnull(status,0)&lt;400 and approvaluserGUID = @userGUID'+char(13)+char(10)+
+					char(13)+char(10)
+			set @content = @content +	
+					char(9)+char(9)+char(9)+char(9)+char(9)+char(9) +'if exists(select * from '+@oTableName+'APRV'+char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+char(9)+char(9) +'	where '+@colname+' = @GUID and approvaluserGUID = @userGUID'+char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+char(9)+char(9) +'		and (isnull(Status,0)&lt;400 and lvl=@minlvl1))'+char(13)+char(10)+				
+					char(9)+char(9)+char(9)+char(9)+char(9)+char(9) +'begin '+char(13)+char(10)+						
+					char(9)+char(9)+char(9)+char(9)+char(9) +char(9)+'	update '+@oTableName+'APRV '+char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+char(9) +char(9)+'		set	status = '+char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+char(9) +char(9)+'				case '+char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+char(9)+char(9) +char(9)+'			when approvalUserGUID = @userguid then 400'+char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+char(9)+char(9) +char(9)+'			when 	approvalUserGUID &lt;&gt; @userGUID'+char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+char(9) +char(9)+'		and @approve in (100, 200)'+char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+char(9) +char(9)+'		and lvl &gt;= @lvl and status in (300, 400) then 200'+char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+char(9)+char(9) +char(9)+'			else status end,'+char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+char(9) +char(9)+'			updatedDate = getdate(),'+char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+char(9) +char(9)+'			curlvl ='+char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+char(9) +char(9)+'				case'+char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+char(9)+char(9) +char(9)+'			when isnull(curlvl, 0) &lt; @lvl then @lvl'+char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+char(9)+char(9) +char(9)+'			else curlvl end,'+char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+char(9) +char(9)+'			delegateUserGUID = @delegateUserGUID'+char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+char(9) +char(9)+'		where '+@colname+' = @GUID and approvaluserGUID = @userGUID'+char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+char(9) +char(9)+'			and isnull(Status,0)&lt;400 and lvl=@minlvl1'+char(13)+char(10)+
+					char(13)+char(10)
+			set @content = @content +	
+					char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+'end'+char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+'else set @skipMail=1'+char(13)+char(10) +
+					char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+'select @sumLVL=count(lvl) from oph.'+@TableName+'APRV where '+@colname+' = @GUID'+char(13)+char(10)+
+					char(13)+char(10)+	
+					char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+'if (select count(*) from oph.'+@TableName+'APRV where '+@colname+'= @GUID and status=400)=@sumLVL begin'+char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+'	select @username = username'+char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+'	from '+@oTableName+'APRV'+ char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+'		inner join coUSER'+char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+'			on '+@oTableName+'APRV.approvalUserGUID = coUSER.userGUID'+char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+'	where '+@colname+' = @GUID and approvalUserGUID=@userGUID'+char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+'		and status=400'+char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+'	set @statusComment=@username'+char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+'end'+char(13)+char(10)+ 
+					char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+'else'+char(13)+char(10)+ 
+					char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+'begin'+char(13)+char(10)+ 
+					char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+'	if exists(select * from oph.'+@TableName+'APRV'+char(13)+char(10)+			
+					char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+'		where'+char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+'			'+@colname+'= @GUID'+char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+'			and isnull(status,0)&lt;400 and isactive=1) '+char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+'	begin	'+char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+'		declare @minlvl int'+char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+'		select @minlvl=min(lvl) from oph.'+@TableName+'APRV where '+@colname+' = @GUID and isnull(status,0)&lt;400 and isactive=1	'+char(13)+char(10) 
+			set @content = @content +	
+					char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+'		DECLARE csr cursor FOR'+char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+'		select username'+char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+'		from '+@oTableName+'APRV'+char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+'			inner join coUSER'+char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+'				on '+@oTableName+'APRV.approvalUserGUID = coUSER.userGUID'+char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+'		where '+@colname+' = @GUID and lvl = @minlvl and isnull(status,0)&lt;400'+char(13)+char(10)+
+					char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+'		OPEN csr'+char(13)+char(10) +
+					char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+'		FETCH next from csr into @username'+char(13)+char(10) +
+					char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+'		WHILE @@fetch_status =0'+char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+'		BEGIN'+char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+'			if @username2 is null'+char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+'				set @username2 = @username'+char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+'			else '+char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+'				set @username2 = @username2+'', ''+@username'+char(13)+char(10)+
+					char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+'			FETCH next from csr into @username'+char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+'		END'+char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+'		CLOSE csr'+char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+'		DEALLOCATE csr '+char(13)+char(10) +
+					char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+'		set @statusComment = @username2'+char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+'		select @approve=100	'+char(13)+char(10)+					
+					char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+'	end'+char(13)+char(10)+	 
+					char(9)+char(9)+char(9)+char(9)+char(9)+'	end '+char(13)+char(10)+	
+					char(9)+char(9)+char(9)+char(9)+char(9)+'end'+char(13)+char(10) +
+					char(13)+char(10)
+			set @content = @content +	
+					char(9)+char(9)+char(9)+char(9)+char(9)+'if @approve=400'+char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+'set @msg=''2Approval Succesfully'''+char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+char(9)+'else if @approve=300'+char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+'set @msg=''3Rejected Submission is failed. You are not the requestor.'''+char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+char(9)+'else if @approve=100'+char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+'set @msg=''2Submission Succesfully'''+char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+char(9)+'else begin '+char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+'set @msg=''3Submission is failed since you don''''t have any approval users above you.'''+char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+char(9)+'end'+char(13)+char(10)+
+					char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+'	update '+@oTableName+''+char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+'	set updateddate=getdate(),status = @approve, '+char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+'		StatusComment = case @approve'+char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+'			when 0 then ''Recently Created'''+char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+'			when 100 then ''For approval by '''+char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+'			when 200 then ''Re-approval by'''+char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+'			when 300 then ''Not Approved by '''+char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+'			when 400 then ''Approved by '' end+@statusComment'+char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+'	where '+@colname+' = @GUID and @approve in (100, 400)'+char(13)+char(10) +
+					char(13)+char(10)
+			set @content = @content +	
+					char(9)+char(9)+char(9)+char(9)+'	if exists(	'+char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+'		select * '+char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+'		from '+@otablename+' a'+char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+'		where '+@colname+' = @GUID'+char(13)+char(10) +
+					char(9)+char(9)+char(9)+char(9)+'			and status = 400 and a.'+@refno+' is null) '+char(13)+char(10) +
+					char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+'	begin'+char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+'		declare @SFCDate smalldatetime'+char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+'		declare @autono varchar(10)'+char(13)+char(10)+
+					char(13)+char(10)+			
+					char(9)+char(9)+char(9)+char(9)+'		select @SFCDate = '+@primarydate+''+char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+'		from '+@otablename+''+char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+'		where '+@colname+' = @GUID and status=400 and '+@refno+' is null'+char(13)+char(10)+
+					char(9)+char(13)+char(10)+		
+					char(9)+char(9)+char(9)+char(9)+'		exec gen.getNumber '''+@tablename+''', @SFCDate, 1, @autono OUTPUT'+char(13)+char(10)+
+					char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+'		update '+@otablename+''+char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+'		set '+@refno+'=@autono --, statusComment = '''''+char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+'		where  '+@colname+' = @GUID and status = 400 and '+@refno+' is null'+char(13)+char(10)+
+					char(13)+char(10)+				
+					char(9)+char(9)+char(9)+char(9)+'	end'+char(13)+char(10)+
+					char(9)+char(9)+char(9)+char(9)+'end'+char(13)+char(10)+
+					char(13)+char(10)+
+					char(9)+char(9)+'	commit tran'+char(13)+char(10)+
+					char(13)+char(10)+
+					char(9)+char(9)+'	if @skipMail=0 and dbo.fn_checkObject(''dbo'','''+@tablename+'_mail_send'')=1 exec '+@tablename+'_mail_send @GUID, @hostGUID'+char(13)+char(10)+
+					char(13)+char(10)+
+					char(9)+char(9)+'	if dbo.fn_checkObject(''dbo'','''+@tablename+'_execute_after'')=1 exec dbo.'+@tablename+'_execute_after @GUID, @hostGUID'+char(13)+char(10)+
+					char(9)+'	end'+char(13)+char(10)+
+					char(9)+'	select @msg saved'+char(13)+char(10) +
+					char(9)+'end'+char(13)+char(10)
+			end 
+	end 
+
+	exec gen.addproc @sp, @parameter, @content, @content2, @isEnc=@isenc
+
+	--setuser
+	set @content=''
+	set @content2=''
+	set @sp=''+@tableName+'APRV_setuser'
+	set @parameter = char(9)+'@GUID uniqueidentifier, @hostGUID uniqueidentifier'
+	set @content = 	
+			char(9)+'if dbo.fn_checkObject(''dbo'','''+@tablename+'APRV_setuser_custom'')=0 begin'+char(13)+char(10)+
+			char(13)+char(10)+
+			char(9)+char(9)+'Declare @userGUID uniqueidentifier, @newguid uniqueidentifier, @ModuleGUID uniqueidentifier, @@tablename uniqueidentifier, @@approvalgroupGUID uniqueidentifier'+char(13)+char(10)+
+			char(9)+char(9)++char(9)+',@createduser uniqueidentifier'+char(13)+char(10)+
+			char(9)+char(9)+'select @userGUID=userguid from coUSERHOST where hostGUID=@hostGUID'+char(13)+char(10)+
+			char(13)+char(10)+
+			char(9)+char(9)+'select @ModuleGUID=ModuleGUID from CoMODL where Moduleid='''+@tablename+''''+char(13)+char(10)+
+			char(13)+char(10)+
+			char(9)+char(9)+'set @newguid=newid()'+char(13)+char(10)+
+			char(13)+char(10)+
+			char(9)+char(9)+'if not exists(	select *'+char(13)+char(10)+
+--			char(9)+char(9)+char(9)+char(9)+'from oph.'+@otablename+'aprv'+char(13)+char(10)+
+			char(9)+char(9)+char(9)+char(9)+'from '+@otablename+'APRV'+char(13)+char(10)+
+			char(9)+char(9)+char(9)+char(9)+'where '+@colname+' = @guid and Lvl&gt;0)'+char(13)+char(10)+
+			char(9)+char(9)+'begin'+char(13)+char(10)+
+			char(9)+char(9)+char(9)+'--declare @val money, @isIT bit, @isIV bit, @isPool bit'+char(13)+char(10)+
+			char(9)+char(9)+char(9)+'--set @val=0'+char(13)+char(10)+
+			char(13)+char(10)+
+			char(9)+char(9)+char(9)+'-- insert all requestors'+char(13)+char(10)+
+			char(9)+char(9)+char(9)++'select @createduser=createduser from '+@otablename+' where '+@colname+'=@GUID'+char(13)+char(10)+
+			char(13)+char(10)+
+			char(9)+char(9)+char(9)+'insert into '+@otablename+'aprv('+@otablename+'APRVGUID, curlvl, '+@colname+', lvl, approvalUserGUID, ugroupguid)'+char(13)+char(10)+
+			char(9)+char(9)+char(9)+'select newid(), null, @GUID, lvl, b.MemberUserGUID, b.ugroupguid'+char(13)+char(10)+
+			char(9)+char(9)+char(9)+'from  CoAPPRLVEL a'+char(13)+char(10)+
+			char(9)+char(9)+char(9)+char(9)+'inner join cougrpuser1 b'+char(13)+char(10)+
+			char(9)+char(9)+char(9)+char(9)+char(9)+'on a.ApprovalGroupGUID=b.UGroupGUID'+char(13)+char(10)+
+			char(9)+char(9)+char(9)+char(9)+'inner join coappr a1'+char(13)+char(10)+
+			char(9)+char(9)+char(9)+char(9)+char(9)+'on a.approvalguid=a1.approvalguid'+char(13)+char(10)+
+			char(9)+char(9)+char(9)+'where a1.moduleguid = @ModuleGUID '+char(13)+char(10)+
+			char(9)+char(9)+char(9)+char(9)+'and b.MemberUserGUID =@userGUID and a.lvl=0 and b.MemberUserGUID=@createduser'+char(13)+char(10)+
+			char(13)+char(10)+
+			char(9)+char(9)+char(9)+'--insert the upper level users'+char(13)+char(10)+
+			char(9)+char(9)+char(9)+'declare @first integer'+char(13)+char(10)+
+			char(9)+char(9)+char(9)+'set @first=1'+char(13)+char(10)+
+			char(13)+char(10)+
+			char(9)+char(9)+char(9)+'declare @a integer, @a1 integer, @level integer'+char(13)+char(10)+
+			char(9)+char(9)+char(9)+'declare @modluserGUID uniqueidentifier'+char(13)+char(10)+
+			char(9)+char(9)+char(9)+'set @a=1'+char(13)+char(10)+
+			char(9)+char(9)+char(9)+'set @a1=0'+char(13)+char(10) +
+			char(13)+char(10)  
+	set @content2 = 				
+			--'##insertApproval##'+
+			char(9)+char(9)+'end'+char(13)+char(10)+
+			char(13)+char(10)+
+			char(9)+char(9)+'-- delete yang gak perlu approve'+char(13)+char(10)+
+			char(9)+char(9)+'-- delete from '+@otablename+'APRV'+char(13)+char(10)+
+			char(9)+char(9)+'-- where '+@colname+' = @GUID and curlvl=1'+char(13)+char(10)+
+			char(13)+char(10)+
+			char(9)+char(9)+'exec oph.'+@tableName+'APRV_setUser_reset	'+		char(13)+char(10)+
+			char(13)+char(10)+
+			char(9)+char(9)+'exec gen.newApprovalMark @GUID'+char(13)+char(10)+
+			char(13)+char(10)+
+			char(9)+'end else'+char(13)+char(10)+char(13)+char(10)+
+			char(9)+CHAR(9)+'exec dbo.'+@tablename+'APRV_setuser_custom @GUID, @hostGUID'+char(13)+char(10) 
+			
+			--insert approval
+			declare @groupname varchar(50)
+			declare @ApprovalGroupGUID uniqueidentifier, @lvl int, @sqlfilter varchar(max), @bottom varchar(max)
+			DECLARE #cur222 CURSOR
+			READ_ONLY
+			FOR select c.ApprovalGroupGUID, c.lvl, c.sqlfilter, d.GroupId, c.bottomgroup
+				--select * 
+				from coappr a
+					inner join comodl b
+							on a.moduleguid=b.ModuleGUID
+					inner join CoAPPRLVEL c
+						on a.ApprovalGUID=c.ApprovalGUID
+					inner join CoUGRP d
+						on c.ApprovalGroupGUID=d.UGroupGUID
+				where b.moduleid=@tableName and c.Lvl between 100 and 199 --and c.isDeleted=0
+					and c.bottomgroup is not null
+				order by c.Lvl
+
+			DECLARE @name varchar(40)
+			OPEN #cur222
+
+			FETCH NEXT FROM #cur222 INTO @ApprovalGroupGUID, @lvl, @sqlfilter, @groupname, @bottom
+			WHILE (@@fetch_status &lt;&gt; -1)
+			BEGIN
+				IF (@@fetch_status &lt;&gt; -2)
+				BEGIN
+					set @tempstr = 
+						char(9)+char(9)+char(9)+'--LEVEL:'+cast(@lvl as varchar(5))+' USERGROUP:'+@groupname+ char(13)+char(10) +
+						char(9)+char(9)+char(9)+'insert into '+@otableName+'APRV('+@colName+', lvl, approvalUserGUID, curlvl, ugroupguid)'+char(13)+char(10)+	
+						char(9)+char(9)+char(9)+ 'select distinct @GUID, currentLevel.lvl, currentUser.memberUserGUID, 1, currentLevel.ApprovalGroupGUID'+char(13)+char(10) +
+						char(9)+char(9)+char(9)+ 'from coAPPR a'+char(13)+char(10) +
+						char(9)+char(9)+char(9)+char(9)+ 'inner join CoMODL b'+char(13)+char(10) +
+						char(9)+char(9)+char(9)+char(9)+char(9)+ 'on a.ModuleGUID=b.ModuleGUID'+char(13)+char(10) +
+						char(9)+char(9)+char(9)+char(9)+char(9)+ 'and b.ModuleId='''+@tablename+''''+char(13)+char(10) +
+						char(9)+char(9)+char(9)+char(9)+ 'inner join CoAPPRLVEL currentLevel'+char(13)+char(10) +
+						char(9)+char(9)+char(9)+char(9)+char(9)+ 'on a.ApprovalGUID=currentLevel.ApprovalGUID'+char(13)+char(10) +
+						char(9)+char(9)+char(9)+char(9)+char(9)+ 'and currentLevel.ApprovalGroupGUID='''+convert(varchar(50), @ApprovalGroupGUID)+''''+char(13)+char(10) +
+						char(9)+char(9)+char(9)+char(9)+char(9)+ 'inner join cougrpuser1 currentUser'+char(13)+char(10) +
+						char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+ 'on currentLevel.ApprovalGroupGUID=currentUser.UGroupGUID'+char(13)+char(10) +
+						char(9)+char(9)+char(9)+char(9)+char(9)+ '--level bottom'++char(13)+char(10) +
+						char(9)+char(9)+char(9)+char(9)+char(9)+ 'left join dbo.CoAPPRLVEL bottomLevel'++char(13)+char(10) +
+						char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+ 'on bottomLevel.ApprovalGroupGUID in('+@bottom+')'++char(13)+char(10) +
+						char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+ 'left join cougrpuser1 bottomuser'++char(13)+char(10) +
+						char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+ 'on bottomLevel.ApprovalGroupGUID=bottomuser.UGroupGUID'++char(13)+char(10) +
+						char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+ 'inner join '+@otableName+' e2'++char(13)+char(10) +
+						char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+ 'on (e2.CreatedUser=bottomuser.MemberUserGUID'++char(13)+char(10) +
+						char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+char(9)+ 'and e2.'+@colName+'=@GUID)'++char(13)+char(10) +
+						char(9)+char(9)+char(9)+ 'where currentLevel.lvl = '+cast(@lvl as varchar(5)) + case when isnull(@sqlfilter,'')='' then '' else ' and ' +@sqlfilter end+char(13)+char(10)+char(13)+char(10) 
+					set @sqlstr=@sqlstr+@tempstr
+				END
+				FETCH NEXT FROM #cur222 INTO @ApprovalGroupGUID, @lvl, @sqlfilter, @groupname, @bottom
+			END
+
+			CLOSE #cur222
+			DEALLOCATE #cur222
+
+			--insert approval
+			set @sqlstr=@content+@sqlstr+@content2
+	
+	exec gen.addproc @sp, @parameter, @sqlstr, @isEnc=@isenc
+	set @content=''
+	set @sp=''+@tableName+'APRV_setuser_reset'
+	set @parameter = char(9)+''
+	set @content = 	
+			char(9)+'declare @pguid uniqueidentifier, @uGUID uniqueidentifier, @i int'+char(13)+char(10)+
+			char(9)+'DECLARE #currr CURSOR'+char(13)+char(10)+
+			char(9)+'READ_ONLY'+char(13)+char(10)+
+			char(9)+'FOR select '+@colname+', ApprovalUserGUID, min(lvl)'+char(13)+char(10)+
+			char(9)+char(9)+'from '+@otablename+'APRV'+char(13)+char(10)+
+			char(13)+char(10)+
+			char(9)+char(9)+'group by '+@colname+', ApprovalUserGUID'+char(13)+char(10)+
+			char(9)+char(9)+'having count(*)&gt;1'+char(13)+char(10)+
+			char(13)+char(10)+
+			char(9)+'OPEN #currr'+char(13)+char(10)+
+			char(13)+char(10)+
+			char(9)+'FETCH NEXT FROM #currr INTO @pGUID, @uGUID, @i'+char(13)+char(10)+
+			char(9)+'WHILE (@@fetch_status &lt;&gt; -1)'+char(13)+char(10)+
+			char(9)+'BEGIN'+char(13)+char(10)+
+			char(9)+char(9)+'IF (@@fetch_status &lt;&gt; -2)'+char(13)+char(10)+
+			char(9)+char(9)+'BEGIN'+char(13)+char(10)+
+			char(9)+char(9)+char(9)+'delete from '+@otablename+'APRV'+char(13)+char(10)+
+			char(9)+char(9)+char(9)+'where '+@colname+'=@pGUID and approvaluserGUID=@uGUID'+char(13)+char(10)+
+			char(9)+char(9)+char(9)+char(9)+'and lvl&gt;@i'+char(13)+char(10)+
+			char(9)+char(9)+'END'+char(13)+char(10)+
+			char(9)+char(9)+'FETCH NEXT FROM #currr INTO @pGUID, @uGUID, @i'+char(13)+char(10)+
+			char(9)+'END'+char(13)+char(10)+
+			char(13)+char(10)+
+			char(9)+'CLOSE #currr'+char(13)+char(10)+
+			char(9)+'DEALLOCATE #currr'+char(13)+char(10)+
+			char(13)+char(10)+
+			char(9)+'declare @xguid uniqueidentifier'+char(13)+char(10)+
+			char(13)+char(10)+
+			char(9)+'DECLARE #currr1 CURSOR'+char(13)+char(10)+
+			char(9)+'READ_ONLY'+char(13)+char(10)+
+			char(9)+'FOR select '+@colname+', ApprovalUserGUID,'+ char(13)+char(10)+
+			char(9)+'max(convert(varchar(100), '+@otablename+'APRVGUID))'+char(13)+char(10)+
+			char(9)+char(9)+'from '+@otablename+'APRV'+char(13)+char(10)+
+			char(9)+char(9)+'group by '+@colname+', ApprovalUserGUID'+char(13)+char(10)+
+			char(9)+char(9)+'having count(*)&gt;1'+char(13)+char(10)+
+			char(13)+char(10)+
+			char(9)+'OPEN #currr1'+char(13)+char(10)+
+			char(13)+char(10)+
+			char(9)+'FETCH NEXT FROM #currr1 INTO @pGUID, @uGUID, @xGUID'+char(13)+char(10)+
+			char(9)+'WHILE (@@fetch_status &lt;&gt; -1)'+char(13)+char(10)+
+			char(9)+'BEGIN'+char(13)+char(10)+
+			char(9)+char(9)+'IF (@@fetch_status &lt;&gt; -2)'+char(13)+char(10)+
+			char(9)+char(9)+'BEGIN'+char(13)+char(10)+
+			char(9)+char(9)+char(9)+'delete from '+@otablename+'APRV'+char(13)+char(10)+
+			char(9)+char(9)+char(9)+'where '+@colname+'=@pGUID and approvaluserGUID=@uGUID'+char(13)+char(10)+
+			char(9)+char(9)+char(9)+char(9)+'and '+@otablename+'APRVGUID&lt;&gt;@xGUID'+    char(13)+char(10)+
+			char(13)+char(10)+			                
+			char(9)+char(9)+'END'+char(13)+char(10)+
+			char(9)+char(9)+'FETCH NEXT FROM #currr1 INTO @pGUID, @uGUID, @xGUID'+char(13)+char(10)+
+			char(9)+'END'+char(13)+char(10)+
+			char(13)+char(10)+
+			char(9)+'CLOSE #currr1'+char(13)+char(10)+
+			char(9)+'DEALLOCATE #currr1'+char(13)+char(10)  	
+
+	exec gen.addproc @sp, @parameter, @content, @isEnc=@isenc
+		
+	--auto
+	set @attachmentcol1=''					
+	set @attachmentcol2=''
+	set @attachmentcol3=''
+	
+	select @attachmentcol1=colname 
+	from gen.cotablfiel a
+		inner join gen.cotabl b
+			on a.tableguid=b.tableguid	
+	where ComboType=5 and Tablename=@tablename 
+	
+	select @attachmentcol2=colname 
+	from gen.cotablfiel a
+		inner join gen.cotabl b
+			on a.tableguid=b.tableguid	
+	where ComboType=5 and Tablename=@tablename and ColName&lt;&gt;@attachmentcol1
+	
+	select @attachmentcol3=colname 
+	from gen.cotablfiel a
+		inner join gen.cotabl b
+			on a.tableguid=b.tableguid	
+	where ComboType=5 and Tablename=@tablename and ColName&lt;&gt;@attachmentcol1 and ColName&lt;&gt;@attachmentcol2
+	
+	if isnull(@attachmentcol1,'')&lt;&gt;'' begin					
+		set @content=''
+		set @sp=''+@tableName+'_execute_auto'
+		set @parameter = char(9)+''
+		set @content = 	
+			char(9)+'if dbo.fn_checkObject(''dbo'','''+@tablename+'_execute_auto_custom'')=0 begin'+char(13)+char(10)+
+			char(9)+char(9)+'	set nocount on'+char(13)+char(10)+
+			char(13)+char(10)+
+			char(9)+char(9)+'	DECLARE #cur_autoexec  CURSOR'+char(13)+char(10)+
+			char(9)+char(9)+'	READ_ONLY'+char(13)+char(10)+
+			char(9)+char(9)+'	FOR select '+@colname+' from '+@otablename+' '+char(13)+char(10)+
+			char(9)+char(9)+'		where (statuserrorno=8 '+char(13)+char(10)+
+			char(9)+char(9)+char(9)+'or '+@attachmentcol1+' IS NULL '+char(13)+char(10)+
+			case when isnull(@attachmentcol2,'')&lt;&gt;'' then char(9)+char(9)+char(9)+char(9)+'or '+@attachmentcol2+' IS NULL'+char(13)+char(10) else '' end +
+			case when isnull(@attachmentcol3,'')&lt;&gt;'' then char(9)+char(9)+char(9)+char(9)+'or '+@attachmentcol3+' IS NULL'+char(13)+char(10) else '' end +
+			char(9)+char(9)+char(9)+') and isdeleted=0 and status=400'+char(13)+char(10)+
+			char(13)+char(10)+
+			char(9)+char(9)+'	DECLARE @'+@colname+' uniqueidentifier, @userGUID uniqueidentifier, @hostGUID uniqueidentifier'+char(13)+char(10)+
+			char(9)+char(9)+'	OPEN #cur_autoexec '+char(13)+char(10)+
+			char(13)+char(10)+
+			char(9)+char(9)+'	FETCH NEXT FROM #cur_autoexec  INTO @'+@colname+''+char(13)+char(10)+
+			char(9)+char(9)+'	WHILE (@@fetch_status &lt;&gt; -1)'+char(13)+char(10)+
+			char(9)+char(9)+'	BEGIN'+char(13)+char(10)+
+			char(9)+char(9)+char(9)+'IF (@@fetch_status &lt;&gt; -2)'+char(13)+char(10)+
+			char(9)+char(9)+char(9)+'BEGIN'+char(13)+char(10)+
+			char(9)+char(9)+char(9)+char(9)+'select @hostGUID = hostGUID '+char(13)+char(10)+
+			char(9)+char(9)+char(9)+'from '+@otablename+'APRV'+char(13)+char(10)+
+			char(9)+char(9)+char(9)+char(9)+'inner join coUSERHOST'+char(13)+char(10)+
+			char(9)+char(9)+char(9)+char(9)+char(9)+'on '+@otablename+'APRV.approvaluserGUID = coUSERHOST.userguid'+char(13)+char(10)+
+			char(9)+char(9)+char(9)+'where '+@colname+'=@'+@colname+''+char(13)+char(10)+
+			char(9)+char(9)+char(9)+char(9)+'and lvl=0'+char(13)+char(10)+
+			char(13)+char(10)+		
+			char(9)+char(9)+char(9)+char(9)+'exec oph.'+@tablename+'_execute @'+@colname+', @hostGUID'+char(13)+char(10)+
+			char(9)+char(9)+char(9)+'END'+char(13)+char(10)+
+			char(9)+char(9)+char(9)+'FETCH NEXT FROM #cur_autoexec  INTO @'+@colname+''+char(13)+char(10)+
+			char(9)+char(9)+'	END'+char(13)+char(10)+
+			char(13)+char(10)+
+			char(9)+char(9)+'	CLOSE #cur_autoexec '+char(13)+char(10)+
+			char(9)+char(9)+'	DEALLOCATE #cur_autoexec'+char(13)+char(10)+
+			char(9)+'end else'+char(13)+char(10)+
+			char(9)+CHAR(9)+'exec dbo.'+@tablename+'_execute_auto_custom'+char(13)+char(10) 
+		
+		exec gen.addproc @sp, @parameter, @content, @isEnc=@isenc
+	
+	end					
+
+
+
+
+
+
+
+
+
+
+
+
+

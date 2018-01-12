@@ -1,0 +1,107 @@
+
+
+
+
+
+
+
+
+
+
+
+CREATE procedure [gen].[insertTable] @oldDb nvarchar(100), @tablename nvarchar(100)
+as
+	declare @sqlstr nvarchar(4000), @cols1 varchar(8000), @cols2 varchar(8000)	
+
+	declare @keyCol nvarchar(100), @autoval bit
+
+
+	set @cols1=''
+	set @cols2=''
+	set @sqlstr=''
+
+	select @keycol=y.name
+	from sysobjects x 
+		inner join syscolumns y
+			on x.id=y.id
+	where x.xtype='U' and x.name = @tablename and colid=1
+
+--	select @autoval=case when sum(case when autoval is null then 0 else 1 end)&gt;0 then 1 else 0 end
+--	from sysobjects x 
+--		inner join syscolumns y
+--			on x.id=y.id
+--	where x.xtype='U' and x.name = @tablename 
+	select @autoval=isnull(case when y.status=128 then 1 else 0 end,0)--case when sum(case when autoval is null then 0 else 1 end)&gt;0 then 1 else 0 end
+	from sysobjects x 
+		inner join syscolumns y
+			on x.id=y.id
+	where x.xtype='U' and x.name = @tablename and y.status=128
+
+	if @autoval=1 
+	begin
+		set @sqlstr='SET IDENTITY_INSERT '+@tablename+' ON'+char(13)+char(10)
+	end
+
+
+	DECLARE #cur CURSOR
+	READ_ONLY
+	FOR 	select y.name
+		from sysobjects x 
+			inner join syscolumns y
+				on x.id=y.id
+		where x.xtype='U' and x.name = @tablename
+	
+	DECLARE @name varchar(40)
+	OPEN #cur
+	
+	FETCH NEXT FROM #cur INTO @name
+	WHILE (@@fetch_status &lt;&gt; -1)
+	BEGIN
+		IF (@@fetch_status &lt;&gt; -2)
+		BEGIN
+			set @cols1=@cols1+@name+', '
+			set @cols2=@cols2+'x.'+@name+', '
+		END
+		FETCH NEXT FROM #cur INTO @name
+	END
+	
+	CLOSE #cur
+	DEALLOCATE #cur
+	
+	if @cols1&lt;&gt;'' 
+		set @cols1=substring(@cols1, 1, len(@cols1)-1)
+	if @cols2&lt;&gt;'' 
+		set @cols2=substring(@cols2, 1, len(@cols2)-1)
+
+	set @sqlstr = @sqlstr+'insert into '+@tablename+' 
+		('+@cols1+')
+	select '+@cols2+'
+	from '+@oldDb+'.dbo.'+@tablename+' x
+		left join '+@tablename+' y
+			on x.'+@keycol+' = y.'+@keycol+'
+	where y.'+@keycol+' is null'+char(13)+char(10)
+
+
+
+
+
+	if @autoval=1 
+	begin
+		set @sqlstr=@sqlstr+'SET IDENTITY_INSERT '+@tablename+' OFF'
+
+	end
+
+--	print @sqlstr
+
+	exec(@sqlstr)
+
+
+
+
+
+
+
+
+
+
+

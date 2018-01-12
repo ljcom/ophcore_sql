@@ -1,0 +1,16 @@
+
+
+
+CREATE procedure [api].[VerifyHost] @hostGUID uniqueidentifier
+as
+	declare @result int=0
+	if exists(select userguid from userhost where hostguid=@hostguid) set @Result=1
+	if exists(select userguid from userhost where hostguid=@hostguid and userguid is not null) set @Result=2
+
+	select @result
+
+
+
+
+
+

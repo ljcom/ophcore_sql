@@ -1,0 +1,47 @@
+
+
+CREATE procedure [core].[addSynonymsTable] @code nvarchar(50), @dataDB nvarchar(50)=null, @V4db nvarchar(50), @server nvarchar(50)=null, @isdebug bit=0
+as
+	if isnull(@server, '')='' set @server=@@SERVERNAME
+	if isnull(@dataDB, '')='' set @dataDB=db_name()
+
+	declare @declareList nvarchar(max)
+	declare @fieldList nvarchar(max) 
+	declare @docList nvarchar(max) 
+	declare @docname nvarchar(50)
+	declare @schema nvarchar(5)
+	
+	set @schema='syn'
+
+
+	declare @execstr nvarchar(max)
+	set @execstr='
+		exec '+@server+'.'+@dataDB+'..sp_executesql @sqlstr'
+
+	declare @sqlstr nvarchar(max)
+
+	--create schema 
+	set @sqlstr='
+		if not exists(select * from '+@dataDB+'.sys.schemas where name='''+@schema+''') 
+			exec '+@dataDB+'.dbo.sp_executesql N''create schema '+@schema+''''
+	
+	if @isdebug=1 print @sqlstr
+	exec sp_executesql @sqlstr
+
+	set @sqlstr='
+		if exists(select * from sys.objects where name='''+@code+''' and type=''sn'') 
+			DROP SYNONYM '+@schema+'.'+@code+''
+			
+	if @isdebug=1 print @sqlstr
+	exec sp_executesql @execstr, N'@sqlstr nvarchar(max)', @sqlstr
+
+	set @sqlstr='
+			CREATE SYNONYM ['+@schema+'].['+@code+'] FOR '+@V4db+'.['+@schema+'].'+@code+'	
+	'
+
+	if @isdebug=1 print @sqlstr
+	print @execstr
+	exec sp_executesql @execstr, N'@sqlstr nvarchar(max)', @sqlstr
+
+
+

@@ -1,0 +1,17 @@
+
+
+
+
+CREATE VIEW [dbo].[CoMBOENVI]
+as	--CreatedBy eLs ON August, 2015
+
+	select 
+		ModuleGroupGUID, ModuleGroupId, ModuleGroupName, ModuleGroupDescription
+	from CoMODG where isDeleted = 0
+	UNION
+	select dbo.ZeroGUID(), 'ALL', 'All Environment', 'All Environment'
+
+
+
+
+

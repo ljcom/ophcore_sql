@@ -1,0 +1,14 @@
+create function gen.getCurrentDB()
+returns nvarchar(100)
+as
+begin
+	return (
+		select iif(servername is null, '', '['+servername+'].')+'['+databasename+']'
+		from acct a
+			inner join acctdbse d
+				on a.accountguid=d.accountguid 
+		where databasename=DB_NAME() and isnull(servername, @@servername)=@@SERVERNAME
+	)
+
+end
+

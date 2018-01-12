@@ -1,0 +1,114 @@
+
+
+CREATE PROCEDURE [api].[theme_header] 
+	@hostguid uniqueidentifier, @code varchar(50), @xmlHeader xml OUTPUT, @debug int=0
+--WITH ENCRYPTION
+as	
+	
+	--declare @hostguid uniqueidentifier = gen.getHost('ap\iman.satyagraha'), @code varchar(50) = 'tafasc', @xmlHeader xml, @debug int=0
+
+	declare @ver varchar(10), @db varchar(50), @typecode varchar(1), @theme varchar(50), 
+		@accountid varchar(50), @coreDB varchar(50), @company nvarchar(50), @product varchar(50)
+
+	exec gen.getDBInfo @hostguid, @code, @ver output, @db output, @typecode output,  @theme output, 
+		@companyName=@company output, @accountid=@accountid output, @coreDB=@coreDB output, 
+		@productName=@product output
+
+	if object_id('tempdb..#tempmenusmnu') is not null drop table #tempmenusmnu
+	select * into #tempmenusmnu from gen.authmenusmnu(@hostguid, @code) --where [type] = 'label'-- and isnull(code, '')<>''
+	if @debug=1 select * from gen.authmenusmnu(@hostguid, @code) --where [type] = 'label'-- and isnull(code, '')<>''
+
+	declare @xmlState xml, @menuCode varchar(10)
+	if object_id('tempdb..#stateMenu') is not null drop table #stateMenu
+	create table #stateMenu(mCode varchar(10), tCount xml)
+
+	declare curState cursor for
+		select DISTINCT code from #tempmenusmnu where [type] = 'label' and @typecode='T' and code=@code --AND left(code, 2) like 'T[ao]%'
+	
+	open curState fetch next from curState into @menuCode
+	while @@fetch_status = 0 begin
+		exec [api].[theme_state] @hostguid, @menuCode, 'T', 1, 'header', @xmlState output, @debug
+		insert into #stateMenu values (@menuCode, @xmlState)
+		set @xmlState = NULL
+		fetch next from curState into @menuCode		
+	end
+	close curState deallocate curState
+
+	set @xmlHeader = (	
+		select (
+			--info
+			select (
+				--account
+				select @accountid account 
+				) account, @product productName, @company company,
+				--themeFolder
+				(select @theme) 'themeFolder',
+				--title
+				(	select ModuleDescription 
+					from modl a
+					where moduleid=@code) title, 
+				--code
+				(	select moduleid id, ModuleDescription name, UPPER(b.InfoValue) [shortName], [api].[settingmode](settingMode) settingMode
+					from modl a
+						left join modlinfo b ON a.ModuleGUID = b.ModuleGUID AND b.InfoKey = 'moduleShortName'
+					where moduleid=@code for xml path(''), elements, type) code, 
+				--user
+				(select a.userGUID, userId, userName, userProfilePath userURL, hostGUID, convert(varchar(20), b.createdDate, 107) [dateCreate]
+				from userhost a
+					inner join [user] b
+						on a.userguid=b.userguid
+				where hostguid=@hostGUID
+				for xml path(''), elements, type) [user]	 
+			for xml path(''), elements, type
+			) info, 
+			--(select 'CTGRGUID' '@key', 'ID' '@fieldId', 'Name' '@GroupDescription',  'PARNCTGRGUID' '@Parent', 'Category' 'caption', 'maCTGRFRON' 'code' for xml path('filter'), elements, type
+			--) filters,
+			--(select 'BRANGUID' '@key', 'ID' '@fieldId', 'Name' '@GroupDescription', 'PARNBRANGUID' '@Parent', 'Division' 'caption', 'maBRANFRON' 'code' for xml path('filter'), elements, type
+			--) filters,
+			--menus
+			(select menucode '@code', 
+				--submenus
+				(select [type]+cast(orderno as varchar(5))+LEFT(isNULL(replace(SubMenuDescription, ' ', ''), ''), 4) [@idMenu], 
+					[type] '@type', Tag '@tag', SubMenuDescription [MenuDescription],  caption,  url pageURL, icon_fa fa, icon_url icon_url, 
+					--submenus
+					(select [type]+cast(orderno as varchar(5))+LEFT(isNULL(replace(SubMenuDescription, ' ', ''), ''), 4) [@idMenu], 
+						[type] '@type', Tag '@tag', SubMenuDescription [MenuDescription], caption,  url pageURL, icon_fa fa, icon_url icon_url,
+						--submenus
+						(select [type] '@type', Tag '@tag', SubMenuDescription [MenuDescription], caption,  url pageURL, icon_fa fa, icon_url icon_url
+						, (select tCount from #stateMenu where mCode = d.code)
+						from #tempmenusmnu d
+						where d.uppersubmenuGUID=c.MenudetailGUID
+						order by d.OrderNo, d.caption
+						for xml path('submenu'), elements, type) submenus
+					from #tempmenusmnu c
+					where c.uppersubmenuGUID=b.MenudetailGUID 
+						and (exists(
+							select * from #tempmenusmnu d
+							where d.uppersubmenuGUID=c.MenudetailGUID 
+						) or isnull(c.url,'#')<>'#')
+					order by c.OrderNo, c.caption
+					for xml path('submenu'), elements, type) submenus
+				from #tempmenusmnu b
+				where b.menuGUID=a.MenuGUID and b.upperSubmenuGUID is null
+					and (exists(
+						select *
+						from #tempmenusmnu c
+						where c.uppersubmenuGUID=b.MenudetailGUID 
+							and (exists(
+								select * from #tempmenusmnu d
+								where d.uppersubmenuGUID=c.MenudetailGUID 
+							) or isnull(c.url,'#')<>'#')
+					) or isnull(b.url,'#')<>'#')
+				order by OrderNo, b.caption
+				for xml path('submenu'), elements, type) submenus
+			from menu a
+			--order by OrderNo asc
+			for xml path('menu'), elements, type) menus
+		for xml path(''), elements, type
+	)
+
+	if object_id('tempdb..#tempmenusmnu') is not null drop table #tempmenusmnu
+	if object_id('tempdb..#stateMenu') is not null drop table #stateMenu
+
+	--select @xmlHeader
+	
