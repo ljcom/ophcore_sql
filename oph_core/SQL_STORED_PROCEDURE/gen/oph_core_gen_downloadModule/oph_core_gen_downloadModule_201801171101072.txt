@@ -1,0 +1,61 @@
+CREATE PROCEDURE [gen].[downloadModule] @hostGUID uniqueidentifier, @code varchar(50), @exportMode int = 1 
+as	--CreatedBy eLs ON Nov, 2017
+	
+	--declare @code varchar(50) = 'masepho', @exportMode int = 0
+
+	declare @moduleId varchar(50), @moduleDesc varchar(255), @moduleGUID uniqueidentifier, @L varchar(5), @cols varchar(MAX), @sqlstr nvarchar(MAX)
+
+	declare mdcur cursor read_only for
+		select ModuleId, ModuleDescription, ModuleGUID, IIF(orderNo = '0', 'H','L'+orderNo) [L]
+		from (
+			--Header
+			select ModuleId, ModuleDescription, ModuleGUID, '0' [orderNo] from modl where ModuleID = @code
+			UNION
+			--Anak
+			select a.ModuleId, a.ModuleDescription, a.ModuleGUID, 
+				cast(ROW_NUMBER() OVER(Partition by p.ModuleID order by a.OrderNo, a.ModuleId) as varchar(5)) [orderNo] 
+			from modl a
+				inner join modl p ON a.ParentModuleGUID = p.ModuleGUID
+				inner join modlinfo i ON a.ModuleGUID = i.ModuleGUID AND i.InfoKey = 'AllowBrowse' AND i.InfoValue = '1'
+			where p.ModuleID = @code AND @exportMode = 1
+			UNION
+			--Cucu
+			select c.ModuleId, c.ModuleDescription, c.ModuleGUID,
+				p.orderNo + cast(ROW_NUMBER() OVER(Partition by p.ModuleGUID order by c.OrderNo, c.ModuleId) as varchar(5)) [orderNo] 	
+			from modl c
+				inner join (
+					select a.ModuleGUID, cast(ROW_NUMBER() OVER(Partition by p.ModuleID order by a.OrderNo, a.ModuleId) as varchar(5)) [orderNo] 
+					from modl a
+						inner join modl p ON a.ParentModuleGUID = p.ModuleGUID
+						inner join modlinfo i ON a.ModuleGUID = i.ModuleGUID AND i.InfoKey = 'AllowBrowse' AND i.InfoValue = '1'
+					where p.ModuleID = @code AND @exportMode = 1
+				) p ON c.ParentModuleGUID = p.ModuleGUID
+				inner join modlinfo i ON c.ModuleGUID = i.ModuleGUID AND i.InfoKey = 'AllowBrowse' AND i.InfoValue = '1'
+		) mdc order by orderNo
+	open mdcur fetch next from mdcur into @moduleId, @moduleDesc, @moduleGUID, @L
+	while @@FETCH_STATUS = 0 begin
+		set @cols = isNULL(@cols, '') + iif(@exportMode = 0, '', ', '''+@moduleDesc+char(10)+'('+@L+')'' '+quotename(upper(@moduleId)))+(
+			select 
+				iif(@exportMode = 0, ', ''''', ', '''+titleCaption+iif(d.InfoValue='0', char(10)+'(mandatory)', '')+'''')+
+				space(1)+quotename(colKey) 
+			from modlcolm a
+				inner join modlcolminfo b ON a.ColumnGUID = b.ColumnGUID AND b.InfoKey = 'iseditable' AND b.InfoValue = '1'
+				inner join modlcolminfo c ON a.ColumnGUID = c.ColumnGUID AND c.InfoKey = 'isviewable' AND b.InfoValue = '1'
+				left join modlcolminfo d ON a.ColumnGUID = d.ColumnGUID AND d.InfoKey = 'isNullable' AND d.InfoValue = '0'
+				left join modlcolminfo e ON a.ColumnGUID = e.ColumnGUID AND e.InfoKey = 'exportParameter' AND e.InfoValue = '1'
+			where a.ModuleGUID = @moduleGUID AND e.ColumnGUID is NULL
+			order by colorder for xml path ('')
+		) 
+		set @cols = replace(@cols, '&amp;', '&')
+		fetch next from mdcur into @moduleId, @moduleDesc, @moduleGUID, @L
+	end
+	close mdcur deallocate mdcur
+
+	if @exportMode = 0
+		set @sqlstr = 'select ' + isNULL(STUFF(@cols, 1,2,''), '')
+	else
+		set @sqlstr = 'select gen.ZeroGUID() [DocGUID], ''Level'' [Level]' + isNULL(@cols, '')
+
+	--print @sqlstr
+	exec(@sqlstr)
+

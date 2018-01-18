@@ -1,0 +1,60 @@
+CREATE FUNCTION [gen].[authmenusmnu] (@hostguid uniqueidentifier, @code nvarchar(50))
+RETURNS 
+@result TABLE 
+(
+	MenuDetailGUID uniqueidentifier, env nvarchar(50), code nvarchar(50), MenuGUID uniqueidentifier, SubMenuDescription nvarchar(200), 
+	Tag nvarchar(50), URL varchar(8000), OrderNo int, caption nvarchar(50), [type] nvarchar(20), upperSubmenuGUID uniqueidentifier, 
+	icon_fa nvarchar(50), icon_url nvarchar(50)
+)
+--WITH ENCRYPTION
+AS
+BEGIN	--CreatedBy eLs ON Jan, 2018
+	
+	--declare @hostguid uniqueidentifier = gen.gethost('els'), @code nvarchar(50) = 'masepho'
+	declare @curenv nvarchar(50)
+	select @curenv=ModuleGroupID from modl 
+		inner join modg on modl.ModuleGroupGUID=modg.ModuleGroupGUID
+	where moduleid=@code	
+
+	insert into @result (MenuDetailGUID, env, code, MenuGUID, SubMenuDescription, Tag, URL, OrderNo, caption, [type], upperSubmenuGUID, icon_fa, icon_url)
+	select 
+		MenuDetailGUID, env, code, MenuGUID, SubMenuDescription, Tag, URL, OrderNo, caption, [type], upperSubmenuGUID, icon_fa, icon_url
+	from (
+		select 
+			MenuDetailGUID, 
+			case
+				when ci_env > 0 AND ln_env > 0 then SUBSTRING(URL, ci_env, ln_env)
+				when ci_env > 0 AND ln_env = 0 then SUBSTRING(URL, ci_env, LEN(URL) - ci_env + 1)
+			end [env],
+			case
+				when ci_code > 0 AND ln_code > 0 then SUBSTRING(URL, ci_code, ln_code)
+				when ci_code > 0 AND ln_code = 0 then SUBSTRING(URL, ci_code, LEN(URL) - ci_code + 1)
+			end [code],
+			MenuGUID, SubMenuDescription, 
+			Tag, URL, OrderNo, caption, type, upperSubmenuGUID, icon_fa, icon_url 
+		from (
+			select 
+				IIF(charindex('&', URL, ci_env) > 0, charindex('&', URL, ci_env) - ci_env, charindex('&', URL, ci_env)) [ln_env],
+				IIF(charindex('&', URL, ci_code) > 0, charindex('&', URL, ci_code) - ci_code, charindex('&', URL, ci_code)) [ln_code],
+				*
+			from (
+				select 
+					IIF(charindex('env=', URL) > 0, charindex('env=', URL) + 4, 0) [ci_env], 
+					IIF(charindex('code=', URL) > 0, charindex('code=', URL) + 5, 0) [ci_code], *
+				from menusmnu
+				where URL is Not NULL
+			) a1st
+		) a2nd
+	) a
+		inner join gen.authModg(@hostGUID) b
+			on isNULL(env, @curenv) = b.moduleGroupId 
+		left join gen.authModl(@hostguid, NULL) c
+			on a.code = c.ModuleId
+	where (env is Not NULL AND code is NULL)
+		OR (
+			(isNULL(env, @curenv) = @curenv) AND c.moduleGUID is Not NULL
+		)
+
+	RETURN 
+END
+
